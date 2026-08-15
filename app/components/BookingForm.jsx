@@ -3,10 +3,10 @@
 import React, { useEffect, useState } from "react";
 
 export const bookingTiers = [
-  { id: "general", name: "GENERAL", price: 50, gate: "Gate A", available: 1200, icon: "fa-users", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
-  { id: "premium", name: "PREMIUM", price: 100, gate: "Gate B", available: 850, icon: "fa-star", iconBg: "bg-sky-50", iconColor: "text-sky-600" },
+  { id: "standing", name: "STANDING", price: 50, gate: "Gate A", available: 1200, icon: "fa-users", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+  { id: "special", name: "SPECIAL", price: 100, gate: "Gate B", available: 850, icon: "fa-star", iconBg: "bg-sky-50", iconColor: "text-sky-600" },
   { id: "vip", name: "VIP", price: 200, gate: "Gate C", available: 420, icon: "fa-crown", iconBg: "bg-purple-50", iconColor: "text-purple-600" },
-  { id: "vvip", name: "VVIP", price: 500, gate: "Gate D", available: 80, icon: "fa-gem", iconBg: "bg-orange-50", iconColor: "text-orange-500" },
+  { id: "star", name: "STAR", price: 500, gate: "Gate D", available: 80, icon: "fa-gem", iconBg: "bg-orange-50", iconColor: "text-orange-500" },
 ];
 
 export default function BookingForm({ onClose, onProceed, initialTierId = "vip", initialQuantity = 4, fullPage = false }) {

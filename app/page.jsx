@@ -108,11 +108,11 @@ export default function Home() {
             </div>
 
             <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 pt-1">
-              {/* GENERAL - Orange */}
+              {/* STANDING - Orange */}
               <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
                 <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-32 pt-6 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">General</h4>
+                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">STANDING</h4>
                   <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate A
                   </span>
@@ -160,17 +160,17 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "general" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "standing" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
               </div>
 
-              {/* PREMIUM - Green/Cyan/Blue */}
+              {/* SPECIAL - Green/Cyan/Blue */}
               <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
                 <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-32 pt-6 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">Premium</h4>
+                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">SPECIAL</h4>
                   <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate B
                   </span>
@@ -218,7 +218,7 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "premium" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "special" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
@@ -286,11 +286,11 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* VVIP - Dark/Gold */}
+              {/* STAR - Dark/Gold */}
               <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
                 <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-32 pt-6 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-60 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">VVIP</h4>
+                  <h4 className="relative z-10 text-xl font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">STAR</h4>
                   <span className="relative z-10 inline-block mt-1 bg-amber-400/20 text-amber-300 text-[9px] font-bold px-2 py-0.5 rounded-md border border-amber-400/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate D
                   </span>
@@ -338,7 +338,7 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "vvip" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "star" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
