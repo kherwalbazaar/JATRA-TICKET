@@ -1,9 +1,9 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Adim Lahah Mandawa - Online Ticket System",
+  title: "ADIM OWAR JARPA OPERA - Online Ticket System",
   description:
-    "Book your Adim Lahah Mandawa stadium entry ticket online. Adim Lahah Mandawa 2026 - Balanada, Khunta, Mayurbhanj.",
+    "Book your ADIM OWAR JARPA OPERA stadium entry ticket online. ADIM OWAR JARPA OPERA 2026 - Bahanada, Khunta, Mayurbhanj.",
 };
 
 export default function RootLayout({ children }) {

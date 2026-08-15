@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BookingForm from "../components/BookingForm";
+import { saveBooking } from "../../lib/bookings";
 
 function BookContent() {
   const router = useRouter();
@@ -14,7 +15,14 @@ function BookContent() {
       fullPage
       initialTierId={tierId}
       onClose={() => router.back()}
-      onProceed={() => router.push("/tickets")}
+      onProceed={async (data) => {
+        try {
+          await saveBooking(data);
+        } catch (err) {
+          console.error("Failed to save booking", err);
+        }
+        router.push("/tickets");
+      }}
     />
   );
 }

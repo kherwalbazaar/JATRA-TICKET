@@ -9,6 +9,28 @@ body {
   font-family: "Plus Jakarta Sans", sans-serif;
 }
 
+.pattern-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px);
+  background-size: 7px 7px;
+}
+
+@keyframes blink-live {
+  0%, 100% {
+    background-color: #10b981;
+    color: #ffffff;
+    border-color: #059669;
+  }
+  50% {
+    background-color: #ffffff;
+    color: #10b981;
+    border-color: #10b981;
+  }
+}
+
+.blink-live {
+  animation: blink-live 1s ease-in-out infinite;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

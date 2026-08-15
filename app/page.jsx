@@ -3,9 +3,28 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import BookTicketsModal from "./components/BookTicketsModal";
+import { saveBooking } from "../lib/bookings";
 
 export default function Home() {
   const [booking, setBooking] = useState(null);
+  const [countdown, setCountdown] = useState({ d: "00", h: "00", m: "00", s: "00" });
+
+  useEffect(() => {
+    const TARGET = new Date("2026-10-22T23:00:00");
+    const tick = () => {
+      const diff = Math.max(0, TARGET.getTime() - Date.now());
+      const pad = (n) => String(Math.floor(n)).padStart(2, "0");
+      setCountdown({
+        d: pad(diff / 86400000),
+        h: pad((diff / 3600000) % 24),
+        m: pad((diff / 60000) % 60),
+        s: pad((diff / 1000) % 60),
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
@@ -36,45 +55,9 @@ export default function Home() {
           <HeroCarousel />
 
           {/* ==============================================
-            3. EVENT SCHEDULE & LOCATION CARD
+            3. EVENT SCHEDULE & LOCATION CARDS (SLIDER)
           ============================================== */}
-          <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 relative overflow-hidden">
-            <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-3 translate-y-2">
-              <i className="fa-solid fa-users text-8xl text-indigo-900" />
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-shrink-0 w-20 bg-rose-50 border border-rose-200 rounded-xl overflow-hidden text-center shadow-xs">
-                <div className="bg-rose-600 text-white font-extrabold text-[11px] py-0.5 uppercase tracking-wider">OCT</div>
-                <div className="text-2xl font-black text-slate-900 leading-none py-1">22</div>
-                <div className="text-[11px] font-bold text-slate-600 pb-1">2026</div>
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-base font-black text-slate-900 truncate font-brand flex items-center gap-1">
-                    Adim Lahah Mandawa 2026 <span>🔥</span>
-                  </h3>
-                  <div className="flex items-center gap-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                    <span>Live Booking</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
-                  <i className="fa-solid fa-location-dot text-rose-500 text-xs flex-shrink-0" />
-                  <span className="truncate">Balanada, Khunta, Mayurbhanj</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold">
-                  <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
-                  <span>
-                    Entry 6:00 PM <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start 8:00 PM
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <EventCarousel />
 
           {/* ==============================================
             4. COUNTDOWN TIMER COMPONENT
@@ -89,29 +72,29 @@ export default function Home() {
 
             <div className="flex items-center gap-1.5 text-center">
               <div className="bg-white px-2 py-1 rounded-xl shadow-xs border border-pink-100 min-w-[42px]">
-                <div className="text-sm font-black text-slate-900 leading-tight">5</div>
+                <div className="text-sm font-black text-slate-900 leading-tight">{countdown.d}</div>
                 <div className="text-[9px] font-bold text-slate-500 uppercase">Days</div>
               </div>
               <span className="font-bold text-pink-400">:</span>
               <div className="bg-white px-2 py-1 rounded-xl shadow-xs border border-pink-100 min-w-[42px]">
-                <div className="text-sm font-black text-indigo-950 leading-tight">08</div>
+                <div className="text-sm font-black text-indigo-950 leading-tight">{countdown.h}</div>
                 <div className="text-[9px] font-bold text-slate-500 uppercase">Hours</div>
               </div>
               <span className="font-bold text-pink-400">:</span>
               <div className="bg-white px-2 py-1 rounded-xl shadow-xs border border-pink-100 min-w-[42px]">
-                <div className="text-sm font-black text-indigo-950 leading-tight">24</div>
+                <div className="text-sm font-black text-indigo-950 leading-tight">{countdown.m}</div>
                 <div className="text-[9px] font-bold text-slate-500 uppercase">Minutes</div>
               </div>
               <span className="font-bold text-pink-400">:</span>
               <div className="bg-white px-2 py-1 rounded-xl shadow-xs border border-pink-100 min-w-[42px]">
-                <div className="text-sm font-black text-rose-600 leading-tight">36</div>
+                <div className="text-sm font-black text-rose-600 leading-tight">{countdown.s}</div>
                 <div className="text-[9px] font-bold text-slate-500 uppercase">Seconds</div>
               </div>
             </div>
           </div>
 
           {/* ==============================================
-            5. TICKET TIERS SELECTION (HORIZONTAL SCROLL)
+            5. TICKET TIERS SELECTION (PRICING CARDS)
           ============================================== */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -124,89 +107,241 @@ export default function Home() {
               </a>
             </div>
 
-            <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
-              <div className="min-w-[125px] flex-1 bg-gradient-to-b from-amber-50/70 to-white rounded-2xl p-3 border border-amber-200 shadow-xs flex flex-col justify-between text-center relative">
-                <div>
-                  <div className="text-2xl mb-1">👨‍👩‍👧‍👦</div>
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">General</h4>
-                  <span className="inline-block mt-1 bg-amber-100 text-amber-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 pt-1">
+              {/* GENERAL - Orange */}
+              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-32 pt-6 text-center overflow-hidden">
+                  <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
+                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">General</h4>
+                  <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate A
                   </span>
-                  <div className="my-2.5">
-                    <span className="text-lg font-black text-slate-900">₹50</span>
+                </div>
+
+                <div className="relative -mt-11 flex justify-center z-20">
+                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
+                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
+                    <circle cx="18" cy="16" r="3.5" fill="#ff7700" stroke="#ffffff" strokeWidth="2" />
+                    <line x1="22" y1="16" x2="80" y2="16" stroke="#ff7700" strokeWidth="3" />
+                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#ff7700" strokeWidth="3" fill="none" />
+                    <line x1="150" y1="16" x2="208" y2="16" stroke="#ff7700" strokeWidth="3" />
+                    <circle cx="212" cy="16" r="3.5" fill="#ff7700" stroke="#ffffff" strokeWidth="2" />
+                  </svg>
+
+                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
+                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">50</span>
+                    </div>
                   </div>
-                  <ul className="text-[10px] font-medium text-slate-600 space-y-1 text-left border-t border-amber-100 pt-2">
-                    <li className="flex items-center gap-1"><span className="text-amber-500 font-bold">•</span> Normal Entry</li>
-                    <li className="flex items-center gap-1"><span className="text-amber-500 font-bold">•</span> Free Seating</li>
+                </div>
+
+                <div className="px-5 pt-4 pb-3 flex-1">
+                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Normal Entry</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Free Seating</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                      <span>Fast Track Entry</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                      <span>Best View Zone</span>
+                    </li>
                   </ul>
                 </div>
-                <button onClick={() => setBooking({ tierId: "general" })} className="mt-3 w-full bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold text-[11px] py-1.5 rounded-xl shadow-xs active:scale-95 transition-transform flex items-center justify-center gap-1">
-                  <i className="fa-solid fa-bolt text-[10px]" /> Book Now
-                </button>
+
+                <div className="h-1.5 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
+
+                <div className="bg-[#242426] p-3 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "general" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                  </button>
+                </div>
               </div>
 
-              <div className="min-w-[125px] flex-1 bg-gradient-to-b from-sky-50/70 to-white rounded-2xl p-3 border border-sky-200 shadow-xs flex flex-col justify-between text-center relative">
-                <div>
-                  <div className="text-2xl mb-1 text-sky-500"><i className="fa-solid fa-star" /></div>
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Premium</h4>
-                  <span className="inline-block mt-1 bg-sky-100 text-sky-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+              {/* PREMIUM - Green/Cyan/Blue */}
+              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-32 pt-6 text-center overflow-hidden">
+                  <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
+                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">Premium</h4>
+                  <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate B
                   </span>
-                  <div className="my-2.5">
-                    <span className="text-lg font-black text-slate-900">₹100</span>
+                </div>
+
+                <div className="relative -mt-11 flex justify-center z-20">
+                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
+                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
+                    <circle cx="18" cy="16" r="3.5" fill="#00b37e" stroke="#ffffff" strokeWidth="2" />
+                    <line x1="22" y1="16" x2="80" y2="16" stroke="#00b37e" strokeWidth="3" />
+                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#009fd9" strokeWidth="3" fill="none" />
+                    <line x1="150" y1="16" x2="208" y2="16" stroke="#0077ff" strokeWidth="3" />
+                    <circle cx="212" cy="16" r="3.5" fill="#0077ff" stroke="#ffffff" strokeWidth="2" />
+                  </svg>
+
+                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
+                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">100</span>
+                    </div>
                   </div>
-                  <ul className="text-[10px] font-medium text-slate-600 space-y-1 text-left border-t border-sky-100 pt-2">
-                    <li className="flex items-center gap-1"><span className="text-sky-500 font-bold">•</span> Fast Entry</li>
-                    <li className="flex items-center gap-1"><span className="text-sky-500 font-bold">•</span> Better View</li>
+                </div>
+
+                <div className="px-5 pt-4 pb-3 flex-1">
+                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Fast Entry</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Better View</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Covered Seating</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                      <span>Priority Entry</span>
+                    </li>
                   </ul>
                 </div>
-                <button onClick={() => setBooking({ tierId: "premium" })} className="mt-3 w-full bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold text-[11px] py-1.5 rounded-xl shadow-xs active:scale-95 transition-transform flex items-center justify-center gap-1">
-                  <i className="fa-solid fa-bolt text-[10px]" /> Book Now
-                </button>
+
+                <div className="h-1.5 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
+
+                <div className="bg-[#242426] p-3 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "premium" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                  </button>
+                </div>
               </div>
 
-              <div className="min-w-[125px] flex-1 bg-gradient-to-b from-purple-50 to-white rounded-2xl p-3 border-2 border-purple-400 shadow-md flex flex-col justify-between text-center relative overflow-hidden">
-                <div className="absolute top-2 -right-6 bg-red-500 text-white text-[8px] font-extrabold uppercase py-0.5 px-6 rotate-45 shadow-sm">
+              {/* VIP - Violet/Purple (Popular) */}
+              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative">
+                <div className="absolute top-3 -right-7 bg-red-500 text-white text-[9px] font-extrabold uppercase py-0.5 px-7 rotate-45 shadow-sm z-30">
                   Popular
                 </div>
 
-                <div>
-                  <div className="text-2xl mb-1 text-amber-500"><i className="fa-solid fa-crown" /></div>
-                  <h4 className="text-xs font-black text-purple-950 uppercase tracking-tight">VIP</h4>
-                  <span className="inline-block mt-1 bg-purple-100 text-purple-800 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                <div className="relative bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8] h-32 pt-6 text-center overflow-hidden">
+                  <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
+                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">VIP</h4>
+                  <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate C
                   </span>
-                  <div className="my-2.5">
-                    <span className="text-lg font-black text-purple-900">₹200</span>
+                </div>
+
+                <div className="relative -mt-11 flex justify-center z-20">
+                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
+                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
+                    <circle cx="18" cy="16" r="3.5" fill="#702bf9" stroke="#ffffff" strokeWidth="2" />
+                    <line x1="22" y1="16" x2="80" y2="16" stroke="#702bf9" strokeWidth="3" />
+                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#5b24e6" strokeWidth="3" fill="none" />
+                    <line x1="150" y1="16" x2="208" y2="16" stroke="#3a1eb8" strokeWidth="3" />
+                    <circle cx="212" cy="16" r="3.5" fill="#3a1eb8" stroke="#ffffff" strokeWidth="2" />
+                  </svg>
+
+                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
+                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">200</span>
+                    </div>
                   </div>
-                  <ul className="text-[10px] font-medium text-slate-600 space-y-1 text-left border-t border-purple-100 pt-2">
-                    <li className="flex items-center gap-1"><span className="text-purple-600 font-bold">•</span> Priority Entry</li>
-                    <li className="flex items-center gap-1"><span className="text-purple-600 font-bold">•</span> Best View Zone</li>
+                </div>
+
+                <div className="px-5 pt-4 pb-3 flex-1">
+                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Priority Entry</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Best View Zone</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Reserved Seating</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                      <span>Exclusive Lounge</span>
+                    </li>
                   </ul>
                 </div>
-                <button onClick={() => setBooking({ tierId: "vip" })} className="mt-3 w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-[11px] py-1.5 rounded-xl shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1">
-                  <i className="fa-solid fa-bolt text-[10px]" /> Book Now
-                </button>
+
+                <div className="h-1.5 w-full bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]" />
+
+                <div className="bg-[#242426] p-3 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "vip" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                  </button>
+                </div>
               </div>
 
-              <div className="min-w-[125px] flex-1 bg-[#161a29] text-white rounded-2xl p-3 border border-amber-400/50 shadow-md flex flex-col justify-between text-center relative">
-                <div>
-                  <div className="text-2xl mb-1 text-amber-400"><i className="fa-solid fa-crown" /></div>
-                  <h4 className="text-xs font-black text-amber-400 uppercase tracking-tight">VVIP</h4>
-                  <span className="inline-block mt-1 bg-amber-400/20 text-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-amber-400/30">
+              {/* VVIP - Dark/Gold */}
+              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-32 pt-6 text-center overflow-hidden">
+                  <div className="absolute inset-0 pattern-dots opacity-60 pointer-events-none"></div>
+                  <h4 className="relative z-10 text-xl font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">VVIP</h4>
+                  <span className="relative z-10 inline-block mt-1 bg-amber-400/20 text-amber-300 text-[9px] font-bold px-2 py-0.5 rounded-md border border-amber-400/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate D
                   </span>
-                  <div className="my-2.5">
-                    <span className="text-lg font-black text-white">₹500</span>
+                </div>
+
+                <div className="relative -mt-11 flex justify-center z-20">
+                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
+                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
+                    <circle cx="18" cy="16" r="3.5" fill="#b8860b" stroke="#ffffff" strokeWidth="2" />
+                    <line x1="22" y1="16" x2="80" y2="16" stroke="#b8860b" strokeWidth="3" />
+                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#d4a017" strokeWidth="3" fill="none" />
+                    <line x1="150" y1="16" x2="208" y2="16" stroke="#e6b800" strokeWidth="3" />
+                    <circle cx="212" cy="16" r="3.5" fill="#e6b800" stroke="#ffffff" strokeWidth="2" />
+                  </svg>
+
+                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
+                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">500</span>
+                    </div>
                   </div>
-                  <ul className="text-[10px] font-medium text-slate-300 space-y-1 text-left border-t border-slate-700 pt-2">
-                    <li className="flex items-center gap-1"><span className="text-amber-400 font-bold">•</span> Exclusive Entry</li>
-                    <li className="flex items-center gap-1"><span className="text-amber-400 font-bold">•</span> Special Sitting</li>
+                </div>
+
+                <div className="px-5 pt-4 pb-3 flex-1">
+                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Exclusive Entry</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Special Sitting</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Priority Entry</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                      <span>Best View Zone</span>
+                    </li>
                   </ul>
                 </div>
-                <button onClick={() => setBooking({ tierId: "vvip" })} className="mt-3 w-full bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black text-[11px] py-1.5 rounded-xl shadow-xs active:scale-95 transition-transform flex items-center justify-center gap-1">
-                  <i className="fa-solid fa-bolt text-[10px]" /> Book Now
-                </button>
+
+                <div className="h-1.5 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
+
+                <div className="bg-[#242426] p-3 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "vvip" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -375,7 +510,14 @@ export default function Home() {
         <BookTicketsModal
           initialTierId={booking.tierId}
           onClose={() => setBooking(null)}
-          onProceed={() => setBooking(null)}
+          onProceed={async (data) => {
+            try {
+              await saveBooking(data);
+            } catch (err) {
+              console.error("Failed to save booking", err);
+            }
+            setBooking(null);
+          }}
         />
       )}
     </div>
@@ -404,12 +546,12 @@ function HeroCarousel() {
     },
     {
       img: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&auto=format&fit=crop&q=80",
-      kicker: "Book",
-      title: "ONLINE TICKETS",
-      sub: "Instant Digital QR Ticket",
-      badge: ["Instant", "Booking", "2026"],
-      ctaTop: "Instant Digital QR Ticket",
-      ctaBottom: "Easy • Fast • Secure",
+      kicker: "Advertise",
+      title: "KHERWAL BAZAAR",
+      sub: "Developer Agency & Garments Shop",
+      badge: ["Our", "Local", "Partner"],
+      ctaTop: "Contact Us • 9583252256",
+      ctaBottom: "Bahanada Lamk Chhaka, Bahanada, Khunta, Mayurbhanj • Developer : Balakram Tudu",
     },
   ];
 
@@ -457,9 +599,9 @@ function HeroCarousel() {
               </div>
 
               <div className="mt-8 flex items-end justify-between">
-                <div className="space-y-0.5">
+                <div className="space-y-0.5 min-w-0">
                   <p className="text-[12px] font-semibold text-yellow-300">{slide.ctaTop}</p>
-                  <p className="text-[11px] font-normal text-slate-200">{slide.ctaBottom}</p>
+                  <p className="text-[11px] font-normal text-slate-200 leading-snug">{slide.ctaBottom}</p>
                 </div>
 
                 <div className="flex items-center gap-1.5 pb-1">
@@ -475,6 +617,98 @@ function HeroCarousel() {
               </div>
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EventCarousel() {
+  const events = [
+    {
+      month: "OCT",
+      day: "22",
+      year: "2026",
+      name: "ADIM OWAR JARPA OPERA",
+      emoji: "🔥",
+    },
+    {
+      month: "OCT",
+      day: "23",
+      year: "2026",
+      name: "RAMRAJ GAYAN MOHAL",
+      emoji: "🔥",
+    },
+  ];
+
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % events.length), 4000);
+    return () => clearInterval(id);
+  }, [events.length]);
+
+  return (
+    <div className="relative">
+      <div className="overflow-hidden rounded-2xl">
+        <div
+          className="flex transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${index * 100}%)` }}
+        >
+          {events.map((ev, i) => (
+            <div key={i} className="w-full flex-shrink-0">
+              <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 relative overflow-hidden">
+                <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-3 translate-y-2">
+                  <i className="fa-solid fa-users text-8xl text-indigo-900" />
+                </div>
+
+                <div className="absolute top-1.5 right-1.5 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap -mt-1 blink-live">
+                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
+                  <span>Live Booking</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-shrink-0 w-20 bg-rose-50 border border-rose-200 rounded-xl overflow-hidden text-center shadow-xs">
+                    <div className="bg-rose-600 text-white font-extrabold text-[11px] py-0.5 uppercase tracking-wider">{ev.month}</div>
+                    <div className="text-2xl font-black text-slate-900 leading-none py-1">{ev.day}</div>
+                    <div className="text-[11px] font-bold text-slate-600 pb-1">{ev.year}</div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-1.5">
+                      <h3 className="text-base font-black text-slate-900 truncate font-brand flex items-center gap-1">
+                        {ev.name} <span>{ev.emoji}</span>
+                      </h3>
+                      <div className="w-6" />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
+                      <i className="fa-solid fa-location-dot text-rose-500 text-xs flex-shrink-0" />
+                      <span className="truncate">Bahanada, Khunta, Mayurbhanj</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold">
+                      <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
+                      <span>
+                        Entry 10:00 PM <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start 11:00 PM
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center gap-1.5 mt-2">
+        {events.map((_, si) => (
+          <button
+            key={si}
+            aria-label={`Go to event ${si + 1}`}
+            onClick={() => setIndex(si)}
+            className={`${si === index ? "w-2.5 h-2.5 rounded-full bg-indigo-600" : "w-2 h-2 rounded-full bg-slate-200"} transition-all`}
+          />
         ))}
       </div>
     </div>

@@ -94,7 +94,7 @@ export default function TicketDetail({ ticket }) {
               {ticket.category} • Gate Pass
             </span>
             <h3 className="text-xl font-black text-slate-900 font-brand mt-2 uppercase tracking-tight">
-              Adim Lahah Mandawa 2026
+              ADIM OWAR JARPA OPERA
             </h3>
             <p className="text-xs font-semibold text-slate-500">
               {ticket.name} • Entry via {ticket.gate}
