@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+body {
+  font-family: "Inter", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-brand {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.ticket-notch-left {
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  background-color: #f8faff;
+  border-radius: 50%;
+  box-shadow: inset -2px 0 3px rgba(0, 0, 0, 0.05);
+}
+
+.ticket-notch-right {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  background-color: #f8faff;
+  border-radius: 50%;
+  box-shadow: inset 2px 0 3px rgba(0, 0, 0, 0.05);
+}
