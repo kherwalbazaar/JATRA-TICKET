@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import BottomNav from "../components/BottomNav";
 
 const upcomingTickets = [
   { id: "NJ-TKT-501", name: "Balakram Tudu", isYou: true },
@@ -223,33 +224,7 @@ export default function TicketsPage() {
         </div>
 
         {/* Fixed Bottom Navigation Bar */}
-        <nav className="fixed bottom-0 left-0 right-0 w-full bg-white border-t border-slate-200 px-4 py-2 flex items-center justify-between z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-          <Link href="/" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5"><i className="fa-solid fa-house" /></div>
-            <span className="text-[10px] font-medium">Home</span>
-          </Link>
-
-          <span className="flex flex-col items-center flex-1 text-indigo-600">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5"><i className="fa-solid fa-ticket-simple" /></div>
-            <span className="text-[10px] font-bold">My Tickets</span>
-            <span className="w-6 h-1 bg-indigo-600 rounded-full mt-0.5" />
-          </span>
-
-          <a href="#" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5"><i className="fa-regular fa-calendar-days" /></div>
-            <span className="text-[10px] font-medium">Events</span>
-          </a>
-
-          <a href="#" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5"><i className="fa-solid fa-headset" /></div>
-            <span className="text-[10px] font-medium">Support</span>
-          </a>
-
-          <a href="#" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5"><i className="fa-regular fa-circle-user" /></div>
-            <span className="text-[10px] font-medium">Profile</span>
-          </a>
-        </nav>
+        <BottomNav active="tickets" />
       </div>
     </div>
   );

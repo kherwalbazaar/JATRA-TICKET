@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import BookTicketsModal from "./components/BookTicketsModal";
+import BottomNav from "./components/BottomNav";
 import { saveBooking } from "../lib/bookings";
+import { subscribeEvents } from "../lib/events";
 
 export default function Home() {
   const [booking, setBooking] = useState(null);
@@ -109,35 +111,26 @@ export default function Home() {
 
             <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 pt-1">
               {/* STANDING - Orange */}
-              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-32 pt-6 text-center overflow-hidden">
+              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-24 pt-4 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">STANDING</h4>
+                  <h4 className="relative z-10 text-base font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">STANDING</h4>
                   <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate A
                   </span>
                 </div>
 
-                <div className="relative -mt-11 flex justify-center z-20">
-                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
-                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
-                    <circle cx="18" cy="16" r="3.5" fill="#ff7700" stroke="#ffffff" strokeWidth="2" />
-                    <line x1="22" y1="16" x2="80" y2="16" stroke="#ff7700" strokeWidth="3" />
-                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#ff7700" strokeWidth="3" fill="none" />
-                    <line x1="150" y1="16" x2="208" y2="16" stroke="#ff7700" strokeWidth="3" />
-                    <circle cx="212" cy="16" r="3.5" fill="#ff7700" stroke="#ffffff" strokeWidth="2" />
-                  </svg>
-
-                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                <div className="relative -mt-7 flex justify-center z-20">
+                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
-                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">50</span>
+                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
+                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">50</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-5 pt-4 pb-3 flex-1">
-                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                <div className="px-3 pt-3 pb-2 flex-1">
+                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
                     <li className="flex items-start gap-3">
                       <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
                       <span>Normal Entry</span>
@@ -160,42 +153,33 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "standing" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "standing" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
               </div>
 
               {/* SPECIAL - Green/Cyan/Blue */}
-              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-32 pt-6 text-center overflow-hidden">
+              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-24 pt-4 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">SPECIAL</h4>
+                  <h4 className="relative z-10 text-base font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">SPECIAL</h4>
                   <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate B
                   </span>
                 </div>
 
-                <div className="relative -mt-11 flex justify-center z-20">
-                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
-                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
-                    <circle cx="18" cy="16" r="3.5" fill="#00b37e" stroke="#ffffff" strokeWidth="2" />
-                    <line x1="22" y1="16" x2="80" y2="16" stroke="#00b37e" strokeWidth="3" />
-                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#009fd9" strokeWidth="3" fill="none" />
-                    <line x1="150" y1="16" x2="208" y2="16" stroke="#0077ff" strokeWidth="3" />
-                    <circle cx="212" cy="16" r="3.5" fill="#0077ff" stroke="#ffffff" strokeWidth="2" />
-                  </svg>
-
-                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                <div className="relative -mt-7 flex justify-center z-20">
+                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
-                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">100</span>
+                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
+                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">100</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-5 pt-4 pb-3 flex-1">
-                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                <div className="px-3 pt-3 pb-2 flex-1">
+                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
                     <li className="flex items-start gap-3">
                       <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
                       <span>Fast Entry</span>
@@ -218,46 +202,37 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "special" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "special" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
               </div>
 
               {/* VIP - Violet/Purple (Popular) */}
-              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative">
+              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative">
                 <div className="absolute top-3 -right-7 bg-red-500 text-white text-[9px] font-extrabold uppercase py-0.5 px-7 rotate-45 shadow-sm z-30">
                   Popular
                 </div>
 
-                <div className="relative bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8] h-32 pt-6 text-center overflow-hidden">
+                <div className="relative bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8] h-24 pt-4 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">VIP</h4>
+                  <h4 className="relative z-10 text-base font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">VIP</h4>
                   <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate C
                   </span>
                 </div>
 
-                <div className="relative -mt-11 flex justify-center z-20">
-                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
-                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
-                    <circle cx="18" cy="16" r="3.5" fill="#702bf9" stroke="#ffffff" strokeWidth="2" />
-                    <line x1="22" y1="16" x2="80" y2="16" stroke="#702bf9" strokeWidth="3" />
-                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#5b24e6" strokeWidth="3" fill="none" />
-                    <line x1="150" y1="16" x2="208" y2="16" stroke="#3a1eb8" strokeWidth="3" />
-                    <circle cx="212" cy="16" r="3.5" fill="#3a1eb8" stroke="#ffffff" strokeWidth="2" />
-                  </svg>
-
-                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                <div className="relative -mt-7 flex justify-center z-20">
+                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
-                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">200</span>
+                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
+                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">200</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-5 pt-4 pb-3 flex-1">
-                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                <div className="px-3 pt-3 pb-2 flex-1">
+                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
                     <li className="flex items-start gap-3">
                       <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
                       <span>Priority Entry</span>
@@ -280,42 +255,33 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "vip" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "vip" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
               </div>
 
               {/* STAR - Dark/Gold */}
-              <div className="min-w-[200px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-32 pt-6 text-center overflow-hidden">
+              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-24 pt-4 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-60 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-xl font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">STAR</h4>
+                  <h4 className="relative z-10 text-base font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">STAR</h4>
                   <span className="relative z-10 inline-block mt-1 bg-amber-400/20 text-amber-300 text-[9px] font-bold px-2 py-0.5 rounded-md border border-amber-400/30">
                     <i className="fa-solid fa-location-dot text-[8px]" /> Gate D
                   </span>
                 </div>
 
-                <div className="relative -mt-11 flex justify-center z-20">
-                  <svg className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-24 pointer-events-none z-0" viewBox="0 0 200 100" fill="none">
-                    <path d="M0,0 L75,0 C81,0 84,45 115,45 C146,45 149,0 155,0 L230,0 L230,100 L0,100 Z" fill="#ffffff" />
-                    <circle cx="18" cy="16" r="3.5" fill="#b8860b" stroke="#ffffff" strokeWidth="2" />
-                    <line x1="22" y1="16" x2="80" y2="16" stroke="#b8860b" strokeWidth="3" />
-                    <path d="M80,16 C88,16 90,58 115,58 C140,58 142,16 150,16" stroke="#d4a017" strokeWidth="3" fill="none" />
-                    <line x1="150" y1="16" x2="208" y2="16" stroke="#e6b800" strokeWidth="3" />
-                    <circle cx="212" cy="16" r="3.5" fill="#e6b800" stroke="#ffffff" strokeWidth="2" />
-                  </svg>
-
-                  <div className="relative z-10 w-22 h-22 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
+                <div className="relative -mt-7 flex justify-center z-20">
+                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-xs font-black self-start mt-3.5 mr-0.5">₹</span>
-                      <span className="text-3xl font-black font-brand tracking-tight drop-shadow">500</span>
+                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
+                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">500</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-5 pt-4 pb-3 flex-1">
-                  <ul className="space-y-3 text-[11px] leading-relaxed text-slate-500 font-medium">
+                <div className="px-3 pt-3 pb-2 flex-1">
+                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
                     <li className="flex items-start gap-3">
                       <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
                       <span>Exclusive Entry</span>
@@ -338,7 +304,7 @@ export default function Home() {
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
 
                 <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "star" })} className="w-40 py-2.5 px-6 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
+                  <button onClick={() => setBooking({ tierId: "star" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
                     <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
                   </button>
                 </div>
@@ -465,45 +431,9 @@ export default function Home() {
         </main>
 
         {/* ==============================================
-          10. FIXED BOTTOM NAVIGATION BAR
+          10. FIXED BOTTOM NAVIGATION BAR (animated)
         ============================================== */}
-        <nav className="fixed bottom-0 left-0 right-0 w-full bg-white border-t border-slate-200/80 px-4 py-2 flex items-center justify-between z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-          <a href="#" className="flex flex-col items-center flex-1 text-indigo-600 relative group">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5">
-              <i className="fa-solid fa-house" />
-            </div>
-            <span className="text-[10px] font-bold">Home</span>
-            <span className="w-6 h-1 bg-indigo-600 rounded-full mt-0.5" />
-          </a>
-
-          <Link href="/tickets" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5">
-              <i className="fa-solid fa-ticket-simple" />
-            </div>
-            <span className="text-[10px] font-medium">My Tickets</span>
-          </Link>
-
-          <a href="#" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5">
-              <i className="fa-regular fa-calendar-days" />
-            </div>
-            <span className="text-[10px] font-medium">Events</span>
-          </a>
-
-          <a href="#" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5">
-              <i className="fa-solid fa-headset" />
-            </div>
-            <span className="text-[10px] font-medium">Support</span>
-          </a>
-
-          <a href="#" className="flex flex-col items-center flex-1 text-slate-400 hover:text-slate-700 transition-colors">
-            <div className="w-6 h-6 flex items-center justify-center text-lg mb-0.5">
-              <i className="fa-regular fa-circle-user" />
-            </div>
-            <span className="text-[10px] font-medium">Profile</span>
-          </a>
-        </nav>
+        <BottomNav active="home" />
       </div>
 
       {booking && (
@@ -624,13 +554,16 @@ function HeroCarousel() {
 }
 
 function EventCarousel() {
-  const events = [
+  const defaultEvents = [
     {
       month: "OCT",
       day: "22",
       year: "2026",
       name: "ADIM OWAR JARPA OPERA",
       emoji: "🔥",
+      location: "Bahanada, Khunta, Mayurbhanj",
+      entryTime: "10:00 PM",
+      startTime: "11:00 PM",
     },
     {
       month: "OCT",
@@ -638,12 +571,27 @@ function EventCarousel() {
       year: "2026",
       name: "RAMRAJ GAYAN MOHAL",
       emoji: "🔥",
+      location: "Bahanada, Khunta, Mayurbhanj",
+      entryTime: "10:00 PM",
+      startTime: "11:00 PM",
     },
   ];
 
+  const [events, setEvents] = useState(defaultEvents);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
+    const unsub = subscribeEvents((data) => {
+      if (data && data.length > 0) {
+        setEvents(data);
+        setIndex(0);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (events.length === 0) return;
     const id = setInterval(() => setIndex((i) => (i + 1) % events.length), 4000);
     return () => clearInterval(id);
   }, [events.length]);
@@ -684,13 +632,13 @@ function EventCarousel() {
 
                     <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
                       <i className="fa-solid fa-location-dot text-rose-500 text-xs flex-shrink-0" />
-                      <span className="truncate">Bahanada, Khunta, Mayurbhanj</span>
+                      <span className="truncate">{ev.location}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold">
                       <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
                       <span>
-                        Entry 10:00 PM <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start 11:00 PM
+                        Entry {ev.entryTime} <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start {ev.startTime}
                       </span>
                     </div>
                   </div>
