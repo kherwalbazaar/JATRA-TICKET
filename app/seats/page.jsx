@@ -91,7 +91,8 @@ export default function SeatSelectionPage() {
             {blockSeats[activeBlock].map((row, rowIndex) => (
               <div key={row.id} className="flex items-center gap-0.5">
                 <span className="w-6 text-right pr-1 text-[10px] font-black text-slate-400">{row.id}</span>
-                <div className="flex-1 flex justify-center -space-x-1.5 overflow-hidden">
+                <div className="flex-1 overflow-x-auto">
+                    <div className="flex w-max mx-auto -space-x-1.5">
                     {Array.from({ length: row.count }).map((_, i) => {
                       const seatNo = i + 1;
                       const key = `${row.id}-${seatNo}`;
@@ -108,6 +109,7 @@ export default function SeatSelectionPage() {
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 <span className="w-6 text-left pl-1 text-[10px] font-black text-slate-400">{row.id}</span>
               </div>
