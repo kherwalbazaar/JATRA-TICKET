@@ -7,8 +7,8 @@ const tabs = [
   { id: "home", title: "Home", icon: "fa-solid fa-house", href: "/" },
   { id: "tickets", title: "My Tickets", icon: "fa-solid fa-ticket-simple", href: "/tickets" },
   { id: "events", title: "Events", icon: "fa-solid fa-calendar-days", href: "/events" },
-  { id: "support", title: "Support", icon: "fa-solid fa-headset", href: "#" },
-  { id: "profile", title: "Profile", icon: "fa-regular fa-circle-user", href: "#" },
+  { id: "support", title: "Support", icon: "fa-solid fa-headset", href: "/support" },
+  { id: "profile", title: "Profile", icon: "fa-regular fa-circle-user", href: "/profile" },
 ];
 
 export default function BottomNav({ active }) {
@@ -68,7 +68,7 @@ export default function BottomNav({ active }) {
             aria-label={tab.title}
             aria-current={current === tab.id ? "page" : undefined}
           >
-            <i className={`${tab.icon} nav-icon`} />
+            <i className={`${tab.icon} nav-icon ${tab.id === "home" ? "nav-icon-home" : ""} ${tab.id === "tickets" ? "nav-icon-tickets" : ""} ${tab.id === "support" ? "nav-icon-support" : ""} ${tab.id === "profile" ? "nav-icon-profile" : ""}`} />
             <span className="menu__label">{tab.title}</span>
           </button>
         ))}

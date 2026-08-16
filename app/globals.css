@@ -111,7 +111,8 @@ body {
   flex-grow: 1;
   justify-content: center;
   align-items: center;
-  padding: 0.45em 0;
+  gap: 0.2rem;
+  padding: 0;
   display: flex;
   position: relative;
 }
@@ -149,9 +150,41 @@ body {
   display: block;
 }
 
+.nav-icon-home {
+  transform: translateX(0.3rem);
+}
+
+.menu__item.active .nav-icon.nav-icon-home {
+  transform: translate3d(0.3rem, 0.5rem, 0) scale(1.22);
+}
+
+.nav-icon-tickets {
+  transform: translateX(0.33rem);
+}
+
+.menu__item.active .nav-icon.nav-icon-tickets {
+  transform: translate3d(0.33rem, 0.5rem, 0) scale(1.22);
+}
+
+.nav-icon-support {
+  transform: translateX(0.3rem);
+}
+
+.menu__item.active .nav-icon.nav-icon-support {
+  transform: translate3d(0.3rem, 0.5rem, 0) scale(1.22);
+}
+
+.nav-icon-profile {
+  transform: translateX(0.3rem);
+}
+
+.menu__item.active .nav-icon.nav-icon-profile {
+  transform: translate3d(0.3rem, 0.5rem, 0) scale(1.22);
+}
+
 .menu__item.active .nav-icon {
   color: var(--bgColorMenu);
-  transform: scale(1.22);
+  transform: translate3d(0.55rem, 0.5rem, 0) scale(1.22);
 }
 
 .menu__label {
@@ -159,7 +192,6 @@ body {
   text-align: center;
   white-space: nowrap;
   max-width: 100%;
-  margin-top: 0.18rem;
   padding: 0 0.25rem;
   font-size: 0.68rem;
   font-weight: 700;

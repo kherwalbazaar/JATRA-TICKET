@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 
 export const bookingTiers = [
   { id: "standing", name: "STANDING", price: 50, gate: "Gate A", available: 1200, icon: "fa-users", iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
@@ -145,6 +146,23 @@ export default function BookingForm({ onClose, onProceed, initialTierId = "vip",
 
         {/* SECTION 1: SELECT TICKET TYPE */}
         <div className="space-y-3">
+          {/* Select Seats Shortcut Button */}
+          <Link
+            href="/seats"
+            className="w-full flex items-center justify-between gap-3 bg-gradient-to-r from-indigo-700 to-purple-700 text-white rounded-2xl px-4 py-3 shadow-md hover:brightness-110 active:scale-[0.98] transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center text-amber-300 text-sm">
+                <i className="fa-solid fa-chair" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-black font-brand uppercase tracking-wide">Select Seats</p>
+                <p className="text-[10px] text-white/70 font-medium">Pick your favourite seats on the seating map</p>
+              </div>
+            </div>
+            <i className="fa-solid fa-arrow-right text-sm bg-white/20 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" />
+          </Link>
+
           <div className="flex items-center gap-2">
             <span className="w-5 h-5 rounded-full bg-purple-700 text-white font-bold text-[11px] flex items-center justify-center">1</span>
             <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Select Ticket Type</h4>
