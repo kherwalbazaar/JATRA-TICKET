@@ -1,0 +1,38 @@
+{
+  "rules": {
+    "events": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "bookings": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$bookingId": {
+        ".validate": "newData.hasChildren(['bookingId', 'tierId', 'category', 'gate', 'price', 'quantity', 'totalAmount', 'paymentMethod', 'contact', 'holders', 'createdAt'])",
+        "status": {
+          ".validate": "newData.val() in ['active', 'used', 'cancelled', 'expired']"
+        },
+        "quantity": {
+          ".validate": "newData.val() > 0 && newData.val() <= 10"
+        },
+        "totalAmount": {
+          ".validate": "newData.val() > 0"
+        }
+      }
+    },
+    "tickets": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "seats": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

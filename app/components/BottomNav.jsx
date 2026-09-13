@@ -16,10 +16,11 @@ export default function BottomNav({ active }) {
   const pathname = usePathname();
   const menuRef = useRef(null);
   const borderRef = useRef(null);
+  const glowRef = useRef(null);
   const [hidden, setHidden] = useState(false);
   const lastScroll = useRef(0);
 
-  const current = active || (pathname.startsWith("/tickets") ? "tickets" : pathname.startsWith("/events") ? "events" : "home");
+  const current = active || (pathname.startsWith("/tickets") ? "tickets" : pathname.startsWith("/events") ? "events" : pathname.startsWith("/support") ? "support" : pathname.startsWith("/profile") ? "profile" : "home");
 
   useEffect(() => {
     const onScroll = () => {
@@ -33,7 +34,7 @@ export default function BottomNav({ active }) {
   }, []);
 
   useEffect(() => {
-    const offsetMenuBorder = () => {
+    const updatePositions = () => {
       const activeItem = menuRef.current?.querySelector(".active");
       if (activeItem && borderRef.current && menuRef.current) {
         const rect = activeItem.getBoundingClientRect();
@@ -41,11 +42,21 @@ export default function BottomNav({ active }) {
         const left = Math.floor(rect.left - menuRect.left - (borderRef.current.offsetWidth - rect.width) / 2) + "px";
         borderRef.current.style.transform = `translate3d(${left}, 0, 0)`;
       }
+
+      if (glowRef.current && menuRef.current) {
+        const activeItem = menuRef.current.querySelector(".active");
+        if (activeItem) {
+          const rect = activeItem.getBoundingClientRect();
+          const menuRect = menuRef.current.getBoundingClientRect();
+          const centerX = rect.left - menuRect.left + rect.width / 2;
+          glowRef.current.style.transform = `translate3d(${centerX - 28}px, 0, 0)`;
+        }
+      }
     };
 
-    requestAnimationFrame(offsetMenuBorder);
-    window.addEventListener("resize", offsetMenuBorder);
-    return () => window.removeEventListener("resize", offsetMenuBorder);
+    requestAnimationFrame(updatePositions);
+    window.addEventListener("resize", updatePositions);
+    return () => window.removeEventListener("resize", updatePositions);
   }, [current]);
 
   const handleTabChange = (tab) => {
@@ -58,6 +69,12 @@ export default function BottomNav({ active }) {
   return (
     <div className={`nav-wrapper fixed bottom-0 left-0 right-0 transition-transform duration-300 ${hidden ? "translate-y-full" : "translate-y-0"}`}>
       <menu className="menu" ref={menuRef}>
+        <div className="glow-orb" ref={glowRef}>
+          <div className="glow-orb__core" />
+          <div className="glow-orb__ring" />
+          <div className="glow-orb__pulse" />
+        </div>
+
         {tabs.map((tab) => (
           <button
             type="button"
@@ -68,7 +85,9 @@ export default function BottomNav({ active }) {
             aria-label={tab.title}
             aria-current={current === tab.id ? "page" : undefined}
           >
-            <i className={`${tab.icon} nav-icon ${tab.id === "home" ? "nav-icon-home" : ""} ${tab.id === "tickets" ? "nav-icon-tickets" : ""} ${tab.id === "support" ? "nav-icon-support" : ""} ${tab.id === "profile" ? "nav-icon-profile" : ""}`} />
+            <span className="icon-wrapper">
+              <i className={`${tab.icon} nav-icon`} />
+            </span>
             <span className="menu__label">{tab.title}</span>
           </button>
         ))}
