@@ -6,17 +6,48 @@ import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import { subscribeEvents } from "../../lib/events";
 
+const TABS = [
+  { key: "today", label: "Today's" },
+  { key: "upcoming", label: "Upcoming" },
+  { key: "past", label: "Past" },
+];
+
 export default function EventsPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("upcoming");
 
   useEffect(() => {
-    const unsub = subscribeEvents((data) => {
-      setEvents(data);
+    try {
+      const unsub = subscribeEvents((data) => {
+        setEvents(data || []);
+        setLoading(false);
+      });
+      return () => unsub();
+    } catch (err) {
       setLoading(false);
-    });
-    return () => unsub();
+      return () => {};
+    }
   }, []);
+
+  const getEventDate = (ev) => {
+    return new Date(`${ev.month || "OCT"} ${ev.day || "22"}, ${ev.year || "2026"}`);
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const filteredEvents = events.filter((ev) => {
+    const evDate = getEventDate(ev);
+    evDate.setHours(0, 0, 0, 0);
+    if (tab === "today") return evDate.getTime() === today.getTime();
+    if (tab === "upcoming") return evDate >= tomorrow;
+    if (tab === "past") return evDate < today;
+    return true;
+  });
 
   const formatDate = (month, day, year) => {
     const date = new Date(`${month} ${day}, ${year}`);
@@ -34,7 +65,27 @@ export default function EventsPage() {
           <p className="text-xs text-slate-500 font-medium">Explore upcoming jatra shows & book your tickets</p>
         </div>
 
-        <div className="p-4 space-y-4 flex-1">
+        {/* Tabs */}
+        <div className="px-4 pb-1 pt-1">
+          <div className="flex items-center bg-slate-200/70 p-1 rounded-2xl text-xs font-bold gap-1">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex-1 py-2 rounded-xl transition-all text-center ${
+                  tab === t.key
+                    ? "bg-[#12193b] text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Events Grid */}
+        <div className="px-4 flex-1">
           {loading && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <div className="w-10 h-10 border-4 border-rose-200 border-t-rose-600 rounded-full animate-spin" />
@@ -42,66 +93,54 @@ export default function EventsPage() {
             </div>
           )}
 
-          {!loading && events.length === 0 && (
+          {!loading && filteredEvents.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <i className="fa-regular fa-calendar-xmark text-4xl text-slate-300" />
-              <p className="text-sm text-slate-400 font-medium">No upcoming events</p>
+              <p className="text-sm text-slate-400 font-medium">No {tab} events</p>
               <p className="text-xs text-slate-400">Check back soon for new jatra shows!</p>
             </div>
           )}
 
-          {!loading && events.map((ev, i) => {
-            const { month, day, year } = formatDate(ev.month || "OCT", ev.day || "22", ev.year || "2026");
-            return (
-              <div key={ev.key || i} className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 relative overflow-hidden">
-                <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-3 translate-y-2">
-                  <i className="fa-solid fa-users text-8xl text-indigo-900" />
-                </div>
-
-                <div className="flex items-center gap-3 relative">
-                  <div className="flex-shrink-0 w-20 bg-rose-50 border border-rose-200 rounded-xl overflow-hidden text-center shadow-xs">
-                    <div className="bg-rose-600 text-white font-extrabold text-[11px] py-0.5 uppercase tracking-wider">{month}</div>
-                    <div className="text-2xl font-black text-slate-900 leading-none py-1">{day}</div>
-                    <div className="text-[11px] font-bold text-slate-600 pb-1">{year}</div>
+          {!loading && filteredEvents.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 pb-4">
+              {filteredEvents.map((ev, i) => {
+                const { month, day, year } = formatDate(ev.month || "OCT", ev.day || "22", ev.year || "2026");
+                return (
+                  <div key={ev.key || i} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={ev.banner || ev.img || "/jarpa.png"}
+                      alt={ev.name}
+                      className="w-full h-28 object-cover"
+                    />
+                    <div className="p-2.5">
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="bg-rose-600 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded uppercase">{month}</span>
+                        <span className="text-sm font-black text-slate-900">{day}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{year}</span>
+                      </div>
+                      <h4 className="text-xs font-black text-slate-900 font-brand truncate">{ev.name || "Event"}</h4>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-0.5">
+                        <i className="fa-solid fa-location-dot text-rose-500 text-[8px]" />
+                        <span className="truncate">{ev.location || "TBD"}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px] text-indigo-800 font-bold mt-0.5">
+                        <i className="fa-regular fa-clock text-indigo-500 text-[8px]" />
+                        <span>{ev.entryTime || "TBD"}</span>
+                      </div>
+                      <Link
+                        href="/book"
+                        className="mt-2 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1"
+                      >
+                        <i className="fa-solid fa-ticket -rotate-12 text-[9px]" />
+                        Book
+                      </Link>
+                    </div>
                   </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <h3 className="text-base font-black text-slate-900 truncate font-brand flex items-center gap-1">
-                        {ev.name || "Event"} <span>{ev.emoji || "🎭"}</span>
-                      </h3>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
-                      <i className="fa-solid fa-location-dot text-rose-500 text-xs flex-shrink-0" />
-                      <span className="truncate">{ev.location || "Location TBD"}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold">
-                      <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
-                      <span>
-                        Entry {ev.entryTime || "TBD"} <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start {ev.startTime || "TBD"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center gap-2 relative">
-                  <Link
-                    href="/book"
-                    className="flex-1 bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-xs py-2.5 rounded-xl shadow-md active:scale-95 transition-transform flex items-center justify-center gap-1.5"
-                  >
-                    <i className="fa-solid fa-ticket -rotate-12 text-xs" />
-                    <span>Book Tickets</span>
-                  </Link>
-                  <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-bold px-2.5 py-1.5 rounded-full whitespace-nowrap blink-live">
-                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
-                    Live Booking
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <BottomNav active="events" />

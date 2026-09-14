@@ -47,6 +47,11 @@ export default function Home() {
         <main className="p-3.5 space-y-3.5">
 
           {/* ==============================================
+            TODAY'S SHOW SECTION
+          ============================================== */}
+          <TodaysShow />
+
+          {/* ==============================================
             3. EVENT SCHEDULE & LOCATION CARDS (SLIDER)
           ============================================== */}
           <EventCarousel />
@@ -440,25 +445,86 @@ export default function Home() {
   );
 }
 
-function HeroCarousel() {
-  const defaultSlides = [
-    { img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80" },
-    { img: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&auto=format&fit=crop&q=80" },
-    { img: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&auto=format&fit=crop&q=80" },
+function TodaysShow() {
+  const shows = [
+    {
+      key: "1",
+      name: "ADIM OWAR JARPA OPERA",
+      partyName: "Adim Opera Group",
+      month: "SEP",
+      day: "14",
+      year: "2026",
+      location: "Bahanada, Khunta, Mayurbhanj",
+      banner: "/jarpa.png",
+      time: "10:00 PM - 05:00 AM",
+    },
+    {
+      key: "2",
+      name: "RAMRAJ GAYAN MOHAL",
+      partyName: "Ramraj Opera",
+      month: "OCT",
+      day: "23",
+      year: "2026",
+      location: "Bahanada, Khunta, Mayurbhanj",
+      banner: "/ramraj.png",
+      time: "10:00 PM - 05:00 AM",
+    },
   ];
 
-  const [slides, setSlides] = useState(defaultSlides);
-  const [index, setIndex] = useState(0);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-base">🎭</span>
+          <h3 className="text-base font-black text-slate-900 font-brand tracking-tight">Todays Show</h3>
+        </div>
+        <Link href="/todays-show" className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+          View All <i className="fa-solid fa-arrow-right text-[10px]" />
+        </Link>
+      </div>
 
-  useEffect(() => {
-    const unsub = subscribeBanners((data) => {
-      if (data && data.length > 0) {
-        setSlides(data);
-        setIndex(0);
-      }
-    });
-    return () => unsub();
-  }, []);
+      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+        {shows.map((show) => (
+          <div key={show.key} className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={show.banner}
+              alt={show.name}
+              className="w-full h-32 object-cover"
+            />
+            <div className="p-2.5">
+              <h4 className="text-xs font-black text-slate-900 font-brand truncate">{show.name}</h4>
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
+                <i className="fa-solid fa-users text-indigo-500 text-[9px]" />
+                <span className="truncate">{show.partyName}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
+                <i className="fa-regular fa-calendar text-rose-500 text-[9px]" />
+                <span>{show.month} {show.day}, {show.year}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
+                <i className="fa-solid fa-location-dot text-rose-500 text-[9px]" />
+                <span className="truncate">{show.location}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-indigo-800 font-bold mt-0.5">
+                <i className="fa-regular fa-clock text-indigo-500 text-[9px]" />
+                <span>{show.time}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HeroCarousel() {
+  const slides = [
+    { img: "/jarpa.png" },
+    { img: "/ramraj.png" },
+  ];
+
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     if (slides.length === 0) return;
@@ -468,18 +534,18 @@ function HeroCarousel() {
 
   return (
     <div>
-      <div className="relative w-full overflow-hidden">
+      <div className="relative w-full h-[200px] overflow-hidden bg-slate-900">
         <div
-          className="flex transition-transform duration-700 ease-in-out"
+          className="flex transition-transform duration-700 ease-in-out h-full"
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
           {slides.map((slide, i) => (
-            <div key={slide.key || i} className="w-full flex-shrink-0">
+            <div key={i} className="w-full flex-shrink-0 h-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={slide.img}
                 alt={`Banner ${i + 1}`}
-                className="w-full h-[180px] object-cover"
+                className="w-full h-full"
               />
             </div>
           ))}
@@ -546,13 +612,17 @@ function EventCarousel() {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const unsub = subscribeEvents((data) => {
-      if (data && data.length > 0) {
-        setEvents(data);
-        setIndex(0);
-      }
-    });
-    return () => unsub();
+    try {
+      const unsub = subscribeEvents((data) => {
+        if (data && data.length > 0) {
+          setEvents(data);
+          setIndex(0);
+        }
+      });
+      return () => unsub();
+    } catch (err) {
+      return () => {};
+    }
   }, []);
 
   useEffect(() => {
