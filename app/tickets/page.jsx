@@ -223,11 +223,11 @@ function TicketStatusList({ tab }) {
   const statusConfig = {
     used: {
       label: "USED",
-      textClass: "text-white",
-      borderClass: "border-white/30",
-      badge: "border-emerald-600 bg-white/95 text-emerald-700",
+      textClass: "text-red-500",
+      borderClass: "border-red-200",
+      badge: "border-red-500 bg-white/95 text-red-500",
       note: "Entry Completed",
-      gradient: "bg-gradient-to-br from-emerald-500 via-teal-500 to-teal-700",
+      gradient: "bg-gradient-to-br from-slate-300 via-slate-200 to-slate-300",
     },
     cancelled: {
       label: "CANCELLED",
@@ -251,27 +251,27 @@ function TicketStatusList({ tab }) {
           <div className="absolute -left-8 -bottom-10 w-32 h-32 rounded-full bg-white/10" />
 
           <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
-            <span className="w-6 h-6 rounded-full bg-white/25 backdrop-blur text-white font-black text-xs flex items-center justify-center flex-shrink-0 ring-1 ring-white/30">
+            <span className={`w-6 h-6 rounded-full bg-white/50 backdrop-blur ${tab === "used" ? "text-slate-600" : "text-white"} font-black text-xs flex items-center justify-center flex-shrink-0 ring-1 ring-white/30`}>
               <i className="fa-solid fa-user text-[10px]" />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <i className="fa-regular fa-circle-user text-white/80 text-sm" />
-                <h4 className="text-xs font-black text-white truncate drop-shadow">{ticket.name}</h4>
+                <i className={`fa-regular fa-circle-user ${tab === "used" ? "text-slate-500" : "text-white/80"} text-sm`} />
+                <h4 className={`text-xs font-black ${tab === "used" ? "text-slate-700" : "text-white"} truncate drop-shadow`}>{ticket.name}</h4>
               </div>
-              <p className="text-[11px] font-bold text-white/80 mt-0.5">
-                {ticket.category} <span className="text-white/40">•</span> {ticket.gate} <span className="text-white/40">•</span> {ticket.date}
+              <p className={`text-[11px] font-bold ${tab === "used" ? "text-slate-500" : "text-white/80"} mt-0.5`}>
+                {ticket.category} <span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span> {ticket.gate} <span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span> {ticket.date}
               </p>
-              <p className="text-[11px] font-extrabold text-white mt-0.5 drop-shadow">Ticket ID: {ticket.id}</p>
-              <span className={`inline-flex items-center gap-1 text-[10px] font-bold text-white mt-1 bg-white/20 backdrop-blur px-1.5 py-0.5 rounded-md ring-1 ring-white/30`}>
+              <p className={`text-[11px] font-extrabold ${tab === "used" ? "text-slate-600" : "text-white"} mt-0.5 drop-shadow`}>Ticket ID: {ticket.id}</p>
+              <span className={`inline-flex items-center gap-1 text-[10px] font-bold mt-1 px-1.5 py-0.5 rounded-md ring-1 ${tab === "used" ? "text-red-500 bg-red-50 ring-red-200" : "text-white bg-white/20 backdrop-blur ring-white/30"}`}>
                 <i className="fa-solid fa-circle-check text-xs" />
                 <span>{statusConfig.label}</span>
-                {ticket.refunded && <span className="font-semibold text-white/75 text-[9px]">- {ticket.refunded}</span>}
+                {ticket.refunded && <span className={`font-semibold text-[9px] ${tab === "used" ? "text-slate-400" : "text-white/75"}`}>- {ticket.refunded}</span>}
               </span>
             </div>
           </div>
 
-          <div className={`relative w-16 h-16 p-1 bg-white/90 rounded-xl shadow-lg flex-shrink-0 flex items-center justify-center ring-2 ring-white/40`}>
+          <div className={`relative w-16 h-16 p-1 bg-white/90 rounded-xl shadow-lg flex-shrink-0 flex items-center justify-center ring-2 ${tab === "used" ? "ring-slate-200" : "ring-white/40"}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${ticket.id}`} alt="QR Code" className={`w-full h-full object-contain ${tab === "cancelled" ? "grayscale" : ""}`} />
             <span className={`absolute inset-0 m-auto w-fit h-fit border-2 ${statusConfig.badge} text-[8px] font-black px-1 rounded -rotate-12 uppercase`}>

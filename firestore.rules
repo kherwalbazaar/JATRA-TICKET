@@ -2,166 +2,144 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ================= ====== =================
-    // USERS COLLECTION
-    // ================= ====== =================
+    // ============================================================
+    // HELPER FUNCTIONS
+    // ============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasDbRole(role) {
+      return isSignedIn() && getUserData().role == role;
+    }
+
+    function isAdmin() {
+      return hasDbRole('admin') || hasDbRole('superadmin');
+    }
+
+    function isCounterOperator() {
+      return isAdmin() || hasDbRole('counter_operator');
+    }
+
+    function isGateStaff() {
+      return isAdmin() || hasDbRole('gate_staff');
+    }
+
+    // ============================================================
+    // 1. USERS
+    // ============================================================
     match /users/{userId} {
-      // Users can read their own profile
-      // Admins can read all profiles
-      allow read: if request.auth != null && (
-        request.auth.uid == userId ||
-        isAdmin()
-      );
-
-      // Users can create their own profile during signup
-      allow create: if request.auth != null && request.auth.uid == userId;
-
-      // Users can update their own profile (not role field)
-      allow update: if request.auth != null && (
-        request.auth.uid == userId &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
-      );
-
-      // Only admins can delete users
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
       allow delete: if isAdmin();
     }
 
-    // ================= ====== =================
-    // EVENTS COLLECTION
-    // ================= ====== =================
+    // ============================================================
+    // 2. EVENTS
+    // ============================================================
     match /events/{eventId} {
-      // Anyone can read events (public)
       allow read: if true;
+      allow create, update, delete: if isAdmin();
 
-      // Only admins can create events
-      allow create: if isAdmin();
-
-      // Only admins can update events
-      allow update: if isAdmin();
-
-      // Only admins can delete events
-      allow delete: if isAdmin();
+      match /ticketTypes/{typeId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
-    // ================= ====== =================
-    // BOOKINGS COLLECTION
-    // ================= ====== =================
-    match /bookings/{bookingId} {
-      // Users can read their own bookings
-      // Admins can read all bookings
-      allow read: if request.auth != null && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-
-      // Authenticated users can create bookings
-      allow create: if request.auth != null && (
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.keys().hasAll([
-          'bookingId', 'tierId', 'category', 'gate', 'price',
-          'quantity', 'totalAmount', 'paymentMethod', 'contact',
-          'holders', 'createdAt', 'userId', 'status'
-        ]) &&
-        request.resource.data.status == 'active' &&
-        request.resource.data.quantity > 0 &&
-        request.resource.data.quantity <= 10 &&
-        request.resource.data.totalAmount > 0
-      );
-
-      // Only admins can update booking status
-      allow update: if isAdmin() && (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
-        request.resource.data.status in ['active', 'used', 'cancelled', 'expired']
-      );
-
-      // Only admins can delete bookings
-      allow delete: if isAdmin();
-    }
-
-    // ================= ====== =================
-    // TICKETS COLLECTION (individual tickets)
-    // ================= ====== =================
-    match /tickets/{ticketId} {
-      // Users can read tickets linked to their bookings
-      allow read: if request.auth != null && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-
-      // System creates tickets when booking is confirmed (admin or backend)
-      allow create: if isAdmin();
-
-      // Only admins can update ticket status/seat
-      allow update: if isAdmin();
-
-      // Only admins can delete tickets
-      allow delete: if isAdmin();
-    }
-
-    // ================= ====== =================
-    // SEATS COLLECTION (per event)
-    // ================= ====== =================
-    match /seats/{eventId}/{blockId}/{rowId}/{seatNumber} {
-      // Anyone can read seat availability
-      allow read: if true;
-
-      // Authenticated users can reserve a seat
-      allow write: if request.auth != null && (
-        isAdmin() ||
-        (
-          resource.data.status == 'available' &&
-          request.resource.data.status == 'reserved' &&
-          request.resource.data.userId == request.auth.uid
-        )
-      );
-    }
-
-    // ================= ====== =================
-    // SUPPORT TICKETS COLLECTION
-    // ================= ====== =================
-    match /supportTickets/{ticketId} {
-      // Users can read their own support tickets
-      allow read: if request.auth != null && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-
-      // Authenticated users can create support tickets
-      allow create: if request.auth != null && (
-        request.resource.data.userId == request.auth.uid &&
-        request.resource.data.keys().hasAll([
-          'topic', 'message', 'status', 'createdAt', 'userId'
-        ]) &&
-        request.resource.data.status == 'open'
-      );
-
-      // Users can update their own support tickets (close/comment)
-      allow update: if request.auth != null && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-
-      // Only admins can delete support tickets
-      allow delete: if isAdmin();
-    }
-
-    // ================= ====== =================
-    // TICKET TIERS CONFIGURATION
-    // ================= ====== =================
+    // ============================================================
+    // 3. TICKET TIERS
+    // ============================================================
     match /ticketTiers/{tierId} {
-      // Anyone can read tier info (public pricing)
       allow read: if true;
-
-      // Only admins can manage tiers
       allow write: if isAdmin();
     }
 
-    // ================= ====== =================
-    // HELPER: Admin check (reads role from users collection)
-    // ================= ====== =================
-    function isAdmin() {
-      return request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // ============================================================
+    // 4. BOOKINGS
+    // ============================================================
+    match /bookings/{bookingId} {
+      allow read: if isAdmin() || isCounterOperator() || isGateStaff()
+                  || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isCounterOperator() || isAdmin();
+
+      allow update: if isGateStaff()
+                    && resource.data.status == 'Confirmed'
+                    && request.resource.data.status == 'Checked-in'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'checkedInAt', 'checkedInGate', 'scannedBy']);
+
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // 5. TICKETS
+    // ============================================================
+    match /tickets/{ticketId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ============================================================
+    // 6. SEATS
+    // ============================================================
+    match /seats/{eventId}/{blockId}/{rowId}/{seatNumber} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // ============================================================
+    // 7. COUNTERS
+    // ============================================================
+    match /counters/{counterId} {
+      allow read: if isAdmin() || isCounterOperator();
+      allow update: if isCounterOperator() && request.auth.uid == resource.data.operatorUid;
+      allow create, delete: if isAdmin();
+    }
+
+    // ============================================================
+    // 8. GATES
+    // ============================================================
+    match /gates/{gateId} {
+      allow read: if isSignedIn();
+      allow update: if isGateStaff()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['entered', 'status', 'percentage']);
+      allow create, delete: if isAdmin();
+    }
+
+    // ============================================================
+    // 9. SUPPORT TICKETS
+    // ============================================================
+    match /supportTickets/{ticketId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // 10. SETTINGS
+    // ============================================================
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ============================================================
+    // 11. AUDIT LOGS
+    // ============================================================
+    match /logs/{logId} {
+      allow create: if isSignedIn();
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }
