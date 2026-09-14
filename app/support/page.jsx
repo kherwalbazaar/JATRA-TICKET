@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import BottomNav from "../components/BottomNav";
+import Header from "../components/Header";
 
 const helpTopics = [
   { icon: "fa-ticket", title: "Booking Help", desc: "How to book, modify or cancel tickets", color: "text-rose-500 bg-rose-50 border-rose-100" },
@@ -27,20 +28,7 @@ export default function SupportPage() {
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
       <div className="bg-[#f8faff] min-h-screen relative pb-24 shadow-2xl flex flex-col overflow-hidden">
         {/* Top App Header */}
-        <header className="bg-[#12193b] px-4 pt-3.5 pb-4 text-white flex items-center justify-center sticky top-0 z-50 shadow-md relative">
-          <h1 className="text-lg font-black tracking-wide font-brand flex items-center gap-1.5 uppercase">
-            <span className="font-black">ADIM</span>
-            <span className="text-amber-400 font-black">LAHAH</span>
-            <span className="text-red-500 font-black">MANDAWA</span>
-          </h1>
-
-          <div className="absolute right-4 cursor-pointer">
-            <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-slate-200 text-sm">
-              <i className="fa-solid fa-bell" />
-            </div>
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-[#12193b]">3</span>
-          </div>
-        </header>
+        <Header />
 
         <div className="flex-1 p-4 space-y-4">
           {/* Page Title */}

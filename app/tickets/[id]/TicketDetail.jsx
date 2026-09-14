@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Header from "../../components/Header";
 
 export default function TicketDetail({ ticket }) {
   const [copied, setCopied] = useState(false);
@@ -20,23 +21,12 @@ export default function TicketDetail({ ticket }) {
   return (
     <div className="w-full bg-[#f8faff] min-h-screen relative pb-10 shadow-2xl flex flex-col overflow-hidden">
       {/* Top App Bar with Back & Share */}
-      <header className="bg-[#12193b] px-4 py-3.5 text-white flex items-center justify-between sticky top-0 z-50 shadow-md">
-        <button
-          onClick={() => window.history.back()}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 text-white text-base active:scale-95 transition-transform"
-        >
-          <i className="fa-solid fa-arrow-left" />
-        </button>
-
-        <h2 className="text-base font-black font-brand tracking-wide">Ticket Details</h2>
-
-        <button
-          onClick={() => copy(`${ticket.name} | ${ticket.id} | ${ticket.category} | ${ticket.gate} | 22 Oct 2026 | Balanada`)}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 text-white text-base active:scale-95 transition-transform"
-        >
-          <i className={copied ? "fa-solid fa-check text-emerald-400" : "fa-solid fa-share-nodes"} />
-        </button>
-      </header>
+      <Header
+        showBack
+        showShare
+        title="Ticket Details"
+        onShare={() => copy(`${ticket.name} | ${ticket.id} | ${ticket.category} | ${ticket.gate} | 22 Oct 2026 | Balanada`)}
+      />
 
       {/* Notification Bar */}
       <div className="bg-amber-400/90 text-slate-950 px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">

@@ -1,4 +1,6 @@
 import "./globals.css";
+import { SidebarProvider } from "./components/SidebarContext";
+import Sidebar from "./components/Sidebar";
 
 export const metadata = {
   title: "ADIM OWAR JARPA OPERA - Online Ticket System",
@@ -21,7 +23,12 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <SidebarProvider>
+          <Sidebar />
+          {children}
+        </SidebarProvider>
+      </body>
     </html>
   );
 }

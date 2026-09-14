@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import BookTicketsModal from "./components/BookTicketsModal";
 import BottomNav from "./components/BottomNav";
+import Header from "./components/Header";
 import { saveBooking } from "../lib/bookings";
 import { subscribeEvents } from "../lib/events";
 
@@ -35,26 +36,14 @@ export default function Home() {
         {/* ==============================================
             1. TOP HEADER & APP BAR
         ============================================== */}
-        <header className="bg-[#12193b] px-4 pt-3.5 pb-4 text-white flex items-center justify-center sticky top-0 z-50 shadow-md relative">
-          <h1 className="text-lg font-black tracking-wide font-brand flex items-center gap-1.5 uppercase">
-            <span className="font-black">ADIM</span>
-            <span className="text-amber-400 font-black">LAHAH</span>
-            <span className="text-red-500 font-black">MANDAWA</span>
-          </h1>
+        <Header />
 
-          <div className="absolute right-4 cursor-pointer">
-            <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-slate-200 text-sm">
-              <i className="fa-solid fa-bell" />
-            </div>
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-[#12193b]">3</span>
-          </div>
-        </header>
+        {/* ==============================================
+            2. HERO BANNER (AUTO SLIDER) - Full width, no padding
+        ============================================== */}
+        <HeroCarousel />
 
         <main className="p-3.5 space-y-3.5">
-          {/* ==============================================
-            2. HERO BANNER (AUTO SLIDER)
-          ============================================== */}
-          <HeroCarousel />
 
           {/* ==============================================
             3. EVENT SCHEDULE & LOCATION CARDS (SLIDER)
@@ -493,7 +482,7 @@ function HeroCarousel() {
   }, [slides.length]);
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden shadow-lg bg-gradient-to-r from-blue-950 via-indigo-950 to-purple-950 text-white border border-indigo-900/50">
+    <div className="relative w-full overflow-hidden bg-gradient-to-r from-blue-950 via-indigo-950 to-purple-950 text-white">
       <div
         className="flex transition-transform duration-700 ease-in-out"
         style={{ transform: `translateX(-${index * 100}%)` }}
