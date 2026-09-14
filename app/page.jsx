@@ -7,6 +7,7 @@ import BottomNav from "./components/BottomNav";
 import Header from "./components/Header";
 import { saveBooking } from "../lib/bookings";
 import { subscribeEvents } from "../lib/events";
+import { subscribeBanners } from "../lib/banners";
 
 export default function Home() {
   const [booking, setBooking] = useState(null);
@@ -112,7 +113,6 @@ export default function Home() {
                 <div className="relative -mt-7 flex justify-center z-20">
                   <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
                       <span className="text-2xl font-black font-brand tracking-tight drop-shadow">50</span>
                     </div>
                   </div>
@@ -161,7 +161,6 @@ export default function Home() {
                 <div className="relative -mt-7 flex justify-center z-20">
                   <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
                       <span className="text-2xl font-black font-brand tracking-tight drop-shadow">100</span>
                     </div>
                   </div>
@@ -214,7 +213,6 @@ export default function Home() {
                 <div className="relative -mt-7 flex justify-center z-20">
                   <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
                       <span className="text-2xl font-black font-brand tracking-tight drop-shadow">200</span>
                     </div>
                   </div>
@@ -263,7 +261,6 @@ export default function Home() {
                 <div className="relative -mt-7 flex justify-center z-20">
                   <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-[10px] font-black self-start mt-2.5 mr-0.5">₹</span>
                       <span className="text-2xl font-black font-brand tracking-tight drop-shadow">500</span>
                     </div>
                   </div>
@@ -444,100 +441,79 @@ export default function Home() {
 }
 
 function HeroCarousel() {
-  const slides = [
-    {
-      img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80",
-      kicker: "Adim",
-      title: "LAHAH MANDAWA",
-      sub: "Opera Entry Ticket",
-      badge: ["Cultural", "Heritage of", "Odisha"],
-      ctaTop: "Book Your Ticket Online",
-      ctaBottom: "Skip the Queue • Enjoy the Show",
-    },
-    {
-      img: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&auto=format&fit=crop&q=80",
-      kicker: "Live",
-      title: "OPERA NIGHT",
-      sub: "Traditional Cultural Show",
-      badge: ["Night", "Cultural", "Show"],
-      ctaTop: "Grand Cultural Night",
-      ctaBottom: "Traditional Odia Opera",
-    },
-    {
-      img: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&auto=format&fit=crop&q=80",
-      kicker: "Advertise",
-      title: "KHERWAL BAZAAR",
-      sub: "Developer Agency & Garments Shop",
-      badge: ["Our", "Local", "Partner"],
-      ctaTop: "Contact Us • 9583252256",
-      ctaBottom: "Bahanada Lamk Chhaka, Bahanada, Khunta, Mayurbhanj • Developer : Balakram Tudu",
-    },
+  const defaultSlides = [
+    { img: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&auto=format&fit=crop&q=80" },
+    { img: "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&auto=format&fit=crop&q=80" },
+    { img: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&auto=format&fit=crop&q=80" },
   ];
 
+  const [slides, setSlides] = useState(defaultSlides);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setIndex((i) => (i + 1) % slides.length), 4000);
+    const unsub = subscribeBanners((data) => {
+      if (data && data.length > 0) {
+        setSlides(data);
+        setIndex(0);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (slides.length === 0) return;
+    const id = setInterval(() => setIndex((i) => (i + 1) % slides.length), 5000);
     return () => clearInterval(id);
   }, [slides.length]);
 
   return (
-    <div className="relative w-full overflow-hidden bg-gradient-to-r from-blue-950 via-indigo-950 to-purple-950 text-white">
-      <div
-        className="flex transition-transform duration-700 ease-in-out"
-        style={{ transform: `translateX(-${index * 100}%)` }}
-      >
-        {slides.map((slide, i) => (
-          <div key={i} className="w-full flex-shrink-0 relative min-h-[180px] overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={slide.img}
-              alt={slide.title}
-              className="absolute inset-0 w-full h-full object-cover opacity-35 mix-blend-luminosity"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-
-            <div className="relative z-10 p-4 pt-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="font-serif italic text-amber-300 text-xl font-bold tracking-wide drop-shadow">{slide.kicker}</span>
-                  <h2 className="text-2xl font-black tracking-tight text-yellow-400 drop-shadow-md font-brand uppercase leading-none mt-0.5">
-                    {slide.title}
-                  </h2>
-                  <p className="text-sm font-bold text-white tracking-wide mt-1 drop-shadow">{slide.sub}</p>
-                </div>
-
-                <div className="bg-gradient-to-b from-amber-500/90 to-amber-700/90 backdrop-blur-sm border border-amber-300/40 rounded-xl px-2.5 py-1.5 text-center shadow-lg">
-                  <i className="fa-solid fa-award text-amber-200 text-xs block mb-0.5" />
-                  <span className="text-[9px] uppercase font-black leading-tight text-white block tracking-tighter">
-                    {slide.badge.map((line) => (
-                      <span key={line} className="block">{line}</span>
-                    ))}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-end justify-between">
-                <div className="space-y-0.5 min-w-0">
-                  <p className="text-[12px] font-semibold text-yellow-300">{slide.ctaTop}</p>
-                  <p className="text-[11px] font-normal text-slate-200 leading-snug">{slide.ctaBottom}</p>
-                </div>
-
-                <div className="flex items-center gap-1.5 pb-1">
-                  {slides.map((_, si) => (
-                    <button
-                      key={si}
-                      aria-label={`Go to slide ${si + 1}`}
-                      onClick={() => setIndex(si)}
-                      className={`${si === index ? "w-2 h-2 rounded-full bg-white" : "w-1.5 h-1.5 rounded-full bg-white/50"} transition-all`}
-                    />
-                  ))}
-                </div>
-              </div>
+    <div>
+      <div className="relative w-full overflow-hidden">
+        <div
+          className="flex transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${index * 100}%)` }}
+        >
+          {slides.map((slide, i) => (
+            <div key={slide.key || i} className="w-full flex-shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={slide.img}
+                alt={`Banner ${i + 1}`}
+                className="w-full h-[180px] object-cover"
+              />
             </div>
-          </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center gap-2 py-2.5 bg-white">
+        {slides.map((_, si) => (
+          <button
+            key={si}
+            aria-label={`Go to slide ${si + 1}`}
+            onClick={() => setIndex(si)}
+            className="relative h-2 rounded-full overflow-hidden transition-all duration-300"
+            style={{ width: si === index ? "32px" : "8px", backgroundColor: "#e2e8f0" }}
+          >
+            {si === index && (
+              <span
+                className="absolute inset-y-0 left-0 bg-indigo-600 rounded-full banner-progress"
+              />
+            )}
+          </button>
         ))}
       </div>
+
+      <style>{`
+        .banner-progress {
+          width: 100%;
+          animation: bannerProgress 5s linear forwards;
+        }
+        @keyframes bannerProgress {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+      `}</style>
     </div>
   );
 }
