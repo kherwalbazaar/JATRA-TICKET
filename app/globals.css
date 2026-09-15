@@ -155,11 +155,11 @@ body {
 }
 
 .nav-icon-home {
-  transform: translateX(0.3rem);
+  transform: translate(-0.3rem, -0.15rem);
 }
 
 .menu__item.active .nav-icon.nav-icon-home {
-  transform: translate3d(0.3rem, 0.5rem, 0) scale(1.22);
+  transform: translate3d(-0.3rem, -0.15rem, 0) scale(1.22);
 }
 
 .nav-icon-tickets {
