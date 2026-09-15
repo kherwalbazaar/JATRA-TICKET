@@ -438,7 +438,9 @@ export default function Home() {
 }
 
 function TodaysShow() {
-  const shows = [
+  const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+
+  const allShows = [
     {
       key: "1",
       name: "ADIM OWAR JARPA OPERA",
@@ -463,12 +465,33 @@ function TodaysShow() {
     },
   ];
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const parseShowDate = (show) => new Date(Number(show.year), monthMap[show.month], Number(show.day));
+
+  const todayShows = allShows.filter((show) => {
+    const d = parseShowDate(show);
+    return d.getTime() === today.getTime();
+  });
+
+  const upcomingShows = allShows.filter((show) => {
+    const d = parseShowDate(show);
+    return d.getTime() > today.getTime();
+  }).sort((a, b) => parseShowDate(a) - parseShowDate(b));
+
+  const isToday = todayShows.length > 0;
+  const displayShows = isToday ? todayShows : upcomingShows;
+  const title = isToday ? "Todays Show" : "Next Show";
+
+  if (displayShows.length === 0) return null;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           <span className="text-base">🎭</span>
-          <h3 className="text-base font-black text-slate-900 font-brand tracking-tight">Todays Show</h3>
+          <h3 className="text-base font-black text-slate-900 font-brand tracking-tight">{title}</h3>
         </div>
         <Link href="/todays-show" className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
           View All <i className="fa-solid fa-arrow-right text-[10px]" />
@@ -476,7 +499,7 @@ function TodaysShow() {
       </div>
 
       <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
-        {shows.map((show) => (
+        {displayShows.map((show) => (
           <div key={show.key} className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -511,10 +534,20 @@ function TodaysShow() {
 }
 
 function HeroCarousel() {
-  const slides = [
-    { img: "/jarpa.png" },
-    { img: "/ramraj.png" },
+  const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+
+  const allSlides = [
+    { img: "/jarpa.png", month: "SEP", day: "14", year: "2026" },
+    { img: "/ramraj.png", month: "OCT", day: "23", year: "2026" },
   ];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const slides = allSlides.filter((slide) => {
+    const d = new Date(Number(slide.year), monthMap[slide.month], Number(slide.day));
+    return d.getTime() >= today.getTime();
+  });
 
   const [index, setIndex] = useState(0);
 
@@ -523,6 +556,8 @@ function HeroCarousel() {
     const id = setInterval(() => setIndex((i) => (i + 1) % slides.length), 5000);
     return () => clearInterval(id);
   }, [slides.length]);
+
+  if (slides.length === 0) return null;
 
   return (
     <div>

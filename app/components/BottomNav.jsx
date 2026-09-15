@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 const tabs = [
-  { id: "home", title: "Home", icon: "fa-solid fa-house", href: "/" },
   { id: "tickets", title: "My Tickets", icon: "fa-solid fa-ticket-simple", href: "/tickets" },
   { id: "events", title: "Events", icon: "fa-solid fa-calendar-days", href: "/events" },
+  { id: "home", title: "Home", icon: "fa-solid fa-house", href: "/" },
   { id: "support", title: "Support", icon: "fa-solid fa-headset", href: "/support" },
   { id: "profile", title: "Profile", icon: "fa-regular fa-circle-user", href: "/profile" },
 ];
@@ -20,7 +20,7 @@ export default function BottomNav({ active }) {
   const [hidden, setHidden] = useState(false);
   const lastScroll = useRef(0);
 
-  const current = active || (pathname.startsWith("/tickets") ? "tickets" : pathname.startsWith("/events") ? "events" : pathname.startsWith("/support") ? "support" : pathname.startsWith("/profile") ? "profile" : "home");
+  const currentPage = active || (pathname.startsWith("/tickets") ? "tickets" : pathname.startsWith("/events") ? "events" : pathname.startsWith("/support") ? "support" : pathname.startsWith("/profile") ? "profile" : "home");
 
   useEffect(() => {
     const onScroll = () => {
@@ -33,7 +33,7 @@ export default function BottomNav({ active }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updatePositions = () => {
       const activeItem = menuRef.current?.querySelector(".active");
       if (activeItem && borderRef.current && menuRef.current) {
@@ -54,10 +54,10 @@ export default function BottomNav({ active }) {
       }
     };
 
-    requestAnimationFrame(updatePositions);
+    updatePositions();
     window.addEventListener("resize", updatePositions);
     return () => window.removeEventListener("resize", updatePositions);
-  }, [current]);
+  }, [currentPage]);
 
   const handleTabChange = (tab) => {
     if (tab.href && tab.href !== "#") {
@@ -79,11 +79,11 @@ export default function BottomNav({ active }) {
           <button
             type="button"
             key={tab.id}
-            className={`menu__item ${current === tab.id ? "active" : ""}`}
+            className={`menu__item ${currentPage === tab.id ? "active" : ""} ${tab.id === "home" ? "home-always" : ""}`}
             onClick={() => handleTabChange(tab)}
             title={tab.title}
             aria-label={tab.title}
-            aria-current={current === tab.id ? "page" : undefined}
+            aria-current={currentPage === tab.id ? "page" : undefined}
           >
             <span className="icon-wrapper">
               <i className={`${tab.icon} nav-icon`} />
