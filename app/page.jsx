@@ -104,199 +104,191 @@ export default function Home() {
               </a>
             </div>
 
-            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 pt-1">
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pt-1">
               {/* STANDING - Orange */}
-              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-24 pt-4 text-center overflow-hidden">
+              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-16 pt-3 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-base font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">STANDING</h4>
-                  <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
-                    <i className="fa-solid fa-location-dot text-[8px]" /> Gate A
-                  </span>
+                  <h4 className="relative z-10 text-sm font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">STANDING</h4>
+
                 </div>
 
-                <div className="relative -mt-7 flex justify-center z-20">
-                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">50</span>
+                <div className="relative -mt-5 flex justify-center z-20">
+                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">50</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-3 pt-3 pb-2 flex-1">
-                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                <div className="px-2 pt-2 pb-1 flex-1">
+                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Normal Entry</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Free Seating</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
                       <span>Fast Track Entry</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
                       <span>Best View Zone</span>
                     </li>
                   </ul>
                 </div>
 
-                <div className="h-1.5 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
+                <div className="h-1 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
 
-                <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "standing" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
-                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "standing" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
               </div>
 
               {/* SPECIAL - Green/Cyan/Blue */}
-              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-24 pt-4 text-center overflow-hidden">
+              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-16 pt-3 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-base font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">SPECIAL</h4>
-                  <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
-                    <i className="fa-solid fa-location-dot text-[8px]" /> Gate B
-                  </span>
+                  <h4 className="relative z-10 text-sm font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">SPECIAL</h4>
+
                 </div>
 
-                <div className="relative -mt-7 flex justify-center z-20">
-                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">100</span>
+                <div className="relative -mt-5 flex justify-center z-20">
+                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">100</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-3 pt-3 pb-2 flex-1">
-                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                <div className="px-2 pt-2 pb-1 flex-1">
+                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Fast Entry</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Better View</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Covered Seating</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
                       <span>Priority Entry</span>
                     </li>
                   </ul>
                 </div>
 
-                <div className="h-1.5 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
+                <div className="h-1 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
 
-                <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "special" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
-                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "special" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
               </div>
 
               {/* VIP - Violet/Purple (Popular) */}
-              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative">
-                <div className="absolute top-3 -right-7 bg-red-500 text-white text-[9px] font-extrabold uppercase py-0.5 px-7 rotate-45 shadow-sm z-30">
+              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative">
+                <div className="absolute top-2 -right-6 bg-red-500 text-white text-[7px] font-extrabold uppercase py-0.5 px-5 rotate-45 shadow-sm z-30">
                   Popular
                 </div>
 
-                <div className="relative bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8] h-24 pt-4 text-center overflow-hidden">
+                <div className="relative bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8] h-16 pt-3 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-base font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">VIP</h4>
-                  <span className="relative z-10 inline-block mt-1 bg-white/20 text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/30">
-                    <i className="fa-solid fa-location-dot text-[8px]" /> Gate C
-                  </span>
+                  <h4 className="relative z-10 text-sm font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">VIP</h4>
+
                 </div>
 
-                <div className="relative -mt-7 flex justify-center z-20">
-                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">200</span>
+                <div className="relative -mt-5 flex justify-center z-20">
+                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">200</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-3 pt-3 pb-2 flex-1">
-                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                <div className="px-2 pt-2 pb-1 flex-1">
+                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Priority Entry</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Best View Zone</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Reserved Seating</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-xmark text-slate-400 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
                       <span>Exclusive Lounge</span>
                     </li>
                   </ul>
                 </div>
 
-                <div className="h-1.5 w-full bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]" />
+                <div className="h-1 w-full bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]" />
 
-                <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "vip" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
-                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "vip" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
               </div>
 
               {/* STAR - Dark/Gold */}
-              <div className="min-w-[160px] flex-1 bg-white rounded-[20px] shadow-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-24 pt-4 text-center overflow-hidden">
+              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
+                <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-16 pt-3 text-center overflow-hidden">
                   <div className="absolute inset-0 pattern-dots opacity-60 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-base font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">STAR</h4>
-                  <span className="relative z-10 inline-block mt-1 bg-amber-400/20 text-amber-300 text-[9px] font-bold px-2 py-0.5 rounded-md border border-amber-400/30">
-                    <i className="fa-solid fa-location-dot text-[8px]" /> Gate D
-                  </span>
+                  <h4 className="relative z-10 text-sm font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">STAR</h4>
+
                 </div>
 
-                <div className="relative -mt-7 flex justify-center z-20">
-                  <div className="relative z-10 w-16 h-16 rounded-full p-1.5 bg-white shadow-xl flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_4px_8px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-2xl font-black font-brand tracking-tight drop-shadow">500</span>
+                <div className="relative -mt-5 flex justify-center z-20">
+                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
+                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">500</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="px-3 pt-3 pb-2 flex-1">
-                  <ul className="space-y-2 text-[10px] leading-relaxed text-slate-500 font-medium">
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                <div className="px-2 pt-2 pb-1 flex-1">
+                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Exclusive Entry</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Special Sitting</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Priority Entry</span>
                     </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fa-solid fa-check text-emerald-500 text-xs mt-0.5" />
+                    <li className="flex items-start gap-2">
+                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
                       <span>Best View Zone</span>
                     </li>
                   </ul>
                 </div>
 
-                <div className="h-1.5 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
+                <div className="h-1 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
 
-                <div className="bg-[#242426] p-3 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "star" })} className="w-32 py-2 px-4 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-xs uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110">
-                    <i className="fa-solid fa-bolt text-[10px] mr-1" /> Book Now
+                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
+                  <button onClick={() => setBooking({ tierId: "star" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
               </div>
