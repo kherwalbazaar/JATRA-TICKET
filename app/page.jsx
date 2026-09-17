@@ -425,7 +425,7 @@ export default function Home() {
           onClose={() => setBooking(null)}
           onProceed={async (data) => {
             try {
-              await saveBooking(data);
+              await saveBooking({ ...data, eventId: "EVT-2026-001" });
             } catch (err) {
               console.error("Failed to save booking", err);
             }
@@ -440,7 +440,7 @@ export default function Home() {
 function TodaysShow() {
   const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
 
-  const allShows = [
+  const defaultShows = [
     {
       key: "1",
       name: "ADIM OWAR JARPA OPERA",
@@ -465,25 +465,54 @@ function TodaysShow() {
     },
   ];
 
+  const [allShows, setAllShows] = useState(defaultShows);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      const unsub = subscribeEvents((data) => {
+        console.log("TodaysShow received data:", data);
+        if (data && data.length > 0) {
+          const shows = data.map(ev => ({
+            key: ev.key,
+            name: ev.name || "Event",
+            partyName: ev.partyName || ev.organizer || "TBD",
+            month: ev.month || "OCT",
+            day: ev.day || "22",
+            year: ev.year || "2026",
+            location: ev.location || "TBD",
+            banner: ev.banner || ev.img || "/jarpa.png",
+            time: ev.time || ev.entryTime || "TBD"
+          }));
+          console.log("TodaysShow processed shows:", shows);
+          setAllShows(shows);
+        } else {
+          console.log("TodaysShow: No data from database, using defaults");
+          setAllShows(defaultShows);
+        }
+        setLoading(false);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.error("Failed to load shows:", err);
+      setAllShows(defaultShows);
+      setLoading(false);
+      return () => {};
+    }
+  }, []);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const parseShowDate = (show) => new Date(Number(show.year), monthMap[show.month], Number(show.day));
 
-  const todayShows = allShows.filter((show) => {
-    const d = parseShowDate(show);
-    return d.getTime() === today.getTime();
-  });
+  // Show all shows instead of filtering by date
+  const displayShows = allShows.sort((a, b) => parseShowDate(a) - parseShowDate(b));
+  const title = "All Shows";
 
-  const upcomingShows = allShows.filter((show) => {
-    const d = parseShowDate(show);
-    return d.getTime() > today.getTime();
-  }).sort((a, b) => parseShowDate(a) - parseShowDate(b));
+  console.log("TodaysShow display shows:", displayShows);
 
-  const isToday = todayShows.length > 0;
-  const displayShows = isToday ? todayShows : upcomingShows;
-  const title = isToday ? "Todays Show" : "Next Show";
-
+  if (loading) return null;
   if (displayShows.length === 0) return null;
 
   return (
@@ -536,20 +565,50 @@ function TodaysShow() {
 function HeroCarousel() {
   const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
 
-  const allSlides = [
+  const defaultSlides = [
     { img: "/jarpa.png", month: "SEP", day: "14", year: "2026" },
     { img: "/ramraj.png", month: "OCT", day: "23", year: "2026" },
   ];
 
+  const [allSlides, setAllSlides] = useState(defaultSlides);
+  const [loading, setLoading] = useState(true);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    try {
+      const unsub = subscribeEvents((data) => {
+        console.log("HeroCarousel received data:", data);
+        if (data && data.length > 0) {
+          const slides = data.map(ev => ({
+            img: ev.banner || ev.img || "/jarpa.png",
+            month: ev.month || "OCT",
+            day: ev.day || "22",
+            year: ev.year || "2026"
+          }));
+          console.log("HeroCarousel processed slides:", slides);
+          setAllSlides(slides);
+        } else {
+          console.log("HeroCarousel: No data from database, using defaults");
+          setAllSlides(defaultSlides);
+        }
+        setLoading(false);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.error("Failed to load banners:", err);
+      setAllSlides(defaultSlides);
+      setLoading(false);
+      return () => {};
+    }
+  }, []);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const slides = allSlides.filter((slide) => {
-    const d = new Date(Number(slide.year), monthMap[slide.month], Number(slide.day));
-    return d.getTime() >= today.getTime();
-  });
+  // Show all slides (remove date filtering for banners)
+  const slides = allSlides;
 
-  const [index, setIndex] = useState(0);
+  console.log("HeroCarousel filtered slides:", slides);
 
   useEffect(() => {
     if (slides.length === 0) return;
@@ -557,6 +616,7 @@ function HeroCarousel() {
     return () => clearInterval(id);
   }, [slides.length]);
 
+  if (loading) return null;
   if (slides.length === 0) return null;
 
   return (
@@ -636,27 +696,52 @@ function EventCarousel() {
   ];
 
   const [events, setEvents] = useState(defaultEvents);
+  const [loading, setLoading] = useState(true);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     try {
       const unsub = subscribeEvents((data) => {
+        console.log("EventCarousel received data:", data);
         if (data && data.length > 0) {
-          setEvents(data);
+          const processedEvents = data.map(ev => ({
+            month: ev.month || "OCT",
+            day: ev.day || "22",
+            year: ev.year || "2026",
+            name: ev.name || "Event",
+            emoji: ev.emoji || "🔥",
+            location: ev.location || "TBD",
+            entryTime: ev.entryTime || "TBD",
+            startTime: ev.startTime || ev.time || "TBD"
+          }));
+          console.log("EventCarousel processed events:", processedEvents);
+          setEvents(processedEvents);
           setIndex(0);
+        } else {
+          console.log("EventCarousel: No data from database, using defaults");
+          setEvents(defaultEvents);
         }
+        setLoading(false);
       });
       return () => unsub();
     } catch (err) {
+      console.error("Failed to load events:", err);
+      setEvents(defaultEvents);
+      setLoading(false);
       return () => {};
     }
   }, []);
+
+  console.log("EventCarousel final events:", events);
 
   useEffect(() => {
     if (events.length === 0) return;
     const id = setInterval(() => setIndex((i) => (i + 1) % events.length), 4000);
     return () => clearInterval(id);
   }, [events.length]);
+
+  if (loading) return null;
+  if (events.length === 0) return null;
 
   return (
     <div className="relative">

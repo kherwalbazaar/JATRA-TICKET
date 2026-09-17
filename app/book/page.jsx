@@ -9,15 +9,17 @@ function BookContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tierId = searchParams.get("tier") ?? "vip";
+  const eventId = searchParams.get("eventId") ?? "EVT-2026-001";
 
   return (
     <BookingForm
       fullPage
       initialTierId={tierId}
+      eventId={eventId}
       onClose={() => router.back()}
       onProceed={async (data) => {
         try {
-          await saveBooking(data);
+          await saveBooking({ ...data, eventId });
         } catch (err) {
           console.error("Failed to save booking", err);
         }
