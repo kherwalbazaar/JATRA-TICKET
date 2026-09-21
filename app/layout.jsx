@@ -9,9 +9,18 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
+  const isDev = process.env.NODE_ENV === 'development';
+
   return (
     <html lang="en">
       <head>
+        {isDev && (
+          <>
+            <meta httpEquiv="Cache-Control" content="no-store, no-cache, must-revalidate, proxy-revalidate" />
+            <meta httpEquiv="Pragma" content="no-cache" />
+            <meta httpEquiv="Expires" content="0" />
+          </>
+        )}
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"

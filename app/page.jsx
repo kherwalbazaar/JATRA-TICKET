@@ -443,19 +443,21 @@ function TodaysShow() {
   const defaultShows = [
     {
       key: "1",
-      name: "ADIM OWAR JARPA OPERA",
-      partyName: "Adim Opera Group",
-      month: "SEP",
-      day: "14",
+      name: "ADIM LAHAH MANDAWA",
+      partyName: "Adim Lahah Mandawa",
+      organizationName: "ADIM LAHAH MANDAWA",
+      month: "OCT",
+      day: "1",
       year: "2026",
-      location: "Bahanada, Khunta, Mayurbhanj",
+      location: "TBD",
       banner: "/jarpa.png",
-      time: "10:00 PM - 05:00 AM",
+      time: "08:30 PM - 04:30 AM",
     },
     {
       key: "2",
       name: "RAMRAJ GAYAN MOHAL",
       partyName: "Ramraj Opera",
+      organizationName: "Ramraj Opera",
       month: "OCT",
       day: "23",
       year: "2026",
@@ -529,7 +531,11 @@ function TodaysShow() {
 
       <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
         {displayShows.map((show) => (
-          <div key={show.key} className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div
+            key={show.key}
+            onClick={() => { window.location.href = `/events/${show.key}`; }}
+            className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={show.banner}
@@ -539,12 +545,16 @@ function TodaysShow() {
             <div className="p-2.5">
               <h4 className="text-xs font-black text-slate-900 font-brand truncate">{show.name}</h4>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
-                <i className="fa-solid fa-users text-indigo-500 text-[9px]" />
-                <span className="truncate">{show.partyName}</span>
+                <i className="fa-solid fa-user-group text-indigo-500 text-[9px]" />
+                <span className="truncate">{show.partyName || show.organizationName || "TBD"}</span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
                 <i className="fa-regular fa-calendar text-rose-500 text-[9px]" />
                 <span>{show.month} {show.day}, {show.year}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
+                <i className="fa-solid fa-building text-rose-500 text-[9px]" />
+                <span className="truncate">{show.organizationName || show.partyName || "TBD"}</span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
                 <i className="fa-solid fa-location-dot text-rose-500 text-[9px]" />
@@ -607,11 +617,12 @@ function HeroCarousel() {
 
   // Show all slides (remove date filtering for banners)
   const slides = allSlides;
+  const singleSlide = slides.length === 1;
 
   console.log("HeroCarousel filtered slides:", slides);
 
   useEffect(() => {
-    if (slides.length === 0) return;
+    if (slides.length <= 1) return;
     const id = setInterval(() => setIndex((i) => (i + 1) % slides.length), 5000);
     return () => clearInterval(id);
   }, [slides.length]);
@@ -622,21 +633,32 @@ function HeroCarousel() {
   return (
     <div>
       <div className="relative w-full h-[200px] overflow-hidden bg-slate-900">
-        <div
-          className="flex transition-transform duration-700 ease-in-out h-full"
-          style={{ transform: `translateX(-${index * 100}%)` }}
-        >
-          {slides.map((slide, i) => (
-            <div key={i} className="w-full flex-shrink-0 h-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={slide.img}
-                alt={`Banner ${i + 1}`}
-                className="w-full h-full"
-              />
-            </div>
-          ))}
-        </div>
+        {singleSlide ? (
+          <div className="relative w-full h-full overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={slides[0].img}
+              alt="Banner"
+              className="w-full h-full object-cover single-banner-motion"
+            />
+          </div>
+        ) : (
+          <div
+            className="flex transition-transform duration-700 ease-in-out h-full"
+            style={{ transform: `translateX(-${index * 100}%)` }}
+          >
+            {slides.map((slide, i) => (
+              <div key={i} className="w-full flex-shrink-0 h-full">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={slide.img}
+                  alt={`Banner ${i + 1}`}
+                  className="w-full h-full"
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-center gap-2 py-2.5 bg-white">
@@ -662,9 +684,26 @@ function HeroCarousel() {
           width: 100%;
           animation: bannerProgress 5s linear forwards;
         }
+        .single-banner-motion {
+          animation: singleBannerSlide 8s ease-in-out infinite;
+        }
         @keyframes bannerProgress {
           from { width: 0%; }
           to { width: 100%; }
+        }
+        @keyframes singleBannerSlide {
+          0% {
+            transform: translateX(-100%);
+          }
+          15% {
+            transform: translateX(0);
+          }
+          85% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(100%);
+          }
         }
       `}</style>
     </div>
@@ -675,13 +714,15 @@ function EventCarousel() {
   const defaultEvents = [
     {
       month: "OCT",
-      day: "22",
+      day: "1",
       year: "2026",
-      name: "ADIM OWAR JARPA OPERA",
+      name: "ADIM LAHAH MANDAWA",
+      partyName: "Adim Lahah Mandawa",
+      organizationName: "ADIM LAHAH MANDAWA",
       emoji: "🔥",
-      location: "Bahanada, Khunta, Mayurbhanj",
-      entryTime: "10:00 PM",
-      startTime: "11:00 PM",
+      location: "TBD",
+      entryTime: "08:30 PM",
+      startTime: "04:30 AM",
     },
     {
       month: "OCT",
@@ -775,6 +816,16 @@ function EventCarousel() {
                         {ev.name} <span>{ev.emoji}</span>
                       </h3>
                       <div className="w-6" />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
+                      <i className="fa-solid fa-user-group text-indigo-500 text-xs flex-shrink-0" />
+                      <span className="truncate">{ev.partyName || ev.organizationName || "TBD"}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
+                      <i className="fa-solid fa-building text-rose-500 text-xs flex-shrink-0" />
+                      <span className="truncate">{ev.organizationName || ev.partyName || "TBD"}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">

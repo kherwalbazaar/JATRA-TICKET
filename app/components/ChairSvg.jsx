@@ -2,15 +2,19 @@
 
 import React from "react";
 
-export default function ChairSvg({ isBooked = false, isSelected = false, onClick, label, sizeClass = "w-10 h-12" }) {
-  const stroke = isBooked ? "#9CA3AF" : isSelected ? "#B45309" : "#065F46";
+export default function ChairSvg({ isBooked = false, isSelected = false, onClick, label, sizeClass = "w-10 h-12", disabled = false }) {
+  const stroke = disabled ? "#E5E7EB" : isBooked ? "#9CA3AF" : isSelected ? "#B45309" : "#065F46";
+  const fill = disabled ? "#F3F4F6" : isBooked ? "#D1D5DB" : isSelected ? "#FBBF24" : "#4ADE80";
+  const cushionFill = disabled ? "#E5E7EB" : isBooked ? "#9CA3AF" : isSelected ? "#F59E0B" : "#22C55E";
+  const textColor = disabled ? "#9CA3AF" : isBooked ? "#6B7280" : isSelected ? "#7C2D12" : "#065F46";
+  
   return (
     <svg
       viewBox="0 0 100 120"
       className={`${sizeClass} transition-all duration-200 select-none ${
-        isBooked ? "cursor-not-allowed opacity-80" : isSelected ? "cursor-pointer hover:scale-105" : "cursor-pointer hover:scale-105 active:scale-95"
+        disabled ? "cursor-not-allowed opacity-50" : isBooked ? "cursor-not-allowed opacity-80" : "cursor-pointer active:scale-95"
       }`}
-      onClick={!isBooked ? onClick : undefined}
+      onClick={!disabled && !isBooked ? onClick : undefined}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -29,7 +33,7 @@ export default function ChairSvg({ isBooked = false, isSelected = false, onClick
         stroke={stroke}
         strokeWidth="4"
         strokeLinejoin="round"
-        fill={isBooked ? "#D1D5DB" : isSelected ? "#FBBF24" : "#4ADE80"}
+        fill={fill}
       />
 
       {/* Armrest - Right */}
@@ -38,7 +42,7 @@ export default function ChairSvg({ isBooked = false, isSelected = false, onClick
         stroke={stroke}
         strokeWidth="4"
         strokeLinejoin="round"
-        fill={isBooked ? "#D1D5DB" : isSelected ? "#FBBF24" : "#4ADE80"}
+        fill={fill}
       />
 
       {/* Backrest */}
@@ -47,7 +51,7 @@ export default function ChairSvg({ isBooked = false, isSelected = false, onClick
         stroke={stroke}
         strokeWidth="4"
         strokeLinejoin="round"
-        fill={isBooked ? "#D1D5DB" : isSelected ? "#FBBF24" : "#4ADE80"}
+        fill={fill}
       />
 
       {/* Cushion Base */}
@@ -56,7 +60,7 @@ export default function ChairSvg({ isBooked = false, isSelected = false, onClick
         stroke={stroke}
         strokeWidth="4"
         strokeLinejoin="round"
-        fill={isBooked ? "#9CA3AF" : isSelected ? "#F59E0B" : "#22C55E"}
+        fill={cushionFill}
       />
 
       {/* Seat Number */}
@@ -67,7 +71,7 @@ export default function ChairSvg({ isBooked = false, isSelected = false, onClick
           textAnchor="middle"
           fontSize="20"
           fontWeight="900"
-          fill={isBooked ? "#6B7280" : isSelected ? "#7C2D12" : "#065F46"}
+          fill={textColor}
           style={{ fontFamily: "'Poppins', 'Segoe UI', sans-serif" }}
         >
           {label}

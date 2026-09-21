@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import { subscribeEvents } from "../../lib/events";
@@ -50,9 +49,24 @@ export default function EventsPage() {
   });
 
   const formatDate = (month, day, year) => {
+    // Check if day is a day name (like "Sunday") vs numeric day (like "22")
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const isDayName = dayNames.includes(day);
+    
+    if (isDayName) {
+      // Data issue: day contains day name instead of numeric day
+      const monthShort = new Date(`${month} 1, ${year}`).toLocaleString("en-US", { month: "short" });
+      return `${monthShort} ${day}, ${year}`; // Shows "OCT Sunday, 2026" to indicate data issue
+    }
+    
+    // Normal case: day is numeric
     const date = new Date(`${month} ${day}, ${year}`);
-    const monthShort = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
-    return { month: monthShort, day: String(date.getDate()), year: String(date.getFullYear()) };
+    if (isNaN(date.getTime())) {
+      return "TBD";
+    }
+    
+    const monthShort = date.toLocaleString("en-US", { month: "short" });
+    return `${date.getDate()} ${monthShort} ${date.getFullYear()}`;
   };
 
   return (
@@ -104,22 +118,28 @@ export default function EventsPage() {
           {!loading && filteredEvents.length > 0 && (
             <div className="grid grid-cols-2 gap-3 pb-4">
               {filteredEvents.map((ev, i) => {
-                const { month, day, year } = formatDate(ev.month || "OCT", ev.day || "22", ev.year || "2026");
+                const formattedDate = formatDate(ev.month || "OCT", ev.day || "22", ev.year || "2026");
                 return (
-                  <div key={ev.key || i} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                  <div
+                    key={ev.key || i}
+                    onClick={() => { window.location.href = `/events/${ev.key}`; }}
+                    className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={ev.banner || ev.img || "/jarpa.png"}
                       alt={ev.name}
-                      className="w-full h-28 object-cover"
+                      className="w-full h-28 object-contain bg-slate-100"
                     />
                     <div className="p-2.5">
                       <div className="flex items-center gap-1 mb-1">
-                        <span className="bg-rose-600 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded uppercase">{month}</span>
-                        <span className="text-sm font-black text-slate-900">{day}</span>
-                        <span className="text-[10px] font-bold text-slate-500">{year}</span>
+                        <span className="bg-rose-600 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded">{formattedDate}</span>
                       </div>
                       <h4 className="text-xs font-black text-slate-900 font-brand truncate">{ev.name || "Event"}</h4>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-0.5">
+                        <i className="fa-solid fa-user-group text-indigo-500 text-[8px]" />
+                        <span className="truncate">{ev.partyName || ev.organizationName || "TBD"}</span>
+                      </div>
                       <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-0.5">
                         <i className="fa-solid fa-location-dot text-rose-500 text-[8px]" />
                         <span className="truncate">{ev.location || "TBD"}</span>
@@ -128,13 +148,10 @@ export default function EventsPage() {
                         <i className="fa-regular fa-clock text-indigo-500 text-[8px]" />
                         <span>{ev.entryTime || "TBD"}</span>
                       </div>
-                      <Link
-                        href="/book"
-                        className="mt-2 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1"
-                      >
+                      <div className="mt-2 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1">
                         <i className="fa-solid fa-ticket -rotate-12 text-[9px]" />
-                        Book
-                      </Link>
+                        View Details
+                      </div>
                     </div>
                   </div>
                 );

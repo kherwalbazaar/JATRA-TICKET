@@ -83,7 +83,7 @@ body {
   background-color: var(--bgColorMenu);
   isolation: isolate;
   border-radius: 0;
-  justify-content: space-around;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: center;
   width: 100%;
   min-height: 4rem;
@@ -91,7 +91,7 @@ body {
   padding: 0;
   font-size: 0.8em;
   list-style: none;
-  display: flex;
+  display: grid;
   position: relative;
   overflow: visible;
 }
@@ -108,7 +108,7 @@ body {
   transition: transform var(--duration);
   border-radius: 50%;
   flex-direction: column;
-  flex-grow: 1;
+  width: 100%;
   justify-content: center;
   align-items: center;
   gap: 0.2rem;
@@ -155,35 +155,35 @@ body {
 }
 
 .nav-icon-home {
-  transform: translate(-0.3rem, -0.15rem);
+  transform: none;
 }
 
 .menu__item.active .nav-icon.nav-icon-home {
-  transform: translate3d(-0.3rem, -0.15rem, 0) scale(1.22);
+  transform: scale(1.22);
 }
 
 .nav-icon-tickets {
-  transform: translateX(0.33rem);
+  transform: none;
 }
 
 .menu__item.active .nav-icon.nav-icon-tickets {
-  transform: translate3d(0.33rem, 0.5rem, 0) scale(1.22);
+  transform: scale(1.22);
 }
 
 .nav-icon-support {
-  transform: translateX(0.3rem);
+  transform: none;
 }
 
 .menu__item.active .nav-icon.nav-icon-support {
-  transform: translate3d(0.3rem, 0.5rem, 0) scale(1.22);
+  transform: scale(1.22);
 }
 
 .nav-icon-profile {
-  transform: translateX(0.3rem);
+  transform: none;
 }
 
 .menu__item.active .nav-icon.nav-icon-profile {
-  transform: translate3d(0.3rem, 0.5rem, 0) scale(1.22);
+  transform: scale(1.22);
 }
 
 .menu__item.active .nav-icon {
@@ -295,7 +295,7 @@ body {
 
 .menu__item.active .icon-wrapper {
   opacity: 1;
-  transform: translate(8px, -6px);
+  transform: translateY(-6px);
   transition: opacity 0.2s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 

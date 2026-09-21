@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node -e \"const fs=require('fs'); const dir='.next'; if (fs.existsSync(dir)) fs.rmSync(dir,{recursive:true,force:true}); console.log('Cleared .next cache before dev server');\" && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

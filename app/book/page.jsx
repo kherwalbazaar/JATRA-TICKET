@@ -4,26 +4,34 @@ import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BookingForm from "../components/BookingForm";
 import { saveBooking } from "../../lib/bookings";
+import { markSeatsBooked } from "../../lib/seats";
 
 function BookContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tierId = searchParams.get("tier") ?? "vip";
   const eventId = searchParams.get("eventId") ?? "EVT-2026-001";
+  const block = searchParams.get("block") ?? "";
+  const seats = searchParams.get("seats") ?? "";
+  const seatPrice = Number(searchParams.get("seatPrice")) || 100;
+  const seatCount = seats ? seats.split(",").filter(Boolean).length : 0;
+  const totalAmount = seatPrice * seatCount;
 
   return (
     <BookingForm
       fullPage
-      initialTierId={tierId}
-      eventId={eventId}
+      block={block}
+      seats={seats}
+      seatPrice={seatPrice}
       onClose={() => router.back()}
       onProceed={async (data) => {
-        try {
-          await saveBooking({ ...data, eventId });
-        } catch (err) {
-          console.error("Failed to save booking", err);
-        }
-        router.push("/tickets");
+        const params = new URLSearchParams({
+          eventId,
+          block,
+          seats,
+          seatPrice: String(seatPrice),
+          paymentMethod: data.paymentMethod,
+        });
+        router.push(`/payment?${params.toString()}`);
       }}
     />
   );
