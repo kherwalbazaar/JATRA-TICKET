@@ -18,8 +18,8 @@ const DUMMY_EVENTS = [
     entryTime: "07:45 PM",
     startTime: "08:30 PM",
     about: "Adim Lahah Mandawa is a grand Jatra performance featuring traditional folk art, music, and cultural storytelling. Experience the vibrant colors and rhythms of Odisha's rich theatrical heritage.",
-    language: "Odia",
-    duration: "8 Hours",
+    language: "Santali",
+    duration: "10:00 PM - 05:00 AM",
     audience: "All Age",
     committee: "Adim Lahah Mandawa Committee",
     address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
@@ -58,8 +58,8 @@ const DUMMY_EVENTS = [
     entryTime: "09:15 PM",
     startTime: "10:00 PM",
     about: "Ramraj Opera presents a spectacular Jatra show with talented artists, beautiful costumes, and mesmerizing performances that captivate the audience through the night.",
-    language: "Odia",
-    duration: "7 Hours",
+    language: "Santali",
+    duration: "10:00 PM - 05:00 AM",
     audience: "All Age",
     committee: "Ramraj Gayan Mohal",
     address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
@@ -120,11 +120,38 @@ export default function SeedEventsPage() {
     setLoading(false);
   };
 
+  const reseedEvents = async () => {
+    setLoading(true);
+    setStatus("Clearing old events...");
+    try {
+      const snap = await getDocs(query(collection(firestore, "events")));
+      for (const d of snap.docs) {
+        await deleteDoc(doc(firestore, "events", d.id));
+      }
+      setStatus("Seeding updated events...");
+      for (const ev of DUMMY_EVENTS) {
+        await addDoc(collection(firestore, "events"), ev);
+      }
+      setStatus("✅ All events updated in Firestore!");
+    } catch (err) {
+      setStatus("❌ Error: " + err.message);
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-md mx-auto bg-white rounded-2xl p-6 space-y-4">
         <h1 className="text-xl font-black text-slate-900">Seed Events to Firestore</h1>
         <p className="text-sm text-slate-500">Store dummy event data into Firestore database</p>
+
+        <button
+          onClick={reseedEvents}
+          disabled={loading}
+          className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl disabled:opacity-50"
+        >
+          {loading ? "Working..." : "Re-seed (Clear + Update)"}
+        </button>
 
         <button
           onClick={seedEvents}

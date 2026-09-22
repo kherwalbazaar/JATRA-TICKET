@@ -70,8 +70,8 @@ const FALLBACK_EVENTS = [
     entryTime: "07:45 PM",
     startTime: "08:30 PM",
     about: "Adim Lahah Mandawa is a grand Jatra performance featuring traditional folk art, music, and cultural storytelling. Experience the vibrant colors and rhythms of Odisha's rich theatrical heritage.",
-    language: "Odia",
-    duration: "8 Hours",
+    language: "Santali",
+    duration: "10:00 PM - 05:00 AM",
     audience: "All Age",
     committee: "Adim Lahah Mandawa Committee",
     address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
@@ -96,8 +96,8 @@ const FALLBACK_EVENTS = [
     entryTime: "09:15 PM",
     startTime: "10:00 PM",
     about: "Ramraj Opera presents a spectacular Jatra show with talented artists, beautiful costumes, and mesmerizing performances that captivate the audience through the night.",
-    language: "Odia",
-    duration: "7 Hours",
+    language: "Santali",
+    duration: "10:00 PM - 05:00 AM",
     audience: "All Age",
     committee: "Ramraj Gayan Mohal",
     address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
@@ -143,8 +143,8 @@ export default function EventDetail({ id }) {
     || FALLBACK_EVENTS.find((ev) => ev.key === id) 
     || FALLBACK_EVENTS[0];
   const guide = event?.guide || {};
-  const language = firstValue(event?.language, guide.language, "Odia");
-  const duration = firstValue(event?.duration, guide.duration, "8 Hours");
+  const language = firstValue(event?.language, guide.language, "Santali");
+  const duration = firstValue(event?.duration, guide.duration, event?.time, "10:00 PM - 05:00 AM");
   const audience = firstValue(event?.audience, guide.audience, "All Age");
   const trailer = toYouTubeEmbedUrl(firstValue(event?.trailer, event?.trailerUrl, event?.youtubeTrailer, DUMMY_TRAILER));
   const credits = event?.credits && Object.values(event.credits).some(Boolean) ? event.credits : DUMMY_CREDITS;
@@ -216,13 +216,9 @@ export default function EventDetail({ id }) {
           <h2 className="text-lg font-black font-brand truncate">Event Details</h2>
         </div>
 
-        {/* Banner */}
-        <div className="px-4 py-4">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="w-full h-[200px] overflow-hidden bg-slate-100">
-              <img src={event.banner || event.img || "/jarpa.png"} alt={event.name} className="w-full h-full object-contain" />
-            </div>
-          </div>
+        {/* Banner - Full width, fit */}
+        <div className="w-full overflow-hidden bg-slate-100">
+          <img src={event.banner || event.img || "/jarpa.png"} alt={event.name} className="w-full h-auto object-contain" />
         </div>
 
         <div className="px-4 py-4 space-y-4">
@@ -237,33 +233,15 @@ export default function EventDetail({ id }) {
             <h3 className="text-sm font-black text-slate-900 font-brand flex items-center gap-2">
               <i className="fa-solid fa-location-dot text-rose-500" /> Location
             </h3>
-            <div className="space-y-1.5 text-xs font-semibold text-slate-700">
-              <div className="flex items-center gap-2">
-                <i className="fa-regular fa-calendar text-rose-500 w-4" />
-                <span>{formatDate(event.month, event.day, event.year)}</span>
+            <div className="space-y-2">
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Committee</p>
+                <p className="text-xs font-black text-slate-900">{committee}</p>
               </div>
-              {event.entryTime && (
-                <div className="flex items-center gap-2">
-                  <i className="fa-regular fa-clock text-indigo-500 w-4" />
-                  <span>Entry: {event.entryTime}</span>
-                </div>
-              )}
-              {event.startTime && (
-                <div className="flex items-center gap-2">
-                  <i className="fa-solid fa-play text-emerald-500 w-4" />
-                  <span>Start: {event.startTime}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-location-dot text-rose-500 w-4" />
-                <span>{event.location || address || "TBD"}</span>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Address</p>
+                <p className="text-xs font-semibold text-rose-600">{event.location || address || "TBD"}</p>
               </div>
-              {committee && (
-                <div className="flex items-center gap-2">
-                  <i className="fa-solid fa-users text-indigo-500 w-4" />
-                  <span>{committee}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -366,8 +344,8 @@ export default function EventDetail({ id }) {
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {displayBanners.map((img, i) => (
-                <div key={i} className="bg-white rounded-xl overflow-hidden shadow-sm">
-                  <img src={img} alt={`Banner ${i + 1}`} className="w-full aspect-video object-contain bg-slate-100" />
+                <div key={i} className="bg-white rounded-xl overflow-hidden shadow-sm aspect-video">
+                  <img src={img} alt={`Banner ${i + 1}`} className="w-full h-full object-cover" />
                 </div>
               ))}
             </div>
@@ -444,24 +422,38 @@ export default function EventDetail({ id }) {
                   <p className="text-sm font-bold text-slate-900">{managingDirector}</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 bg-white rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
                 <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
                   <i className="fa-solid fa-location-dot text-rose-500 text-sm" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-bold text-slate-500 uppercase">Full Address</p>
-                  <p className="text-xs font-semibold text-slate-700 leading-relaxed">{address}</p>
+                  <p className="text-xs font-semibold text-rose-600">{address}</p>
                 </div>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+                >
+                  <i className="fa-solid fa-map-location-dot text-white text-sm" />
+                </a>
               </div>
-              <a href={`tel:${phone}`} className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
                 <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
                   <i className="fa-solid fa-phone text-emerald-500 text-sm" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-bold text-slate-500 uppercase">Contact Number</p>
                   <p className="text-sm font-bold text-indigo-700">{phone}</p>
                 </div>
-              </a>
+                <a
+                  href={`tel:${phone}`}
+                  className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+                >
+                  <i className="fa-solid fa-phone-volume text-white text-sm" />
+                </a>
+              </div>
             </div>
           </div>
 

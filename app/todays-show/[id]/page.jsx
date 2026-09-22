@@ -39,7 +39,7 @@ const showsData = {
     time: "10:00 PM - 05:00 AM",
     location: "Bahanada, Khunta, Mayurbhanj",
     committee: "Ramraj Opera Committee",
-    about: "Ramraj Gayan Mohal is a spectacular jatra show featuring traditional Odia and Santali performances with modern storytelling.",
+    about: "Ramraj Gayan Mohal is a spectacular jatra show featuring traditional Santali and Santali performances with modern storytelling.",
     language: "Santali",
     duration: "10:00 PM - 05:00 AM",
     trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
