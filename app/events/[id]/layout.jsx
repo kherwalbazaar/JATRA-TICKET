@@ -1,6 +1,4 @@
-export function generateStaticParams() {
-  return [{ id: "1" }, { id: "2" }, { id: "3" }];
-}
+export const dynamic = "force-dynamic";
 
 export default function EventLayout({ children }) {
   return children;
