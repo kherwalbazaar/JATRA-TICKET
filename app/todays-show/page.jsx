@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Header from "../components/Header";
+import BannerImage from "../components/BannerImage";
 
 const TABS = [
   { key: "today", label: "Today's" },
@@ -99,7 +100,7 @@ export default function TodaysShowPage() {
             {filteredShows.map((show) => (
               <Link key={show.key} href={`/todays-show/${show.key}`} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <BannerImage
                   src={show.banner}
                   alt={show.name}
                   className="w-full h-28 object-cover"

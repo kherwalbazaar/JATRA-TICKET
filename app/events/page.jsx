@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
+import BannerImage from "../components/BannerImage";
 import { subscribeEvents } from "../../lib/events";
 
 const TABS = [
@@ -126,7 +127,7 @@ export default function EventsPage() {
                     className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <BannerImage
                       src={ev.banner || ev.img || "/jarpa.png"}
                       alt={ev.name}
                       className="w-full h-28 object-contain bg-slate-100"

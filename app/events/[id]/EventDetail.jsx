@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { subscribeEvents, fetchEvents } from "../../../lib/events";
+import BannerImage from "../../components/BannerImage";
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
 
@@ -112,20 +113,26 @@ const FALLBACK_EVENTS = [
 
 export default function EventDetail({ id }) {
   const [showAllTerms, setShowAllTerms] = useState(false);
-  const [events, setEvents] = useState([]);
+  const [event, setEvent] = useState(null);
   const [fetching, setFetching] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+
+    setFetching(true);
+    setLoadError("");
+    setEvent(null);
     
     async function load() {
       try {
         const data = await fetchEvents();
-        if (!cancelled && data && data.length > 0) {
-          setEvents(data);
+        if (!cancelled) {
+          setEvent(data?.find((item) => item?.key === id) || null);
         }
       } catch (err) {
         console.error("Error loading events:", err);
+        if (!cancelled) setLoadError("We could not load this event. Please try again.");
       } finally {
         if (!cancelled) setFetching(false);
       }
@@ -136,18 +143,44 @@ export default function EventDetail({ id }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [id]);
 
-  const event = events.find((ev) => ev.key === id) 
-    || events[0] 
-    || FALLBACK_EVENTS.find((ev) => ev.key === id) 
-    || FALLBACK_EVENTS[0];
+  const statusPage = (icon, message, actionLabel = "Go back", onAction = () => window.history.back()) => (
+    <div className="bg-slate-900 min-h-screen text-slate-800 antialiased">
+      <div className="bg-[#f8faff] min-h-screen flex flex-col">
+        <div className="bg-[#12193b] text-white px-4 py-3 flex items-center gap-3">
+          <button onClick={onAction} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center" aria-label={actionLabel}>
+            <i className="fa-solid fa-arrow-left text-xs" />
+          </button>
+          <h2 className="text-lg font-black font-brand truncate">Event Details</h2>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 gap-3 text-center">
+          <i className={`${icon} text-4xl text-slate-300`} />
+          <p className="text-sm text-slate-600 font-semibold">{message}</p>
+          <button onClick={onAction} className="text-xs font-bold text-indigo-600">{actionLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (fetching) {
+    return statusPage("fa-solid fa-spinner fa-spin", "Loading event details...", "Go back");
+  }
+
+  if (loadError) {
+    return statusPage("fa-solid fa-triangle-exclamation", loadError, "Try again", () => window.location.reload());
+  }
+
+  if (!event) {
+    return statusPage("fa-regular fa-calendar-xmark", "Event not found", "Go back");
+  }
+
   const guide = event?.guide || {};
   const language = firstValue(event?.language, guide.language, "Santali");
   const duration = firstValue(event?.duration, guide.duration, event?.time, "10:00 PM - 05:00 AM");
   const audience = firstValue(event?.audience, guide.audience, "All Age");
   const trailer = toYouTubeEmbedUrl(firstValue(event?.trailer, event?.trailerUrl, event?.youtubeTrailer, DUMMY_TRAILER));
-  const credits = event?.credits && Object.values(event.credits).some(Boolean) ? event.credits : DUMMY_CREDITS;
+  const credits = event?.credits && Object.values(event?.credits || {}).some(Boolean) ? event.credits : DUMMY_CREDITS;
   const castRaw = normalizeCast(firstValue(event?.cast, event?.castCrew));
   const cast = castRaw.length > 0 ? castRaw : DUMMY_CAST;
   const contact = event?.contact || event?.contactInformation || {};
@@ -159,8 +192,8 @@ export default function EventDetail({ id }) {
   const yearBanners = bannersRaw.length > 0
     ? bannersRaw
     : [...new Set(events
-        .filter((item) => String(item.year || "") === String(event?.year || ""))
-        .flatMap((item) => [item.banner, ...asArray(item.banners)])
+        .filter((item) => String(item?.year || "") === String(event?.year || ""))
+        .flatMap((item) => [item?.banner, ...asArray(item?.banners)])
         .filter(Boolean))];
   const displayBanners = yearBanners.length > 0 ? yearBanners : DUMMY_BANNERS;
 
@@ -218,14 +251,14 @@ export default function EventDetail({ id }) {
 
         {/* Banner - Full width, fit */}
         <div className="w-full overflow-hidden bg-slate-100">
-          <img src={event.banner || event.img || "/jarpa.png"} alt={event.name} className="w-full h-auto object-contain" />
+          <BannerImage src={event?.banner || event?.img} alt={event?.name || "Event banner"} className="w-full h-auto object-contain" />
         </div>
 
         <div className="px-4 py-4 space-y-4">
           {/* Event Name & Party */}
           <div>
-            <h1 className="text-xl font-black text-slate-900 font-brand">{event.name || "Event"}</h1>
-            <p className="text-xs text-indigo-600 font-bold mt-0.5">{event.partyName || event.organizer || "TBD"}</p>
+            <h1 className="text-xl font-black text-slate-900 font-brand">{event?.name || "Event"}</h1>
+            <p className="text-xs text-indigo-600 font-bold mt-0.5">{event?.partyName || event?.organizer || "TBD"}</p>
           </div>
 
           {/* Location (Committee, Address) */}
@@ -240,7 +273,7 @@ export default function EventDetail({ id }) {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Address</p>
-                <p className="text-xs font-semibold text-rose-600">{event.location || address || "TBD"}</p>
+                <p className="text-xs font-semibold text-rose-600">{event?.location || address || "TBD"}</p>
               </div>
             </div>
           </div>
@@ -248,7 +281,7 @@ export default function EventDetail({ id }) {
           {/* About Jatra */}
           <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100">
             <h3 className="text-sm font-black text-slate-900 font-brand mb-2">About Jatra</h3>
-            <p className="text-[11px] text-slate-600 leading-relaxed">{event.about || "Experience the magic of traditional Jatra performances."}</p>
+            <p className="text-[11px] text-slate-600 leading-relaxed">{event?.about || "Experience the magic of traditional Jatra performances."}</p>
           </div>
 
           {/* Show Guide (Language, Duration, Audience) */}
@@ -297,19 +330,19 @@ export default function EventDetail({ id }) {
             <div className="grid grid-cols-2 gap-3">
               <div className="text-center">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Writer</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits.writer, credits.writerName, event.writer, "Maheswar Soren")}</p>
+                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits?.writer, credits?.writerName, event?.writer, "Maheswar Soren")}</p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Director</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits.director, credits.direction, event.director, "Dasarath Singh")}</p>
+                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits?.director, credits?.direction, event?.director, "Dasarath Singh")}</p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Music</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits.music, event.music, "Bhubaneswar Mishra")}</p>
+                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits?.music, event?.music, "Bhubaneswar Mishra")}</p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Singer</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{asArray(firstValue(credits.singers, credits.singer, event.singer, ["Ardhendu Giri", "Malabika Sanyal"])).join(", ")}</p>
+                <p className="text-xs font-black text-slate-900 mt-0.5">{asArray(firstValue(credits?.singers, credits?.singer, event?.singer, ["Ardhendu Giri", "Malabika Sanyal"])).join(", ")}</p>
               </div>
             </div>
           </div>
@@ -323,15 +356,15 @@ export default function EventDetail({ id }) {
               {cast.map((member, i) => (
                 <div key={i} className="flex flex-col items-center">
                   <div className="w-full aspect-square rounded-xl overflow-hidden bg-white shadow-sm ring-2 ring-emerald-100 flex items-center justify-center">
-                    {member.photo || member.image ? (
-                      <img src={member.photo || member.image} alt={member.name || "Cast member"} className="w-full h-full object-cover" />
+                    {member?.photo || member?.image ? (
+                      <img src={member?.photo || member?.image} alt={member?.name || "Cast member"} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-100">
                         <i className="fa-solid fa-user text-emerald-400 text-2xl" />
                       </div>
                     )}
                   </div>
-                  <p className="text-[10px] font-bold text-slate-900 mt-2 text-center truncate w-full">{member.name || "Cast member"}</p>
+                  <p className="text-[10px] font-bold text-slate-900 mt-2 text-center truncate w-full">{member?.name || "Cast member"}</p>
                 </div>
               ))}
             </div>
@@ -340,12 +373,12 @@ export default function EventDetail({ id }) {
           {/* Banner Photos */}
           <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-2xl p-4 shadow-sm border border-cyan-100">
             <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-images text-cyan-500" /> Banner ({event.year || "2026"})
+              <i className="fa-solid fa-images text-cyan-500" /> Banner ({event?.year || "2026"})
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {displayBanners.map((img, i) => (
                 <div key={i} className="bg-white rounded-xl overflow-hidden shadow-sm aspect-video">
-                  <img src={img} alt={`Banner ${i + 1}`} className="w-full h-full object-cover" />
+                  <BannerImage src={img} alt={`Banner ${i + 1}`} className="w-full h-full object-cover" />
                 </div>
               ))}
             </div>
@@ -460,8 +493,8 @@ export default function EventDetail({ id }) {
           {/* Book Ticket Now */}
           <button
             onClick={() => {
-              const eventName = event.name || "Event";
-              const eventId = event.key || id;
+              const eventName = event?.name || "Event";
+              const eventId = event?.key || id;
               window.location.href = `/seats?event=${encodeURIComponent(eventName)}&eventId=${eventId}`;
             }}
             className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-base py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"

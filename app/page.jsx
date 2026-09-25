@@ -5,6 +5,7 @@ import Link from "next/link";
 import BookTicketsModal from "./components/BookTicketsModal";
 import BottomNav from "./components/BottomNav";
 import Header from "./components/Header";
+import BannerImage from "./components/BannerImage";
 import { saveBooking } from "../lib/bookings";
 import { subscribeEvents } from "../lib/events";
 import { subscribeBanners } from "../lib/banners";
@@ -636,7 +637,7 @@ function HeroCarousel() {
         {singleSlide ? (
           <div className="relative w-full h-full overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <BannerImage
               src={slides[0].img}
               alt="Banner"
               className="w-full h-full object-cover single-banner-motion"
@@ -650,7 +651,7 @@ function HeroCarousel() {
             {slides.map((slide, i) => (
               <div key={i} className="w-full flex-shrink-0 h-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <BannerImage
                   src={slide.img}
                   alt={`Banner ${i + 1}`}
                   className="w-full h-full"

@@ -79,6 +79,8 @@ function SeatSelectionContent() {
   }, [eventId]);
 
   const toggleSeat = (key) => {
+    const fs = findFsSeat(activeBlock, key);
+    if (fs && fs.status === "booked") return;
     setSelected((prev) => {
       if (prev.includes(key)) return prev.filter((k) => k !== key);
       if (prev.length >= 10) return prev;
@@ -95,45 +97,75 @@ function SeatSelectionContent() {
   };
 
   const getAvailableBlocks = () => {
-    if (!clickedFromMap) return {
-      rightSide: BLOCK_GROUPS.rightSide,
-      frontCenter: BLOCK_GROUPS.frontCenter,
-      leftSide: BLOCK_GROUPS.leftSide
+    const fsBlocks = Object.keys(seatsByBlock).filter(
+      (b) => (seatsByBlock[b] || []).length > 0
+    );
+    const all = {
+      rightSide: [...new Set([...BLOCK_GROUPS.rightSide, ...fsBlocks.filter((b) => /^A/i.test(b))])],
+      frontCenter: [...new Set([...BLOCK_GROUPS.frontCenter, ...fsBlocks.filter((b) => /^B/i.test(b))])],
+      leftSide: [...new Set([...BLOCK_GROUPS.leftSide, ...fsBlocks.filter((b) => /^C/i.test(b))])],
     };
-    
-    // Show only blocks from the same section as the clicked block
-    if (BLOCK_GROUPS.rightSide.includes(activeBlock)) {
-      return { rightSide: BLOCK_GROUPS.rightSide, frontCenter: [], leftSide: [] };
+    const extra = fsBlocks.filter(
+      (b) =>
+        !all.rightSide.includes(b) &&
+        !all.frontCenter.includes(b) &&
+        !all.leftSide.includes(b)
+    );
+    if (extra.length) all.frontCenter = [...all.frontCenter, ...extra];
+
+    if (!clickedFromMap) return all;
+
+    if (all.rightSide.includes(activeBlock)) {
+      return { rightSide: all.rightSide, frontCenter: [], leftSide: [] };
     }
-    if (BLOCK_GROUPS.frontCenter.includes(activeBlock)) {
-      return { rightSide: [], frontCenter: BLOCK_GROUPS.frontCenter, leftSide: [] };
+    if (all.frontCenter.includes(activeBlock)) {
+      return { rightSide: [], frontCenter: all.frontCenter, leftSide: [] };
     }
-    if (BLOCK_GROUPS.leftSide.includes(activeBlock)) {
-      return { rightSide: [], frontCenter: [], leftSide: BLOCK_GROUPS.leftSide };
+    if (all.leftSide.includes(activeBlock)) {
+      return { rightSide: [], frontCenter: [], leftSide: all.leftSide };
     }
-    return {
-      rightSide: BLOCK_GROUPS.rightSide,
-      frontCenter: BLOCK_GROUPS.frontCenter,
-      leftSide: BLOCK_GROUPS.leftSide
-    };
+    return all;
   };
 
   const getBlockStats = (blockId) => {
+    const fsSeats = seatsByBlock[blockId];
+    if (fsSeats && fsSeats.length > 0) {
+      const available = fsSeats.filter((s) => s.status === "available").length;
+      return { total: fsSeats.length, available };
+    }
     const blockData = BLOCK_SEATS[blockId];
     if (!blockData) return { total: 0, available: 0 };
-    
     const totalSeats = blockData.reduce((sum, row) => sum + row.count, 0);
-    
-    // Use Firestore data if available
-    if (seatsByBlock[blockId] && seatsByBlock[blockId].length > 0) {
-      const availableSeats = seatsByBlock[blockId].filter(
-        (s) => s.status === "available"
-      ).length;
-      return { total: totalSeats, available: availableSeats };
-    }
-    
-    // All seats available if no Firestore data
     return { total: totalSeats, available: totalSeats };
+  };
+
+  // Group Firestore seats by row for data-driven rendering
+  const getFsRows = (blockId) => {
+    const list = seatsByBlock[blockId] || [];
+    if (!list.length) return null;
+    const byRow = {};
+    list.forEach((s) => {
+      const rid = s.rowId || "A";
+      if (!byRow[rid]) byRow[rid] = [];
+      byRow[rid].push(s);
+    });
+    return Object.keys(byRow)
+      .sort()
+      .map((rid) => ({
+        id: rid,
+        seats: byRow[rid].sort((a, b) => (a.seatNumber || 0) - (b.seatNumber || 0)),
+      }));
+  };
+
+  const findFsSeat = (blockId, key) => {
+    const list = seatsByBlock[blockId] || [];
+    return list.find(
+      (s) =>
+        s.id === key ||
+        s.seatLabel === key ||
+        `${s.rowId}-${s.seatNumber}` === key ||
+        `${s.rowId}${s.seatNumber}` === key
+    );
   };
 
   return (
@@ -519,9 +551,41 @@ function SeatSelectionContent() {
               <div className="text-center py-8">
                 <p className="text-sm text-slate-500 font-medium">Loading seats...</p>
               </div>
-            ) : activeBlock && BLOCK_SEATS[activeBlock] ? (
+            ) : activeBlock && (getFsRows(activeBlock) || BLOCK_SEATS[activeBlock]) ? (
               (() => {
-    const isBBlock = ["B1", "B2", "B3"].includes(activeBlock);
+                const fsRows = getFsRows(activeBlock);
+                if (fsRows) {
+                  // Admin Seat Create → Firestore-driven grid
+                  return fsRows.map((row) => (
+                    <div key={row.id} className="flex items-center gap-0.5">
+                      <span className="w-6 text-right pr-1 text-[10px] font-black text-slate-400">
+                        {row.id}
+                      </span>
+                      <div className="flex-1 overflow-x-hidden">
+                        <div className="flex w-max mx-auto gap-0.5">
+                          {row.seats.map((seat) => {
+                            const key =
+                              seat.id || `${seat.rowId}-${seat.seatNumber}`;
+                            const isBooked = seat.status === "booked";
+                            return (
+                              <div key={key} className="flex flex-col items-center shrink-0">
+                                <ChairSvg
+                                  isBooked={isBooked}
+                                  isSelected={selected.includes(key)}
+                                  onClick={() => toggleSeat(key)}
+                                  label={seat.seatNumber}
+                                  sizeClass="w-6 h-8"
+                                  disabled={!clickedFromMap}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ));
+                }
+                const isBBlock = ["B1", "B2", "B3"].includes(activeBlock);
                 
                 if (isBBlock && bBlockSeats[activeBlock]) {
                   // Special rendering for B blocks with directional display
@@ -534,9 +598,7 @@ function SeatSelectionContent() {
                         <div className="flex w-max mx-auto gap-0.5">
                           {row.map((seat) => {
                             const key = `${seat.letter}${seat.number}`;
-                            const firestoreSeat = seatsByBlock[activeBlock]?.find(
-                              (s) => s.seatLabel === key
-                            );
+                            const firestoreSeat = findFsSeat(activeBlock, key);
                             const isBooked = firestoreSeat
                               ? firestoreSeat.status === "booked"
                               : false;
@@ -567,9 +629,7 @@ function SeatSelectionContent() {
                           {Array.from({ length: row.count }).map((_, i) => {
                             const seatNo = i + 1;
                             const key = `${row.id}-${seatNo}`;
-                            const firestoreSeat = seatsByBlock[activeBlock]?.find(
-                              (s) => s.seatLabel === key
-                            );
+                            const firestoreSeat = findFsSeat(activeBlock, key);
                             const isBooked = firestoreSeat
                               ? firestoreSeat.status === "booked"
                               : false;
@@ -644,15 +704,15 @@ function SeatSelectionContent() {
 
           <button
             onClick={() => {
-              const isBBlock = ["B1", "B2", "B3"].includes(activeBlock);
+              // Always pass Firestore doc ids: row-seatNumber (e.g. A-9, A-10)
               const displaySeats = selected.map((key) => {
-                if (isBBlock && bBlockSeats[activeBlock]) {
-                  for (let ri = 0; ri < bBlockSeats[activeBlock].length; ri++) {
-                    const row = bBlockSeats[activeBlock][ri];
-                    const seatIdx = row.findIndex((seat) => `${seat.letter}${seat.number}` === key);
-                    if (seatIdx !== -1) return `${String.fromCharCode(65 + ri)}${seatIdx + 1}`;
-                  }
+                const fs = findFsSeat(activeBlock, key);
+                if (fs) {
+                  return fs.id || `${fs.rowId}-${fs.seatNumber}`;
                 }
+                if (key.includes("-")) return key;
+                const m = String(key).match(/^([A-Za-z]+)(\d+)$/);
+                if (m) return `${m[1].toUpperCase()}-${m[2]}`;
                 return key;
               });
               router.push(`/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&block=${activeBlock}&seats=${displaySeats.join(',')}`);

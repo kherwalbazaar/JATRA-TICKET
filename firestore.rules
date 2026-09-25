@@ -97,11 +97,16 @@ service cloud.firestore {
     }
 
     // ============================================================
-    // 7. SEATS
+    // 7. SEATS — seats/{eventId}/{blockId}/{docId}
     // ============================================================
-    match /seats/{eventId}/{blockId}/{rowId}/{seatNumber} {
+    match /seats/{eventId}/{blockId}/{docId} {
       allow read: if true;
-      allow write: if isSignedIn() || !isSignedIn();
+      allow write: if true;
+    }
+
+    match /seatMeta/{eventId} {
+      allow read: if true;
+      allow write: if true;
     }
 
     // ============================================================

@@ -39,6 +39,8 @@ export default function Sidebar() {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  if (pathname.startsWith("/events/") && pathname !== "/events/") return null;
+
   const handleNav = (href) => {
     closeSidebar();
     router.push(href);
