@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { subscribeEvents, fetchEvents } from "../../../lib/events";
-import BannerImage from "../../components/BannerImage";
+import { getImageSource } from "../../components/BannerImage";
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
 
@@ -14,13 +14,44 @@ const asArray = (value) => {
   return [];
 };
 
-const normalizeCast = (cast) => {
-  if (!cast) return [];
-  const castArray = asArray(cast);
-  return castArray.map(member => {
-    if (typeof member === 'string') return { name: member, photo: null };
-    return member;
-  });
+const normalizeCast = (raw) => {
+  if (!raw) return [];
+  let list = raw;
+
+  if (typeof list === "string") {
+    list = list.trim() ? [list] : [];
+  } else if (Array.isArray(list)) {
+    // already a list
+  } else if (typeof list === "object") {
+    // single member object
+    if (list.name || list.actorName || list.fullName || list.photo || list.image || list.img) {
+      list = [list];
+    } else if (Array.isArray(list.members)) list = list.members;
+    else if (Array.isArray(list.cast)) list = list.cast;
+    else if (Array.isArray(list.list)) list = list.list;
+    else if (Array.isArray(list.items)) list = list.items;
+    else list = Object.values(list); // map keyed by index/name
+  } else {
+    return [];
+  }
+
+  return list
+    .map((item) => {
+      if (typeof item === "string") {
+        const name = item.trim();
+        return name ? { name, photo: null } : null;
+      }
+      if (item && typeof item === "object") {
+        const name =
+          firstValue(item.name, item.actorName, item.fullName, item.title, item.label) || "";
+        const photo =
+          firstValue(item.photo, item.image, item.img, item.photoUrl, item.imageUrl, item.picture, item.avatar, item.url) || null;
+        if (!name && !photo) return null;
+        return { ...item, name, photo };
+      }
+      return null;
+    })
+    .filter(Boolean);
 };
 
 const toYouTubeEmbedUrl = (value) => {
@@ -35,81 +66,6 @@ const toYouTubeEmbedUrl = (value) => {
   } catch { return value; }
   return value;
 };
-
-const DUMMY_TRAILER = "https://www.youtube.com/embed/dQw4w9WgXcQ";
-const DUMMY_CAST = [
-  { name: "Rajesh Kumar", photo: "https://i.pravatar.cc/150?img=11" },
-  { name: "Sunita Sahu", photo: "https://i.pravatar.cc/150?img=5" },
-  { name: "Bikram Oraon", photo: "https://i.pravatar.cc/150?img=12" },
-  { name: "Mamata Behera", photo: "https://i.pravatar.cc/150?img=9" },
-  { name: "Suresh Nayak", photo: "https://i.pravatar.cc/150?img=13" },
-  { name: "Purnima Munda", photo: "https://i.pravatar.cc/150?img=16" },
-];
-const DUMMY_CREDITS = {
-  writer: "Maheswar Soren",
-  director: "Dasarath Singh",
-  music: "Bhubaneswar Mishra",
-  singers: ["Ardhendu Giri", "Malabika Sanyal"],
-};
-const DUMMY_BANNERS = [
-  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-  "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=600&auto=format&fit=crop&q=80",
-];
-
-const FALLBACK_EVENTS = [
-  {
-    key: "1",
-    name: "ADIM LAHAH MANDAWA",
-    partyName: "Adim Lahah Mandawa",
-    organizationName: "ADIM LAHAH MANDAWA",
-    month: "OCT",
-    day: "1",
-    year: "2026",
-    location: "Balanada Ground, Khunta, Mayurbhanj",
-    banner: "/jarpa.png",
-    time: "08:30 PM - 04:30 AM",
-    entryTime: "07:45 PM",
-    startTime: "08:30 PM",
-    about: "Adim Lahah Mandawa is a grand Jatra performance featuring traditional folk art, music, and cultural storytelling. Experience the vibrant colors and rhythms of Odisha's rich theatrical heritage.",
-    language: "Santali",
-    duration: "10:00 PM - 05:00 AM",
-    audience: "All Age",
-    committee: "Adim Lahah Mandawa Committee",
-    address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
-    phone: "+91 94370 12345",
-    managingDirector: "Sri Prakash Chandra Sahu",
-    trailer: DUMMY_TRAILER,
-    credits: DUMMY_CREDITS,
-    cast: DUMMY_CAST,
-    banners: DUMMY_BANNERS,
-  },
-  {
-    key: "2",
-    name: "RAMRAJ GAYAN MOHAL",
-    partyName: "Ramraj Opera",
-    organizationName: "Ramraj Opera",
-    month: "OCT",
-    day: "23",
-    year: "2026",
-    location: "Bahanada, Khunta, Mayurbhanj",
-    banner: "/ramraj.png",
-    time: "10:00 PM - 05:00 AM",
-    entryTime: "09:15 PM",
-    startTime: "10:00 PM",
-    about: "Ramraj Opera presents a spectacular Jatra show with talented artists, beautiful costumes, and mesmerizing performances that captivate the audience through the night.",
-    language: "Santali",
-    duration: "10:00 PM - 05:00 AM",
-    audience: "All Age",
-    committee: "Ramraj Gayan Mohal",
-    address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
-    phone: "+91 94370 67890",
-    managingDirector: "Sri Ramesh Chandra Naik",
-    trailer: DUMMY_TRAILER,
-    credits: DUMMY_CREDITS,
-    cast: DUMMY_CAST,
-    banners: DUMMY_BANNERS,
-  },
-];
 
 export default function EventDetail({ id }) {
   const [showAllTerms, setShowAllTerms] = useState(false);
@@ -210,30 +166,72 @@ export default function EventDetail({ id }) {
   }
 
   const guide = event?.guide || {};
-  const language = firstValue(event?.language, guide.language, "Santali");
-  const duration = firstValue(event?.duration, guide.duration, event?.time, "10:00 PM - 05:00 AM");
-  const audience = firstValue(event?.audience, guide.audience, "All Age");
-  const trailer = toYouTubeEmbedUrl(firstValue(event?.trailer, event?.trailerUrl, event?.youtubeTrailer, DUMMY_TRAILER));
-  const credits = event?.credits && Object.values(event?.credits || {}).some(Boolean) ? event.credits : DUMMY_CREDITS;
-  const castRaw = normalizeCast(firstValue(event?.cast, event?.castCrew));
-  const cast = castRaw.length > 0 ? castRaw : DUMMY_CAST;
+  const language = firstValue(event?.language, guide.language);
+  const duration = firstValue(event?.duration, guide.duration, event?.time);
+  const audience = firstValue(event?.audience, guide.audience);
+  const trailer = toYouTubeEmbedUrl(firstValue(event?.trailer, event?.trailerUrl, event?.youtubeTrailer));
+  const credits = event?.credits && Object.values(event?.credits || {}).some(Boolean) ? event.credits : null;
+  const castCandidates = [
+    event?.cast,
+    event?.castCrew,
+    event?.actors,
+    event?.actor,
+    event?.starCast,
+    event?.castMembers,
+    event?.castList,
+    event?.artistDetails,
+    event?.artists,
+    event?.performers,
+    event?.crew,
+    event?.details?.cast,
+    event?.guide?.cast,
+  ];
+  const castSource = castCandidates.find(
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      value !== "" &&
+      !(Array.isArray(value) && value.length === 0)
+  );
+  const cast = normalizeCast(castSource);
   const contact = event?.contact || event?.contactInformation || {};
-  const address = firstValue(contact.address, event?.fullAddress, event?.address, "Bahanada, Khunta, Mayurbhanj, Odisha - 757035");
-  const phone = firstValue(contact.phone, contact.mobile, event?.contactNumber, event?.mdPhone, event?.phone, "+91 94370 12345");
-  const managingDirector = firstValue(contact.md, contact.managingDirector, event?.managingDirector, event?.mdName, "Sri Prakash Chandra Sahu");
-  const committee = event?.committee || contact.committee || "Jatra Committee";
-  const bannersRaw = asArray(event?.banners);
-  const eventsList = allEvents.length > 0 ? allEvents : FALLBACK_EVENTS;
-  const yearBanners = [
-    ...new Set(
-      bannersRaw.length > 0
-        ? bannersRaw
-        : eventsList
-            .filter((item) => String(item?.year || "") === String(event?.year || ""))
-            .flatMap((item) => [item?.banner, ...asArray(item?.banners)])
-    ),
-  ].filter(Boolean);
-  const displayBanners = yearBanners.length > 0 ? yearBanners : DUMMY_BANNERS;
+  const address = firstValue(contact.address, event?.fullAddress, event?.address, event?.addressLine);
+  const committeeAddress = firstValue(
+    event?.committeeLocation,
+    event?.committee?.location,
+    event?.committeeAddress,
+    event?.committeeAddr,
+    event?.committee?.address
+  );
+  const locationAddress = committeeAddress || address;
+  const phone = firstValue(contact.phone, contact.mobile, event?.contactNumber, event?.mdPhone, event?.phone);
+  const managingDirector = firstValue(contact.md, contact.managingDirector, event?.managingDirector, event?.mdName);
+  const committee = event?.committee || contact.committee;
+  const about = event?.about || "";
+  // Only keep URLs the browser can actually load (remote/data URLs).
+  // Local paths like "/jarpa.png" 404 because the project has no public/ folder.
+  const toLoadableUrl = (value) => {
+    const src = getImageSource(value, "");
+    if (!src) return null;
+    const trimmed = src.trim();
+    if (/^(https?:)?\/\//i.test(trimmed) || trimmed.startsWith("data:")) return trimmed;
+    return null;
+  };
+  const sameYearEvents = allEvents.filter(
+    (item) => String(item?.year || "") === String(event?.year || "")
+  );
+  const bannerCandidates = [
+    ...asArray(event?.banners),
+    event?.bannerUrl,
+    event?.bannerImg,
+    event?.imageUrl,
+    event?.image,
+    event?.img,
+    event?.banner,
+    ...sameYearEvents.flatMap((item) => [item?.banner, ...asArray(item?.banners)]),
+  ];
+  const displayBanners = [...new Set(bannerCandidates.map(toLoadableUrl).filter(Boolean))];
+  const topBanner = displayBanners[0] || null;
 
   const formatDate = (month, day, year) => {
     if (!month || !day || !year) return "TBD";
@@ -258,6 +256,22 @@ export default function EventDetail({ id }) {
           <h2 className="text-lg font-black font-brand truncate">Event Details</h2>
         </div>
 
+        {/* Banner - only when a loadable image exists */}
+        {topBanner && (
+          <div className="w-full overflow-hidden bg-slate-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={topBanner}
+              alt={event?.name || "Event banner"}
+              className="w-full h-auto object-contain"
+              decoding="async"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          </div>
+        )}
+
         <div className="px-4 py-4 space-y-4">
           {/* Event Name & Party */}
           <div>
@@ -265,128 +279,170 @@ export default function EventDetail({ id }) {
             <p className="text-xs text-indigo-600 font-bold mt-0.5">{event?.partyName || event?.organizer || "TBD"}</p>
           </div>
 
-          {/* Location (Committee, Address) */}
-          <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 space-y-2">
-            <h3 className="text-sm font-black text-slate-900 font-brand flex items-center gap-2">
-              <i className="fa-solid fa-location-dot text-rose-500" /> Location
-            </h3>
-            <div className="space-y-2">
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Committee</p>
-                <p className="text-xs font-black text-slate-900">{committee}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Address</p>
-                <p className="text-xs font-semibold text-rose-600">{event?.location || address || "TBD"}</p>
+          {/* Location (Committee, Address) - only database data */}
+          {(committee || locationAddress) && (
+            <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 space-y-2">
+              <h3 className="text-sm font-black text-slate-900 font-brand flex items-center gap-2">
+                <i className="fa-solid fa-location-dot text-rose-500" /> Location
+              </h3>
+              <div className="space-y-2">
+                {committee && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Committee</p>
+                    <p className="text-xs font-black text-slate-900">{committee}</p>
+                  </div>
+                )}
+                {locationAddress && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Address</p>
+                    <p className="text-xs font-semibold text-rose-600">{locationAddress}</p>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
           {/* About Jatra */}
-          <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-2">About Jatra</h3>
-            <p className="text-[11px] text-slate-600 leading-relaxed">{event?.about || "Experience the magic of traditional Jatra performances."}</p>
-          </div>
+          {about && (
+            <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100">
+              <h3 className="text-sm font-black text-slate-900 font-brand mb-2">About Jatra</h3>
+              <p className="text-[11px] text-slate-600 leading-relaxed">{about}</p>
+            </div>
+          )}
 
           {/* Show Guide (Language, Duration, Audience) */}
-          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 shadow-sm border border-indigo-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-clapperboard text-indigo-500" /> Show Guide
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
-              {language && (
-                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <i className="fa-solid fa-language text-indigo-500 text-xl" />
-                  <p className="text-[10px] font-bold text-slate-900 mt-2">Language</p>
-                  <p className="text-[10px] text-slate-600 font-semibold">{language}</p>
+          {(language || duration || audience) && (
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-4 shadow-sm border border-indigo-100">
+              <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
+                <i className="fa-solid fa-clapperboard text-indigo-500" /> Show Guide
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                {language && (
+                  <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                    <i className="fa-solid fa-language text-indigo-500 text-xl" />
+                    <p className="text-[10px] font-bold text-slate-900 mt-2">Language</p>
+                    <p className="text-[10px] text-slate-600 font-semibold">{language}</p>
+                  </div>
+                )}
+                {duration && (
+                  <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                    <i className="fa-solid fa-clock text-rose-500 text-xl" />
+                    <p className="text-[10px] font-bold text-slate-900 mt-2">Duration</p>
+                    <p className="text-[10px] text-slate-600 font-semibold">{duration}</p>
+                  </div>
+                )}
+                {audience && (
+                  <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+                    <i className="fa-solid fa-users text-emerald-500 text-xl" />
+                    <p className="text-[10px] font-bold text-slate-900 mt-2">Audience</p>
+                    <p className="text-[10px] text-slate-600 font-semibold">{audience}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Trailer - only when the database has one */}
+          {trailer && (
+            <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-4 shadow-sm border border-rose-100">
+              <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
+                <i className="fa-solid fa-film text-rose-500" /> Trailer
+              </h3>
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-900 shadow-lg">
+                <iframe src={trailer} title="Trailer" className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+              </div>
+            </div>
+          )}
+
+          {/* Creative Credits - only database data */}
+          {credits && (() => {
+            const writer = firstValue(credits?.writer, credits?.writerName, event?.writer);
+            const director = firstValue(credits?.director, credits?.direction, event?.director);
+            const music = firstValue(credits?.music, event?.music);
+            const singers = asArray(firstValue(credits?.singers, credits?.singer, event?.singer)).join(", ");
+            const rows = [
+              ["Writer", writer],
+              ["Director", director],
+              ["Music", music],
+              ["Singer", singers],
+            ].filter(([, value]) => value);
+            if (rows.length === 0) return null;
+            return (
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 shadow-sm border border-amber-100">
+                <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
+                  <i className="fa-solid fa-star text-amber-500" /> Creative
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {rows.map(([label, value]) => (
+                    <div key={label} className="text-center">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">{label}</p>
+                      <p className="text-xs font-black text-slate-900 mt-0.5">{value}</p>
+                    </div>
+                  ))}
                 </div>
-              )}
-              {duration && (
-                <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <i className="fa-solid fa-clock text-rose-500 text-xl" />
-                  <p className="text-[10px] font-bold text-slate-900 mt-2">Duration</p>
-                  <p className="text-[10px] text-slate-600 font-semibold">{duration}</p>
-                </div>
-              )}
-              <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                <i className="fa-solid fa-users text-emerald-500 text-xl" />
-                <p className="text-[10px] font-bold text-slate-900 mt-2">Audience</p>
-                <p className="text-[10px] text-slate-600 font-semibold">{audience}</p>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
-          {/* Trailer */}
-          <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-4 shadow-sm border border-rose-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-film text-rose-500" /> Trailer
-            </h3>
-            <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-900 shadow-lg">
-              <iframe src={trailer} title="Trailer" className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-            </div>
-          </div>
-
-          {/* Creative Credits */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 shadow-sm border border-amber-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-star text-amber-500" /> Creative
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Writer</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits?.writer, credits?.writerName, event?.writer, "Maheswar Soren")}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Director</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits?.director, credits?.direction, event?.director, "Dasarath Singh")}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Music</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{firstValue(credits?.music, event?.music, "Bhubaneswar Mishra")}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Singer</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{asArray(firstValue(credits?.singers, credits?.singer, event?.singer, ["Ardhendu Giri", "Malabika Sanyal"])).join(", ")}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Cast & Crew */}
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-4 shadow-sm border border-emerald-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-users text-emerald-500" /> Cast & Crew
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
-              {cast.map((member, i) => (
-                <div key={i} className="flex flex-col items-center">
-                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-white shadow-sm ring-2 ring-emerald-100 flex items-center justify-center">
-                    {member?.photo || member?.image ? (
-                      <img src={member?.photo || member?.image} alt={member?.name || "Cast member"} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-100">
-                        <i className="fa-solid fa-user text-emerald-400 text-2xl" />
-                      </div>
+          {/* Cast & Crew - only real data from the database */}
+          {cast.length > 0 && (
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-4 shadow-sm border border-emerald-100">
+              <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
+                <i className="fa-solid fa-users text-emerald-500" /> Cast & Crew
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                {cast.map((member, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <div className="w-full aspect-square rounded-xl overflow-hidden bg-white shadow-sm ring-2 ring-emerald-100 flex items-center justify-center">
+                      {member?.photo ? (
+                        <img
+                          src={member.photo}
+                          alt={member?.name || "Cast member"}
+                          className="w-full h-full object-contain object-center bg-white"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-100 to-teal-100">
+                          <i className="fa-solid fa-user text-emerald-400 text-2xl" />
+                        </div>
+                      )}
+                    </div>
+                    {member?.name && (
+                      <p className="text-[10px] font-bold text-slate-900 mt-2 text-center truncate w-full">{member.name}</p>
                     )}
                   </div>
-                  <p className="text-[10px] font-bold text-slate-900 mt-2 text-center truncate w-full">{member?.name || "Cast member"}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Banner Photos */}
-          <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-2xl p-4 shadow-sm border border-cyan-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-images text-cyan-500" /> Banner ({event?.year || "2026"})
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              {displayBanners.map((img, i) => (
-                <div key={i} className="bg-white rounded-xl overflow-hidden shadow-sm aspect-video">
-                  <BannerImage src={img} alt={`Banner ${i + 1}`} className="w-full h-full object-cover" />
-                </div>
-              ))}
+          {/* Banner Photos - only database banners */}
+          {displayBanners.length > 0 && (
+            <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-2xl p-4 shadow-sm border border-cyan-100">
+              <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
+                <i className="fa-solid fa-images text-cyan-500" /> Banner ({event?.year || "2026"})
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {displayBanners.map((img, i) => (
+                  <div key={i} className="bg-white rounded-xl overflow-hidden shadow-sm aspect-video">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img}
+                      alt={`Banner ${i + 1}`}
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const tile = e.currentTarget.parentElement;
+                        if (tile) tile.style.display = "none";
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Good to Know */}
           <div className="bg-gradient-to-br from-sky-50 to-indigo-50 rounded-2xl p-4 shadow-sm border border-sky-100">
@@ -444,55 +500,63 @@ export default function EventDetail({ id }) {
             </button>
           </div>
 
-          {/* Party Address */}
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 shadow-sm border border-purple-100">
-            <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
-              <i className="fa-solid fa-address-book text-purple-500" /> Party Address
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 bg-white rounded-lg p-3 shadow-sm">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                  <i className="fa-solid fa-user-tie text-indigo-500 text-sm" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">Managing Director</p>
-                  <p className="text-sm font-bold text-slate-900">{managingDirector}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
-                <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
-                  <i className="fa-solid fa-location-dot text-rose-500 text-sm" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">Full Address</p>
-                  <p className="text-xs font-semibold text-rose-600">{address}</p>
-                </div>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
-                >
-                  <i className="fa-solid fa-map-location-dot text-white text-sm" />
-                </a>
-              </div>
-              <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
-                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <i className="fa-solid fa-phone text-emerald-500 text-sm" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">Contact Number</p>
-                  <p className="text-sm font-bold text-indigo-700">{phone}</p>
-                </div>
-                <a
-                  href={`tel:${phone}`}
-                  className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
-                >
-                  <i className="fa-solid fa-phone-volume text-white text-sm" />
-                </a>
+          {/* Party Address - only database data */}
+          {(managingDirector || address || phone) && (
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 shadow-sm border border-purple-100">
+              <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
+                <i className="fa-solid fa-address-book text-purple-500" /> Party Address
+              </h3>
+              <div className="space-y-3">
+                {managingDirector && (
+                  <div className="flex items-start gap-3 bg-white rounded-lg p-3 shadow-sm">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                      <i className="fa-solid fa-user-tie text-indigo-500 text-sm" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Managing Director</p>
+                      <p className="text-sm font-bold text-slate-900">{managingDirector}</p>
+                    </div>
+                  </div>
+                )}
+                {address && (
+                  <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
+                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                      <i className="fa-solid fa-location-dot text-rose-500 text-sm" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Full Address</p>
+                      <p className="text-xs font-semibold text-rose-600">{address}</p>
+                    </div>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+                    >
+                      <i className="fa-solid fa-map-location-dot text-white text-sm" />
+                    </a>
+                  </div>
+                )}
+                {phone && (
+                  <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
+                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <i className="fa-solid fa-phone text-emerald-500 text-sm" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Contact Number</p>
+                      <p className="text-sm font-bold text-indigo-700">{phone}</p>
+                    </div>
+                    <a
+                      href={`tel:${phone}`}
+                      className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+                    >
+                      <i className="fa-solid fa-phone-volume text-white text-sm" />
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
           {/* Book Ticket Now */}
           <button
