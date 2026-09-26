@@ -114,6 +114,7 @@ const FALLBACK_EVENTS = [
 export default function EventDetail({ id }) {
   const [showAllTerms, setShowAllTerms] = useState(false);
   const [event, setEvent] = useState(null);
+  const [allEvents, setAllEvents] = useState([]);
   const [fetching, setFetching] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -123,32 +124,65 @@ export default function EventDetail({ id }) {
     setFetching(true);
     setLoadError("");
     setEvent(null);
-    
-    async function load() {
+    setAllEvents([]);
+
+    // 1. Instantly read the event pre-saved by the list page
+    const cachedEvent = sessionStorage.getItem(`event_${id}`);
+    if (cachedEvent) {
+      try {
+        const parsedData = JSON.parse(cachedEvent);
+        if (!cancelled && parsedData) {
+          setEvent(parsedData);
+          setFetching(false);
+        }
+      } catch (e) {
+        console.error("Failed to parse cached event data", e);
+      }
+    }
+
+    // 2. Background sync with Firestore to keep data fresh
+    async function syncFreshData() {
       try {
         const data = await fetchEvents();
-        if (!cancelled) {
-          setEvent(data?.find((item) => item?.key === id) || null);
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : [];
+        setAllEvents(list);
+        const matched = list.find((item) => String(item?.key) === String(id));
+        if (matched) {
+          setEvent(matched);
+          setLoadError("");
+          try {
+            sessionStorage.setItem(`event_${id}`, JSON.stringify(matched));
+          } catch {}
+        } else if (!cachedEvent) {
+          setEvent(null);
         }
       } catch (err) {
-        console.error("Error loading events:", err);
-        if (!cancelled) setLoadError("We could not load this event. Please try again.");
+        console.error("Background sync failed:", err);
+        if (!cancelled && !cachedEvent) {
+          setLoadError("We could not load this event. Please try again.");
+        }
       } finally {
         if (!cancelled) setFetching(false);
       }
     }
-    
-    load();
-    
+
+    syncFreshData();
+
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  const statusPage = (icon, message, actionLabel = "Go back", onAction = () => window.history.back()) => (
-    <div className="bg-slate-900 min-h-screen text-slate-800 antialiased">
-      <div className="bg-[#f8faff] min-h-screen flex flex-col">
-        <div className="bg-[#12193b] text-white px-4 py-3 flex items-center gap-3">
+  const goBack = () => {
+    if (window.history.length > 1) window.history.back();
+    else window.location.href = "/events";
+  };
+
+  const statusPage = (icon, message, actionLabel = "Go back", onAction = goBack) => (
+    <div className="standalone-detail-page bg-slate-900 min-h-screen text-slate-800 antialiased">
+      <div className="bg-[#f8faff] min-h-screen flex flex-col pb-24">
+        <div className="bg-[#12193b] text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-50">
           <button onClick={onAction} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center" aria-label={actionLabel}>
             <i className="fa-solid fa-arrow-left text-xs" />
           </button>
@@ -157,14 +191,14 @@ export default function EventDetail({ id }) {
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 gap-3 text-center">
           <i className={`${icon} text-4xl text-slate-300`} />
           <p className="text-sm text-slate-600 font-semibold">{message}</p>
-          <button onClick={onAction} className="text-xs font-bold text-indigo-600">{actionLabel}</button>
         </div>
+        <BottomNav active="events" />
       </div>
     </div>
   );
 
-  if (fetching) {
-    return statusPage("fa-solid fa-spinner fa-spin", "Loading event details...", "Go back");
+  if (fetching && !event) {
+    return null;
   }
 
   if (loadError) {
@@ -189,12 +223,16 @@ export default function EventDetail({ id }) {
   const managingDirector = firstValue(contact.md, contact.managingDirector, event?.managingDirector, event?.mdName, "Sri Prakash Chandra Sahu");
   const committee = event?.committee || contact.committee || "Jatra Committee";
   const bannersRaw = asArray(event?.banners);
-  const yearBanners = bannersRaw.length > 0
-    ? bannersRaw
-    : [...new Set(events
-        .filter((item) => String(item?.year || "") === String(event?.year || ""))
-        .flatMap((item) => [item?.banner, ...asArray(item?.banners)])
-        .filter(Boolean))];
+  const eventsList = allEvents.length > 0 ? allEvents : FALLBACK_EVENTS;
+  const yearBanners = [
+    ...new Set(
+      bannersRaw.length > 0
+        ? bannersRaw
+        : eventsList
+            .filter((item) => String(item?.year || "") === String(event?.year || ""))
+            .flatMap((item) => [item?.banner, ...asArray(item?.banners)])
+    ),
+  ].filter(Boolean);
   const displayBanners = yearBanners.length > 0 ? yearBanners : DUMMY_BANNERS;
 
   const formatDate = (month, day, year) => {
@@ -209,37 +247,8 @@ export default function EventDetail({ id }) {
     return `${date.getDate()} ${date.toLocaleString("en-US", { month: "short" })} ${date.getFullYear()}`;
   };
 
-  if (!event) {
-    return (
-      <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
-        <div className="bg-[#f8faff] min-h-screen relative pb-6 shadow-2xl flex flex-col overflow-hidden">
-          <div className="bg-[#12193b] text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-50">
-            <button onClick={() => window.history.back()} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-              <i className="fa-solid fa-arrow-left text-xs" />
-            </button>
-            <h2 className="text-lg font-black font-brand truncate">Event Details</h2>
-          </div>
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <i className="fa-regular fa-calendar-xmark text-4xl text-slate-300" />
-            <p className="text-sm text-slate-400 font-medium">Event not found</p>
-            <button onClick={() => window.history.back()} className="text-xs font-bold text-indigo-600">Go back</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
-      {/* Loading Popup Modal */}
-      {fetching && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl px-6 py-5 shadow-2xl flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-rose-200 border-t-rose-600 rounded-full animate-spin" />
-            <p className="text-xs font-bold text-slate-600">Loading event details...</p>
-          </div>
-        </div>
-      )}
+    <div className="standalone-detail-page bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
       <div className="bg-[#f8faff] min-h-screen relative pb-6 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-[#12193b] text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-50">
@@ -247,11 +256,6 @@ export default function EventDetail({ id }) {
             <i className="fa-solid fa-arrow-left text-xs" />
           </button>
           <h2 className="text-lg font-black font-brand truncate">Event Details</h2>
-        </div>
-
-        {/* Banner - Full width, fit */}
-        <div className="w-full overflow-hidden bg-slate-100">
-          <BannerImage src={event?.banner || event?.img} alt={event?.name || "Event banner"} className="w-full h-auto object-contain" />
         </div>
 
         <div className="px-4 py-4 space-y-4">

@@ -534,7 +534,12 @@ function TodaysShow() {
         {displayShows.map((show) => (
           <div
             key={show.key}
-            onClick={() => { window.location.href = `/events/${show.key}`; }}
+            onClick={() => {
+              try {
+                sessionStorage.setItem(`event_${show.key}`, JSON.stringify(show));
+              } catch {}
+              window.location.href = `/event-details?id=${encodeURIComponent(show.key)}`;
+            }}
             className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

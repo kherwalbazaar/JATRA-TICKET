@@ -1,36 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
-import {
-  fetchSeats,
-  storeAllSeats,
-  BLOCK_GROUPS,
-  BLOCK_SEATS,
-  generateBBlockSeats,
-} from "../../lib/seats";
+import { fetchSeats } from "../../lib/seats";
+import { fetchEvents } from "../../lib/events";
 
-const blockOrder = { 
-  B1: ["C1", "B1", "A1"], 
-  C1: ["A1", "C1", "B1"], 
-  A1: ["B1", "A1", "C1"],
-  B2: ["C1", "B1", "A1"],
-  B3: ["C1", "B1", "A1"],
-  A2: ["C1", "B1", "A1"],
-  A3: ["C1", "B1", "A1"],
-  C2: ["C1", "B1", "A1"],
-  C3: ["C1", "B1", "A1"]
-};
-
-const bBlockSeats = generateBBlockSeats();
+const EVENT_ID_KEY = "jatra:eventId";
 
 function SeatSelectionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const eventName = searchParams.get("event") || "Event";
-  const eventId = searchParams.get("eventId") || "";
+  const eventIdParam = searchParams.get("eventId") || "";
+  const [eventId, setEventId] = useState(eventIdParam);
+  const [eventName, setEventName] = useState(searchParams.get("event") || "Event");
+  const [eventOptions, setEventOptions] = useState([]);
   const [selected, setSelected] = useState([]);
   const [activeBlock, setActiveBlock] = useState(null);
   const [showSeatPanel, setShowSeatPanel] = useState(false);
@@ -38,45 +23,120 @@ function SeatSelectionContent() {
   const [clickedFromMap, setClickedFromMap] = useState(false);
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
-  const seatPrice = 100;
+  const [eventReady, setEventReady] = useState(!!eventIdParam);
+  const loadingRef = useRef(false);
+
+  const findSeatInBlock = (blockId, key) => {
+    const list = seatsByBlock[blockId] || [];
+    return list.find(
+      (s) =>
+        s.id === key ||
+        s.seatLabel === key ||
+        `${s.rowId}-${s.seatNumber}` === key ||
+        `${s.rowId}${s.seatNumber}` === key
+    );
+  };
+
+  const seatPrice =
+    (seatsByBlock[activeBlock] || []).find((s) => s.price != null)?.price ?? 0;
 
   const getSelectedRowLetters = () => {
     if (!selected.length) return "";
-    const isBBlock = ["B", "B2", "B3"].includes(activeBlock);
-    if (isBBlock && bBlockSeats[activeBlock]) {
-      const rowLetters = selected.map((key) => {
-        for (let ri = 0; ri < bBlockSeats[activeBlock].length; ri++) {
-          const row = bBlockSeats[activeBlock][ri];
-          if (row.some((s) => `${s.letter}${s.number}` === key)) {
-            return String.fromCharCode(65 + ri);
-          }
-        }
-        return "?";
-      });
-      return [...new Set(rowLetters)].join(", ");
-    }
-    return [...new Set(selected.map((k) => k.split("-")[0]))].join(", ");
+    const letters = selected.map((key) => {
+      const fs = findSeatInBlock(activeBlock, key);
+      if (fs?.rowId) return fs.rowId;
+      return String(key).split("-")[0] || String(key).replace(/\d+$/, "");
+    });
+    return [...new Set(letters)].join(", ");
   };
   const selectedRows = getSelectedRowLetters();
 
-  // Fetch seats from Firestore on mount
-  useEffect(() => {
-    async function loadSeats() {
-      if (!eventId) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const seats = await fetchSeats(eventId);
-        setSeatsByBlock(seats);
-      } catch (error) {
-        console.error("Error loading seats:", error);
-      } finally {
-        setLoading(false);
-      }
+  const loadSeats = async (silent = false) => {
+    if (!eventId) return;
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    if (!silent) setLoading(true);
+    try {
+      const seats = await fetchSeats(eventId);
+      setSeatsByBlock(seats);
+    } catch (error) {
+      console.error("Error loading seats:", error);
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
     }
+  };
+
+  // Resolve event id when the page is opened without query params
+  // (e.g. opened directly at "/seats"), otherwise seats are never fetched.
+  useEffect(() => {
+    if (eventIdParam) return;
+    let cancelled = false;
+    (async () => {
+      let saved = "";
+      try {
+        saved = window.localStorage.getItem(EVENT_ID_KEY) || "";
+      } catch (error) {
+        saved = "";
+      }
+      if (saved) setEventId(saved);
+      try {
+        const list = await fetchEvents();
+        if (cancelled) return;
+        const opts = list
+          .filter((e) => e?.key)
+          .map((e) => ({ id: e.key, name: e.name || e.eventTitle || e.key }));
+        setEventOptions(opts);
+        if (!saved && opts[0]) {
+          setEventId(opts[0].id);
+          setEventName(opts[0].name);
+          try {
+            window.localStorage.setItem(EVENT_ID_KEY, opts[0].id);
+          } catch (error) {
+            /* ignore */
+          }
+        }
+      } catch (error) {
+        console.error("Error loading events for seat map:", error);
+      } finally {
+        if (!cancelled) setEventReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventIdParam]);
+
+  // Fetch seats from Firestore whenever the event changes
+  useEffect(() => {
     loadSeats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  // No event could be resolved → stop the loading state
+  useEffect(() => {
+    if (eventReady && !eventId) setLoading(false);
+  }, [eventReady, eventId]);
+
+  const chooseEvent = (opt) => {
+    setEventId(opt.id);
+    setEventName(opt.name);
+    setSelected([]);
+    setActiveBlock(null);
+    setShowBlockSelector(false);
+    setClickedFromMap(false);
+    setSeatsByBlock({});
+    try {
+      window.localStorage.setItem(EVENT_ID_KEY, opt.id);
+    } catch (error) {
+      /* ignore */
+    }
+    window.history.replaceState(
+      null,
+      "",
+      `/seats?event=${encodeURIComponent(opt.name)}&eventId=${opt.id}`
+    );
+  };
 
   const toggleSeat = (key) => {
     const fs = findFsSeat(activeBlock, key);
@@ -94,16 +154,18 @@ function SeatSelectionContent() {
     setShowSeatPanel(true);
     setClickedFromMap(true);
     setShowBlockSelector(true);
+    // refresh from Firestore so seats created from admin show up immediately
+    loadSeats(true);
   };
 
   const getAvailableBlocks = () => {
-    const fsBlocks = Object.keys(seatsByBlock).filter(
-      (b) => (seatsByBlock[b] || []).length > 0
-    );
+    const fsBlocks = Object.keys(seatsByBlock)
+      .filter((b) => (seatsByBlock[b] || []).length > 0)
+      .sort();
     const all = {
-      rightSide: [...new Set([...BLOCK_GROUPS.rightSide, ...fsBlocks.filter((b) => /^A/i.test(b))])],
-      frontCenter: [...new Set([...BLOCK_GROUPS.frontCenter, ...fsBlocks.filter((b) => /^B/i.test(b))])],
-      leftSide: [...new Set([...BLOCK_GROUPS.leftSide, ...fsBlocks.filter((b) => /^C/i.test(b))])],
+      rightSide: fsBlocks.filter((b) => /^A/i.test(b)),
+      frontCenter: fsBlocks.filter((b) => /^B/i.test(b)),
+      leftSide: fsBlocks.filter((b) => /^C/i.test(b)),
     };
     const extra = fsBlocks.filter(
       (b) =>
@@ -128,15 +190,9 @@ function SeatSelectionContent() {
   };
 
   const getBlockStats = (blockId) => {
-    const fsSeats = seatsByBlock[blockId];
-    if (fsSeats && fsSeats.length > 0) {
-      const available = fsSeats.filter((s) => s.status === "available").length;
-      return { total: fsSeats.length, available };
-    }
-    const blockData = BLOCK_SEATS[blockId];
-    if (!blockData) return { total: 0, available: 0 };
-    const totalSeats = blockData.reduce((sum, row) => sum + row.count, 0);
-    return { total: totalSeats, available: totalSeats };
+    const fsSeats = seatsByBlock[blockId] || [];
+    const available = fsSeats.filter((s) => s.status === "available").length;
+    return { total: fsSeats.length, available };
   };
 
   // Group Firestore seats by row for data-driven rendering
@@ -153,20 +209,15 @@ function SeatSelectionContent() {
       .sort()
       .map((rid) => ({
         id: rid,
-        seats: byRow[rid].sort((a, b) => (a.seatNumber || 0) - (b.seatNumber || 0)),
+        seats: byRow[rid].sort(
+          (a, b) =>
+            (a.displayIndex ?? a.seatNumber ?? 0) -
+            (b.displayIndex ?? b.seatNumber ?? 0)
+        ),
       }));
   };
 
-  const findFsSeat = (blockId, key) => {
-    const list = seatsByBlock[blockId] || [];
-    return list.find(
-      (s) =>
-        s.id === key ||
-        s.seatLabel === key ||
-        `${s.rowId}-${s.seatNumber}` === key ||
-        `${s.rowId}${s.seatNumber}` === key
-    );
-  };
+  const findFsSeat = (blockId, key) => findSeatInBlock(blockId, key);
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
@@ -206,6 +257,24 @@ function SeatSelectionContent() {
         <div className="flex-1 p-4 space-y-4">
           {/* Block Selection Map */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-4 shadow-lg border border-slate-700">
+            {eventOptions.length > 1 && (
+              <div className="flex flex-wrap justify-center gap-2 mb-3">
+                {eventOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => chooseEvent(opt)}
+                    className={`text-[10px] font-black uppercase tracking-wide px-3 py-1.5 rounded-full border transition-all ${
+                      eventId === opt.id
+                        ? "bg-sky-500 border-sky-300 text-white"
+                        : "bg-slate-700 border-slate-600 text-slate-300"
+                    }`}
+                  >
+                    {opt.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <h2 className="text-center text-lg font-black text-sky-400 font-brand mb-2">
               {eventName} - Seating Map
             </h2>
@@ -425,7 +494,7 @@ function SeatSelectionContent() {
           </div>
           {/* Stage Area - Top Center */}
           <div className="flex flex-col items-center">
-            {showBlockSelector && (
+            {showBlockSelector && !loading && eventReady && (
               <div className="w-[95%] max-w-lg bg-white rounded-2xl border border-slate-200 shadow-md px-4 py-3 flex flex-col items-center mb-4">
                 <div className="text-center mb-3">
                   <p className="text-xs text-slate-600 font-medium">
@@ -547,16 +616,14 @@ function SeatSelectionContent() {
 
           {/* Seating Area */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
-            {loading ? (
+            {loading || !eventReady ? (
               <div className="text-center py-8">
                 <p className="text-sm text-slate-500 font-medium">Loading seats...</p>
               </div>
-            ) : activeBlock && (getFsRows(activeBlock) || BLOCK_SEATS[activeBlock]) ? (
+            ) : activeBlock && getFsRows(activeBlock) ? (
               (() => {
                 const fsRows = getFsRows(activeBlock);
-                if (fsRows) {
-                  // Admin Seat Create → Firestore-driven grid
-                  return fsRows.map((row) => (
+                return fsRows.map((row) => (
                     <div key={row.id} className="flex items-center gap-0.5">
                       <span className="w-6 text-right pr-1 text-[10px] font-black text-slate-400">
                         {row.id}
@@ -584,78 +651,15 @@ function SeatSelectionContent() {
                       </div>
                     </div>
                   ));
-                }
-                const isBBlock = ["B1", "B2", "B3"].includes(activeBlock);
-                
-                if (isBBlock && bBlockSeats[activeBlock]) {
-                  // Special rendering for B blocks with directional display
-                  return bBlockSeats[activeBlock].map((row, rowIndex) => (
-                    <div key={rowIndex} className="flex items-center gap-0.5">
-                      <span className="w-6 text-right pr-1 text-[10px] font-black text-slate-400">
-                        {String.fromCharCode(65 + rowIndex)}
-                      </span>
-                      <div className="flex-1 overflow-x-hidden">
-                        <div className="flex w-max mx-auto gap-0.5">
-                          {row.map((seat) => {
-                            const key = `${seat.letter}${seat.number}`;
-                            const firestoreSeat = findFsSeat(activeBlock, key);
-                            const isBooked = firestoreSeat
-                              ? firestoreSeat.status === "booked"
-                              : false;
-                            return (
-                              <div key={key} className="flex flex-col items-center shrink-0">
-                                <ChairSvg
-                                  isBooked={isBooked}
-                                  isSelected={selected.includes(key)}
-                                  onClick={() => toggleSeat(key)}
-                                  label={seat.number}
-                                  sizeClass="w-6 h-8"
-                                  disabled={!clickedFromMap}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ));
-                } else {
-                  // Standard rendering for other blocks
-                  return BLOCK_SEATS[activeBlock].map((row, rowIndex) => (
-                    <div key={row.id} className="flex items-center gap-0.5">
-                      <span className="w-6 text-right pr-1 text-[10px] font-black text-slate-400">{row.id}</span>
-                      <div className="flex-1 overflow-x-hidden">
-                        <div className="flex w-max mx-auto gap-0.5">
-                          {Array.from({ length: row.count }).map((_, i) => {
-                            const seatNo = i + 1;
-                            const key = `${row.id}-${seatNo}`;
-                            const firestoreSeat = findFsSeat(activeBlock, key);
-                            const isBooked = firestoreSeat
-                              ? firestoreSeat.status === "booked"
-                              : false;
-                            return (
-                              <div key={key} className="flex flex-col items-center shrink-0">
-                                <ChairSvg
-                                  isBooked={isBooked}
-                                  isSelected={selected.includes(key)}
-                                  onClick={() => toggleSeat(key)}
-                                  label={seatNo}
-                                  sizeClass="w-6 h-8"
-                                  disabled={!clickedFromMap}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ));
-                }
               })()
             ) : (
               <div className="text-center py-8">
                 <p className="text-sm text-slate-500 font-medium">
-                  {activeBlock ? "No seats available for this block" : "Click on a block to view seats"}
+                  {!eventId
+                    ? "No event selected — seats cannot be loaded"
+                    : activeBlock
+                    ? `No seats found in Firestore for block ${activeBlock}`
+                    : "Click on a block to view seats"}
                 </p>
               </div>
             )}
@@ -667,6 +671,7 @@ function SeatSelectionContent() {
         </div>
 
         {/* Bottom Summary + CTA */}
+        {activeBlock && (
         <div className="fixed bottom-0 left-0 right-0 mx-auto max-w-2xl p-4 bg-white border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] space-y-2.5">
           {/* Calculation Bar */}
           <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
@@ -676,18 +681,10 @@ function SeatSelectionContent() {
               </span>
               <div className="flex flex-wrap gap-1 min-w-0">
                 {selected.length > 0 ? selected.map((s) => {
-                  let displayLabel = s;
-                const isBBlock = ["B1", "B2", "B3"].includes(activeBlock);
-                  if (isBBlock && bBlockSeats[activeBlock]) {
-                    for (let ri = 0; ri < bBlockSeats[activeBlock].length; ri++) {
-                      const row = bBlockSeats[activeBlock][ri];
-                      const seatIdx = row.findIndex((seat) => `${seat.letter}${seat.number}` === s);
-                      if (seatIdx !== -1) {
-                        displayLabel = `${String.fromCharCode(65 + ri)}${seatIdx + 1}`;
-                        break;
-                      }
-                    }
-                  }
+                  const fs = findFsSeat(activeBlock, s);
+                  const displayLabel = fs
+                    ? fs.seatLabel || `${fs.rowId}-${fs.seatNumber}`
+                    : s;
                   return (
                     <span key={s} className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-200">
                       {displayLabel}
@@ -715,7 +712,7 @@ function SeatSelectionContent() {
                 if (m) return `${m[1].toUpperCase()}-${m[2]}`;
                 return key;
               });
-              router.push(`/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&block=${activeBlock}&seats=${displaySeats.join(',')}`);
+              router.push(`/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&block=${activeBlock}&seats=${displaySeats.join(',')}&seatPrice=${seatPrice}`);
             }}
             disabled={selected.length === 0}
             className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -725,6 +722,7 @@ function SeatSelectionContent() {
             <i className="fa-solid fa-chevron-right text-xs ml-1" />
           </button>
         </div>
+        )}
       </div>
     </div>
   );

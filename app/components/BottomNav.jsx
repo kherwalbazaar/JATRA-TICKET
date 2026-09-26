@@ -86,7 +86,7 @@ export default function BottomNav({ active }) {
             aria-current={currentPage === tab.id ? "page" : undefined}
           >
             <span className="icon-wrapper">
-              <i className={`${tab.icon} nav-icon ${tab.id === "home" ? "nav-icon-home" : ""}`} />
+              <i className={`${tab.icon} nav-icon ${tab.id === "home" ? "nav-icon-home" : ""} ${tab.id === "events" ? "nav-icon-events" : ""} ${tab.id === "support" ? "nav-icon-support" : ""} ${tab.id === "profile" ? "nav-icon-profile" : ""} ${tab.id === "tickets" ? "nav-icon-tickets" : ""}`} />
             </span>
             <span className="menu__label">{tab.title}</span>
           </button>

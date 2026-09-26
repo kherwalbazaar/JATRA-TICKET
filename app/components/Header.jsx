@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useSidebar } from "./SidebarContext";
 import { useGeolocation } from "../../hooks/useGeolocation";
 import { LocationCard, LocationSelector } from "./location";
 
 const STORAGE_KEY = "jatra_selected_location";
 
 export default function Header({ showBack, showShare, onShare, title }) {
-  const { toggleSidebar } = useSidebar();
   const location = useGeolocation({
     onError: () => {
       setDropdownOpen(true);
@@ -87,13 +85,7 @@ export default function Header({ showBack, showShare, onShare, title }) {
           <i className="fa-solid fa-arrow-left" />
         </button>
       ) : (
-        <button
-          onClick={toggleSidebar}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 text-white text-base active:scale-95 transition-transform"
-          aria-label="Open menu"
-        >
-          <i className="fa-solid fa-bars" />
-        </button>
+        <div className="w-9 h-9" aria-hidden="true" />
       )}
 
       <div className="flex-1 flex justify-center">
