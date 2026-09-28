@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
-import { fetchSeats } from "../../lib/seats";
+import { fetchSeats, BLOCK_GROUPS } from "../../lib/seats";
 import { fetchEvents } from "../../lib/events";
 
 const EVENT_ID_KEY = "jatra:eventId";
@@ -162,10 +162,17 @@ function SeatSelectionContent() {
     const fsBlocks = Object.keys(seatsByBlock)
       .filter((b) => (seatsByBlock[b] || []).length > 0)
       .sort();
+    // Venue layout (same as the map) + any extra blocks admin created
     const all = {
-      rightSide: fsBlocks.filter((b) => /^A/i.test(b)),
-      frontCenter: fsBlocks.filter((b) => /^B/i.test(b)),
-      leftSide: fsBlocks.filter((b) => /^C/i.test(b)),
+      rightSide: [
+        ...new Set([...BLOCK_GROUPS.rightSide, ...fsBlocks.filter((b) => /^A/i.test(b))]),
+      ],
+      frontCenter: [
+        ...new Set([...BLOCK_GROUPS.frontCenter, ...fsBlocks.filter((b) => /^B/i.test(b))]),
+      ],
+      leftSide: [
+        ...new Set([...BLOCK_GROUPS.leftSide, ...fsBlocks.filter((b) => /^C/i.test(b))]),
+      ],
     };
     const extra = fsBlocks.filter(
       (b) =>
@@ -175,18 +182,19 @@ function SeatSelectionContent() {
     );
     if (extra.length) all.frontCenter = [...all.frontCenter, ...extra];
 
-    if (!clickedFromMap) return all;
+    if (!activeBlock) return all;
 
-    if (all.rightSide.includes(activeBlock)) {
-      return { rightSide: all.rightSide, frontCenter: [], leftSide: [] };
-    }
-    if (all.frontCenter.includes(activeBlock)) {
-      return { rightSide: [], frontCenter: all.frontCenter, leftSide: [] };
-    }
-    if (all.leftSide.includes(activeBlock)) {
-      return { rightSide: [], frontCenter: [], leftSide: all.leftSide };
-    }
-    return all;
+    // Always show only the section of the selected block (A = right, B = front, C = left)
+    const letter = String(activeBlock).trim().charAt(0).toUpperCase();
+    const section =
+      letter === "A" ? "rightSide" : letter === "B" ? "frontCenter" : letter === "C" ? "leftSide" : null;
+    if (!section) return all;
+
+    return {
+      rightSide: section === "rightSide" ? all.rightSide : [],
+      frontCenter: section === "frontCenter" ? all.frontCenter : [],
+      leftSide: section === "leftSide" ? all.leftSide : [],
+    };
   };
 
   const getBlockStats = (blockId) => {
@@ -498,7 +506,7 @@ function SeatSelectionContent() {
               <div className="w-[95%] max-w-lg bg-white rounded-2xl border border-slate-200 shadow-md px-4 py-3 flex flex-col items-center mb-4">
                 <div className="text-center mb-3">
                   <p className="text-xs text-slate-600 font-medium">
-                    {clickedFromMap 
+                    {activeBlock
                       ? `You selected Block ${activeBlock}. Available blocks in this section are shown below.`
                       : 'Select a block from the map above or choose directly:'}
                   </p>
@@ -641,7 +649,7 @@ function SeatSelectionContent() {
                                   isSelected={selected.includes(key)}
                                   onClick={() => toggleSeat(key)}
                                   label={seat.seatNumber}
-                                  sizeClass="w-6 h-8"
+                                  sizeClass="w-4 h-5"
                                   disabled={!clickedFromMap}
                                 />
                               </div>
@@ -670,8 +678,8 @@ function SeatSelectionContent() {
           </p>
         </div>
 
-        {/* Bottom Summary + CTA */}
-        {activeBlock && (
+        {/* Bottom Summary + CTA - only after a seat is selected */}
+        {activeBlock && selected.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 mx-auto max-w-2xl p-4 bg-white border-t border-slate-200/80 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] space-y-2.5">
           {/* Calculation Bar */}
           <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">

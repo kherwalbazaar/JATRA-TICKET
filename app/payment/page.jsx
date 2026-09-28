@@ -9,6 +9,7 @@ function PaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId") ?? "";
+  const eventName = searchParams.get("event") ?? "";
   const block = searchParams.get("block") ?? "";
   const seats = searchParams.get("seats") ?? "";
   const seatPrice = Number(searchParams.get("seatPrice")) || 100;
@@ -28,6 +29,8 @@ function PaymentContent() {
         paymentMethod,
         totalAmount,
         eventId,
+        seats: seatList,
+        eventName,
       });
       if (block && seatList.length > 0) {
         await markSeatsBooked(eventId, block, seatList);

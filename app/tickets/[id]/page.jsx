@@ -13,8 +13,41 @@ export default function TicketDetailPage({ params }) {
 
   useEffect(() => {
     async function load() {
-      const data = await fetchBookingByTicketNumber(id);
-      setTicket(data);
+      // id can be a booking number (NJ26-00001) or a per-seat ticket
+      // number (NJ26-00001-2) — resolve both back to one booking.
+      let data = await fetchBookingByTicketNumber(id);
+      let seat = null;
+      let seatIndex = null;
+      let seatCount = 0;
+
+      if (data) {
+        const seats = Array.isArray(data.seats) ? data.seats.filter(Boolean) : [];
+        if (seats.length === 1) {
+          seat = seats[0];
+          seatIndex = 1;
+          seatCount = 1;
+        }
+      } else {
+        const m = String(id).match(/^(.+)-(\d+)$/);
+        if (m) {
+          data = await fetchBookingByTicketNumber(m[1]);
+          if (data) {
+            const seats = Array.isArray(data.seats) ? data.seats.filter(Boolean) : [];
+            const idx = Number(m[2]) - 1;
+            if (seats[idx]) {
+              seat = seats[idx];
+              seatIndex = idx + 1;
+              seatCount = seats.length;
+            }
+          }
+        }
+      }
+
+      setTicket(
+        data
+          ? { ...data, seat, seatIndex, seatCount, serial: String(id) }
+          : null
+      );
       setLoading(false);
     }
     load();
@@ -48,7 +81,7 @@ export default function TicketDetailPage({ params }) {
     );
   }
 
-  const qrData = `${ticket.ticketNumber}-${ticket.ticketTypeName.toUpperCase().replace(/\s+/g, "-")}`;
+  const qrData = `${ticket.serial || ticket.ticketNumber}-${(ticket.eventName || ticket.ticketTypeName || "").toUpperCase().replace(/\s+/g, "-")}${ticket.seat ? `-${String(ticket.seat).toUpperCase().replace(/[^A-Z0-9]/g, "")}` : ""}`;
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
@@ -57,7 +90,7 @@ export default function TicketDetailPage({ params }) {
           showBack
           showShare
           title="Ticket Details"
-          onShare={() => copy(`${ticket.ticketTypeName} | ${ticket.ticketNumber} | ${ticket.assignedGate} | ${ticket.date}`)}
+          onShare={() => copy(`${ticket.eventName || ticket.ticketTypeName} | ${ticket.serial || ticket.ticketNumber} | ${ticket.assignedGate}${ticket.seat ? ` | Seat ${ticket.seat}` : ""} | ${ticket.date}`)}
         />
 
         <div className="bg-amber-400/90 text-slate-950 px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
@@ -74,7 +107,7 @@ export default function TicketDetailPage({ params }) {
               className="w-16 h-16 rounded-xl object-cover ring-1 ring-slate-100 flex-shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">Event Booking</h3>
+              <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">{ticket.eventName || "Event Booking"}</h3>
               <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">
                 <div className="flex items-center gap-1.5">
                   <i className="fa-regular fa-calendar text-rose-500 text-[11px]" />
@@ -109,10 +142,16 @@ export default function TicketDetailPage({ params }) {
                 {ticket.ticketTypeName} • Gate Pass
               </span>
               <h3 className="text-xl font-black text-slate-900 font-brand mt-2 uppercase tracking-tight">
-                EVENT TICKET
+                {ticket.eventName || "EVENT TICKET"}
               </h3>
               <p className="text-xs font-semibold text-slate-500">
                 Entry via {ticket.assignedGate}
+                {ticket.seat ? (
+                  <>
+                    {" "}• <span className="font-black text-indigo-700">Seat {ticket.seat}</span>
+                    {ticket.seatCount ? <span className="text-slate-400"> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
+                  </>
+                ) : null}
               </p>
             </div>
 
@@ -130,7 +169,7 @@ export default function TicketDetailPage({ params }) {
                 Serial / Security Number
               </span>
               <p className="text-lg font-mono font-black tracking-widest text-indigo-950 select-all">
-                {ticket.ticketNumber}
+                {ticket.serial || ticket.ticketNumber}
               </p>
             </div>
 
@@ -147,9 +186,26 @@ export default function TicketDetailPage({ params }) {
             </div>
             <div className="space-y-2 text-xs">
               <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Event</span>
+                <span className="font-extrabold text-slate-900 truncate max-w-[60%] text-right">{ticket.eventName || "—"}</span>
+              </div>
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Category</span>
                 <span className="font-extrabold text-slate-900">{ticket.ticketTypeName}</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Block</span>
+                <span className="font-extrabold text-emerald-700">{ticket.block || ticket.assignedGate}</span>
+              </div>
+              {ticket.seat ? (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Seat</span>
+                  <span className="font-extrabold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md">
+                    {ticket.seat}
+                    {ticket.seatCount ? <span className="text-slate-400 font-bold"> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Gate</span>
                 <span className="font-extrabold text-emerald-700">{ticket.assignedGate}</span>
@@ -164,7 +220,11 @@ export default function TicketDetailPage({ params }) {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Seats</span>
-                <span className="font-extrabold text-slate-900">{ticket.seats || "N/A"}</span>
+                <span className="font-extrabold text-slate-900 text-right max-w-[60%]">
+                  {Array.isArray(ticket.seats) && ticket.seats.length
+                    ? ticket.seats.join(", ")
+                    : ticket.seats || "N/A"}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Quantity</span>

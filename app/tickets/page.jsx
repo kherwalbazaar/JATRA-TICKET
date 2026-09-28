@@ -15,6 +15,29 @@ const cardGradients = [
   "bg-gradient-to-br from-fuchsia-500 via-purple-500 to-indigo-600",
 ];
 
+// Split a booking into one ticket per seat so each seat gets its own card,
+// QR code and ticket id (falls back to a single ticket when no seats stored).
+function expandTickets(list) {
+  return list.flatMap((b) => {
+    const seats = Array.isArray(b.seats) ? b.seats.filter(Boolean) : [];
+    if (!seats.length) return [b];
+    return seats.map((seat, i) => ({
+      ...b,
+      seat,
+      seatIndex: i + 1,
+      seatCount: seats.length,
+      baseTicketNumber: b.ticketNumber,
+      ticketNumber: `${b.ticketNumber}-${i + 1}`,
+    }));
+  });
+}
+
+// Unique React key — one booking expands to several per-seat tickets that
+// all share the same Firestore doc id (`key`).
+function ticketKey(t) {
+  return `${t.key || t.ticketNumber}-${t.seat ? `${t.seatIndex}-${t.seat}` : "0"}`;
+}
+
 export default function TicketsPage() {
   const [tab, setTab] = useState("upcoming");
   const [copied, setCopied] = useState(false);
@@ -35,9 +58,10 @@ export default function TicketsPage() {
     loadBookings();
   }, []);
 
-  const upcomingTickets = bookings.filter((b) => b.status === "Confirmed" || b.status === "active");
-  const usedTickets = bookings.filter((b) => b.status === "used");
-  const cancelledTickets = bookings.filter((b) => b.status === "cancelled" || b.status === "expired");
+  const allTickets = expandTickets(bookings);
+  const upcomingTickets = allTickets.filter((b) => b.status === "Confirmed" || b.status === "active");
+  const usedTickets = allTickets.filter((b) => b.status === "used");
+  const cancelledTickets = allTickets.filter((b) => b.status === "cancelled" || b.status === "expired");
 
   const STATUS_TAB = [
     { key: "upcoming", label: "Upcoming", count: upcomingTickets.length },
@@ -102,12 +126,12 @@ export default function TicketsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-1">
                         <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md uppercase">Booking ID</span>
-                        <button onClick={async () => { try { await navigator.clipboard.writeText(latestBooking.ticketNumber); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }} className="flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900">
-                          <span>{copied ? "Copied" : latestBooking.ticketNumber}</span>
+                        <button onClick={async () => { try { await navigator.clipboard.writeText(latestBooking.baseTicketNumber || latestBooking.ticketNumber); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }} className="flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900">
+                          <span>{copied ? "Copied" : (latestBooking.baseTicketNumber || latestBooking.ticketNumber)}</span>
                           <i className={`${copied ? "fa-solid fa-check text-emerald-600" : "fa-regular fa-copy"} text-xs`} />
                         </button>
                       </div>
-                      <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">Event Booking</h3>
+                      <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">{latestBooking.eventName || "Event Booking"}</h3>
                       <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">
                         <div className="flex items-center gap-1.5 truncate">
                           <i className="fa-regular fa-calendar text-rose-500 text-[11px]" />
@@ -145,10 +169,10 @@ export default function TicketsPage() {
                 </div>
               )}
 
-              <div className="space-y-2.5">
+              <div className="space-y-2.5 max-w-md mx-auto w-full">
                 {upcomingTickets.map((ticket, index) => (
                   <Link
-                    key={ticket.key || ticket.ticketNumber}
+                    key={ticketKey(ticket)}
                     href={`/tickets/${ticket.ticketNumber}`}
                     className={`relative rounded-2xl p-3 shadow-md border border-white/20 flex items-center justify-between gap-3 overflow-hidden text-white bg-gradient-to-br ${cardGradients[index % cardGradients.length]} transition-transform active:scale-[0.98]`}
                   >
@@ -163,10 +187,21 @@ export default function TicketsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <i className="fa-regular fa-circle-user text-white/80 text-sm" />
-                          <h4 className="text-xs font-black text-white truncate drop-shadow">Ticket Holder</h4>
+                          <h4 className="text-xs font-black text-white truncate drop-shadow">{ticket.eventName || "Ticket Holder"}</h4>
                         </div>
-                        <p className="text-[11px] font-bold text-white/80 mt-0.5">{ticket.ticketTypeName} <span className="text-white/40">•</span> {ticket.assignedGate}</p>
-                        <p className="text-[11px] font-extrabold text-white mt-0.5 drop-shadow">Ticket ID: {ticket.ticketNumber}</p>
+                        <p className="text-[11px] font-bold text-white/80 mt-0.5">
+                          {ticket.ticketTypeName} <span className="text-white/40">•</span> {ticket.assignedGate}
+                          {ticket.seat ? (
+                            <>
+                              {" "}<span className="text-white/40">•</span>{" "}
+                              <span className="bg-white/25 px-1 rounded">Seat {ticket.seat}</span>
+                            </>
+                          ) : null}
+                        </p>
+                        <p className="text-[11px] font-extrabold text-white mt-0.5 drop-shadow">
+                          Ticket ID: {ticket.ticketNumber}
+                          {ticket.seatCount ? <span className="font-bold text-white/70"> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
+                        </p>
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white mt-1 bg-white/20 backdrop-blur px-1.5 py-0.5 rounded-md ring-1 ring-white/30">
                           <i className="fa-solid fa-circle-check text-xs" />
                           <span>ACTIVE <span className="font-semibold text-white/75 text-[9px]">- Ready for entry</span></span>
@@ -212,10 +247,10 @@ function TicketStatusList({ list, tab }) {
   }[tab];
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5 max-w-md mx-auto w-full">
       {list.map((ticket) => (
         <div
-          key={ticket.key || ticket.ticketNumber}
+          key={ticketKey(ticket)}
           className={`relative rounded-2xl p-3 shadow-md border border-white/20 flex items-center justify-between gap-3 overflow-hidden text-white bg-gradient-to-br ${statusConfig.gradient} ${tab === "cancelled" ? "opacity-90" : ""}`}
         >
           <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
@@ -228,12 +263,22 @@ function TicketStatusList({ list, tab }) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <i className={`fa-regular fa-circle-user ${tab === "used" ? "text-slate-500" : "text-white/80"} text-sm`} />
-                <h4 className={`text-xs font-black ${tab === "used" ? "text-slate-700" : "text-white"} truncate drop-shadow`}>Ticket Holder</h4>
+                <h4 className={`text-xs font-black ${tab === "used" ? "text-slate-700" : "text-white"} truncate drop-shadow`}>{ticket.eventName || "Ticket Holder"}</h4>
               </div>
               <p className={`text-[11px] font-bold ${tab === "used" ? "text-slate-500" : "text-white/80"} mt-0.5`}>
-                {ticket.ticketTypeName} <span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span> {ticket.assignedGate} <span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span> {ticket.date}
+                {ticket.ticketTypeName} <span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span> {ticket.assignedGate}
+                {ticket.seat ? (
+                  <>
+                    {" "}<span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span>{" "}
+                    <span className={tab === "used" ? "bg-slate-100 text-slate-700 px-1 rounded" : "bg-white/25 px-1 rounded"}>Seat {ticket.seat}</span>
+                  </>
+                ) : null}{" "}
+                <span className={tab === "used" ? "text-slate-300" : "text-white/40"}>•</span> {ticket.date}
               </p>
-              <p className={`text-[11px] font-extrabold ${tab === "used" ? "text-slate-600" : "text-white"} mt-0.5 drop-shadow`}>Ticket ID: {ticket.ticketNumber}</p>
+              <p className={`text-[11px] font-extrabold ${tab === "used" ? "text-slate-600" : "text-white"} mt-0.5 drop-shadow`}>
+                Ticket ID: {ticket.ticketNumber}
+                {ticket.seatCount ? <span className={tab === "used" ? "font-bold text-slate-500" : "font-bold text-white/70"}> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
+              </p>
               <span className={`inline-flex items-center gap-1 text-[10px] font-bold mt-1 px-1.5 py-0.5 rounded-md ring-1 ${tab === "used" ? "text-red-500 bg-red-50 ring-red-200" : "text-white bg-white/20 backdrop-blur ring-white/30"}`}>
                 <i className="fa-solid fa-circle-check text-xs" />
                 <span>{statusConfig.label}</span>

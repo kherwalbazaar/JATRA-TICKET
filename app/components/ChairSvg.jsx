@@ -2,7 +2,7 @@
 
 import React from "react";
 
-export default function ChairSvg({ isBooked = false, isSelected = false, onClick, label, sizeClass = "w-10 h-12", disabled = false }) {
+export default function ChairSvg({ isBooked = false, isSelected = false, onClick, label, sizeClass = "w-4 h-5", disabled = false }) {
   const stroke = disabled ? "#E5E7EB" : isBooked ? "#9CA3AF" : isSelected ? "#B45309" : "#065F46";
   const fill = disabled ? "#F3F4F6" : isBooked ? "#D1D5DB" : isSelected ? "#FBBF24" : "#4ADE80";
   const cushionFill = disabled ? "#E5E7EB" : isBooked ? "#9CA3AF" : isSelected ? "#F59E0B" : "#22C55E";

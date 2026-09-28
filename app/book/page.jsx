@@ -10,6 +10,7 @@ function BookContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId") ?? "EVT-2026-001";
+  const eventName = searchParams.get("event") ?? "";
   const block = searchParams.get("block") ?? "";
   const seats = searchParams.get("seats") ?? "";
   const seatPrice = Number(searchParams.get("seatPrice")) || 100;
@@ -26,6 +27,7 @@ function BookContent() {
       onProceed={async (data) => {
         const params = new URLSearchParams({
           eventId,
+          event: eventName,
           block,
           seats,
           seatPrice: String(seatPrice),
