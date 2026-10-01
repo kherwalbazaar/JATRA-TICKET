@@ -5,6 +5,7 @@ import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import { fetchBookings } from "../../lib/bookings";
+import { ticketQrUrl } from "../../lib/ticket-qr";
 
 const cardGradients = [
   "bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500",
@@ -211,7 +212,7 @@ export default function TicketsPage() {
 
                     <div className="relative w-16 h-16 p-1 bg-white/90 rounded-xl shadow-lg flex-shrink-0 flex items-center justify-center ring-2 ring-white/40">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${ticket.ticketNumber}`} alt="QR Code" className="w-full h-full object-contain" />
+                      <img src={ticketQrUrl(ticket, 150)} alt="QR Code" className="w-full h-full object-contain" />
                     </div>
                   </Link>
                 ))}
@@ -288,7 +289,7 @@ function TicketStatusList({ list, tab }) {
 
           <div className={`relative w-16 h-16 p-1 bg-white/90 rounded-xl shadow-lg flex-shrink-0 flex items-center justify-center ring-2 ${tab === "used" ? "ring-slate-200" : "ring-white/40"}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${ticket.ticketNumber}`} alt="QR Code" className={`w-full h-full object-contain ${tab === "cancelled" ? "grayscale" : ""}`} />
+            <img src={ticketQrUrl(ticket, 150)} alt="QR Code" className={`w-full h-full object-contain ${tab === "cancelled" ? "grayscale" : ""}`} />
             <span className={`absolute inset-0 m-auto w-fit h-fit border-2 ${statusConfig.badge} text-[8px] font-black px-1 rounded -rotate-12 uppercase`}>
               {statusConfig.label}
             </span>

@@ -5,7 +5,7 @@ import BookingForm from "./BookingForm";
 
 export { bookingTiers } from "./BookingForm";
 
-export default function BookTicketsModal({ onClose, onProceed, initialTierId = "vip", initialQuantity = 4 }) {
+export default function BookTicketsModal({ onClose, onProceed, initialTierId = "vip", initialQuantity = 1 }) {
   return (
     <div
       className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 font-sans text-slate-800 antialiased"

@@ -9,7 +9,7 @@ import { markSeatsBooked } from "../../lib/seats";
 function BookContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const eventId = searchParams.get("eventId") ?? "EVT-2026-001";
+  const eventId = searchParams.get("eventId") ?? "";
   const eventName = searchParams.get("event") ?? "";
   const block = searchParams.get("block") ?? "";
   const seats = searchParams.get("seats") ?? "";
@@ -32,6 +32,8 @@ function BookContent() {
           seats,
           seatPrice: String(seatPrice),
           paymentMethod: data.paymentMethod,
+          customerName: data.customerName || "",
+          customerPhone: data.customerPhone || "",
         });
         router.push(`/payment?${params.toString()}`);
       }}

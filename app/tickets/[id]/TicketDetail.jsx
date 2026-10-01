@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Header from "../../components/Header";
+import { ticketQrPayload } from "../../../lib/ticket-qr";
 
 export default function TicketDetail({ ticket }) {
   const [copied, setCopied] = useState(false);
@@ -16,7 +17,10 @@ export default function TicketDetail({ ticket }) {
     }
   };
 
-  const qrData = `${ticket.id}-${ticket.name.toUpperCase().replace(/\s+/g, "-")}`;
+  const qrData = ticketQrPayload({
+    ticketNumber: ticket.id,
+    eventName: ticket.eventName || "",
+  });
 
   return (
     <div className="w-full bg-[#f8faff] min-h-screen relative pb-10 shadow-2xl flex flex-col overflow-hidden">

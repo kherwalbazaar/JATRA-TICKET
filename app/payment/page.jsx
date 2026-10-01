@@ -13,6 +13,8 @@ function PaymentContent() {
   const block = searchParams.get("block") ?? "";
   const seats = searchParams.get("seats") ?? "";
   const seatPrice = Number(searchParams.get("seatPrice")) || 100;
+  const customerName = searchParams.get("customerName") ?? "";
+  const customerPhone = searchParams.get("customerPhone") ?? "";
   const [paymentMethod, setPaymentMethod] = useState("phonepe");
   const seatCount = seats ? seats.split(",").filter(Boolean).length : 0;
   const totalAmount = seatPrice * seatCount;
@@ -31,6 +33,8 @@ function PaymentContent() {
         eventId,
         seats: seatList,
         eventName,
+        customerName,
+        customerPhone,
       });
       if (block && seatList.length > 0) {
         await markSeatsBooked(eventId, block, seatList);

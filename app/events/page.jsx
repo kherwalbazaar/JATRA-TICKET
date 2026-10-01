@@ -49,23 +49,12 @@ export default function EventsPage() {
     return true;
   });
 
+  // `normalizeEvent()` (lib/events.js) guarantees a numeric day even when the
+  // ADMIN payload stored a weekday name in `day`.
   const formatDate = (month, day, year) => {
-    // Check if day is a day name (like "Sunday") vs numeric day (like "22")
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const isDayName = dayNames.includes(day);
-    
-    if (isDayName) {
-      // Data issue: day contains day name instead of numeric day
-      const monthShort = new Date(`${month} 1, ${year}`).toLocaleString("en-US", { month: "short" });
-      return `${monthShort} ${day}, ${year}`; // Shows "OCT Sunday, 2026" to indicate data issue
-    }
-    
-    // Normal case: day is numeric
     const date = new Date(`${month} ${day}, ${year}`);
-    if (isNaN(date.getTime())) {
-      return "TBD";
-    }
-    
+    if (isNaN(date.getTime())) return "TBD";
+
     const monthShort = date.toLocaleString("en-US", { month: "short" });
     return `${date.getDate()} ${monthShort} ${date.getFullYear()}`;
   };

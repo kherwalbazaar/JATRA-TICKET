@@ -9,10 +9,47 @@ import BannerImage from "./components/BannerImage";
 import { saveBooking } from "../lib/bookings";
 import { subscribeEvents } from "../lib/events";
 import { subscribeBanners } from "../lib/banners";
+import { subscribeTicketTypes } from "../lib/ticketTypes";
 
 export default function Home() {
   const [booking, setBooking] = useState(null);
+  // The pricing cards are static, but a booking must always carry the real
+  // `bookings.eventId` or the admin panel / gate scanner cannot match it.
+  const [featuredEvent, setFeaturedEvent] = useState(null);
+  // Tier prices are authored in JATRA BAZAAR ADMIN (`ticketTypes`); the
+  // static numbers below are only the fallback when nothing is stored yet.
+  const [ticketTypes, setTicketTypes] = useState([]);
   const [countdown, setCountdown] = useState({ d: "00", h: "00", m: "00", s: "00" });
+
+  useEffect(() => {
+    try {
+      const unsub = subscribeTicketTypes((list) => {
+        if (Array.isArray(list)) setTicketTypes(list);
+      });
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
+  }, []);
+
+  const priceFor = (tierName, fallback) => {
+    const match = ticketTypes.find(
+      (t) => String(t.name || "").trim().toUpperCase() === tierName,
+    );
+    const price = Number(match?.price);
+    return price > 0 ? price : fallback;
+  };
+
+  useEffect(() => {
+    try {
+      const unsub = subscribeEvents((data) => {
+        if (Array.isArray(data) && data.length > 0) setFeaturedEvent(data[0]);
+      });
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
+  }, []);
 
   useEffect(() => {
     const TARGET = new Date("2026-10-22T23:00:00");
@@ -117,7 +154,7 @@ export default function Home() {
                 <div className="relative -mt-5 flex justify-center z-20">
                   <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">50</span>
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("STANDING", 50)}</span>
                     </div>
                   </div>
                 </div>
@@ -163,7 +200,7 @@ export default function Home() {
                 <div className="relative -mt-5 flex justify-center z-20">
                   <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">100</span>
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("SPECIAL", 100)}</span>
                     </div>
                   </div>
                 </div>
@@ -213,7 +250,7 @@ export default function Home() {
                 <div className="relative -mt-5 flex justify-center z-20">
                   <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">200</span>
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("VIP", 200)}</span>
                     </div>
                   </div>
                 </div>
@@ -259,7 +296,7 @@ export default function Home() {
                 <div className="relative -mt-5 flex justify-center z-20">
                   <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
                     <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">500</span>
+                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("STAR", 500)}</span>
                     </div>
                   </div>
                 </div>
@@ -426,7 +463,15 @@ export default function Home() {
           onClose={() => setBooking(null)}
           onProceed={async (data) => {
             try {
-              await saveBooking({ ...data, eventId: "EVT-2026-001" });
+              await saveBooking({
+                ...data,
+                eventId: featuredEvent?.key || featuredEvent?.id || "",
+                eventName:
+                  featuredEvent?.eventTitle ||
+                  featuredEvent?.name ||
+                  data.eventName ||
+                  "",
+              });
             } catch (err) {
               console.error("Failed to save booking", err);
             }

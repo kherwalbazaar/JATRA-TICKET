@@ -1,12 +1,94 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { subscribeTicketTypes } from "../../lib/ticketTypes";
 
-export default function BookingForm({ onClose, onProceed, fullPage = false, block = "", seats = "", seatPrice = 0 }) {
+// Pricing cards on the home page use these ids when they call
+// setBooking({ tierId }). Keep them in sync with that list.
+export const bookingTiers = [
+  { id: "standing", name: "STANDING", price: 50, gate: "Gate A" },
+  { id: "special", name: "SPECIAL", price: 100, gate: "Gate B" },
+  { id: "vip", name: "VIP", price: 200, gate: "Gate C" },
+  { id: "star", name: "STAR", price: 500, gate: "Gate D" },
+];
+
+const FALLBACK_TIER = bookingTiers[0];
+
+function matchByName(remoteTiers, name) {
+  const wanted = String(name).trim().toUpperCase();
+  return (
+    remoteTiers.find((t) => String(t.name || "").trim().toUpperCase() === wanted) ||
+    remoteTiers.find((t) => String(t.id || "").trim().toUpperCase() === wanted)
+  );
+}
+
+/** Static card definition + the admin's Firestore tier (price / doc id). */
+function mergeTiers(remoteTiers) {
+  return bookingTiers.map((card) => {
+    const remote = matchByName(remoteTiers, card.name);
+    if (!remote) return { ...card, cardId: card.id, price: card.price };
+    return {
+      id: remote.id || card.id,
+      cardId: card.id,
+      name: remote.name || card.name,
+      price: Number(remote.price) > 0 ? Number(remote.price) : card.price,
+      gate: card.gate,
+    };
+  });
+}
+
+
+export default function BookingForm({
+  onClose,
+  onProceed,
+  fullPage = false,
+  block = "",
+  seats = "",
+  seatPrice = 0,
+  initialTierId = "vip",
+  initialQuantity = 1,
+  eventName = "",
+}) {
   const [paymentMethod, setPaymentMethod] = useState("upi");
   const [seatList, setSeatList] = useState(seats ? seats.split(",").filter(Boolean) : []);
-  const totalAmount = seatPrice * seatList.length;
+  const [quantity, setQuantity] = useState(Math.max(1, Number(initialQuantity) || 1));
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [error, setError] = useState("");
+  const [remoteTiers, setRemoteTiers] = useState([]);
+
+  // Prices/tier ids come from the ADMIN panel's `ticketTypes` collection so
+  // the amount charged here is always the amount the admin configured.
+  useEffect(() => {
+    let active = true;
+    const unsub = subscribeTicketTypes((list) => {
+      if (active && Array.isArray(list)) setRemoteTiers(list);
+    });
+    return () => {
+      active = false;
+      try {
+        unsub?.();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
+  const tiers = useMemo(() => mergeTiers(remoteTiers), [remoteTiers]);
+
+  const tier = useMemo(
+    () =>
+      tiers.find((t) => t.cardId === initialTierId) ||
+      tiers.find((t) => t.id === initialTierId) ||
+      { ...FALLBACK_TIER, cardId: FALLBACK_TIER.id },
+    [tiers, initialTierId],
+  );
+
+  const hasSeats = seatList.length > 0;
+  const totalAmount = hasSeats
+    ? seatPrice * seatList.length
+    : tier.price * quantity;
 
   useEffect(() => {
     const onKey = (e) => {
@@ -15,6 +97,31 @@ export default function BookingForm({ onClose, onProceed, fullPage = false, bloc
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const handleProceed = () => {
+    if (!customerName.trim()) {
+      setError("Please enter your full name");
+      return;
+    }
+    if (!/^[0-9+\-\s]{10,15}$/.test(customerPhone.trim())) {
+      setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+    setError("");
+
+    onProceed?.({
+      paymentMethod,
+      tier: hasSeats
+        ? { id: "seated", name: `SEATED (${block})`, price: seatPrice, gate: `Block ${block}` }
+        : tier,
+      quantity: hasSeats ? seatList.length : quantity,
+      totalAmount,
+      seats: seatList,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      eventName,
+    });
+  };
 
   return (
     <div className={`flex flex-col ${fullPage ? "min-h-screen" : "max-h-[96vh]"} bg-white text-slate-800`}>
@@ -57,7 +164,7 @@ export default function BookingForm({ onClose, onProceed, fullPage = false, bloc
             </div>
             <i className="fa-solid fa-arrow-right text-sm bg-white/20 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" />
           </Link>
-          {seatList.length > 0 && (
+          {hasSeats && (
             <div className="space-y-1.5 px-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-500 uppercase">{seatList.length} seat{seatList.length !== 1 ? "s" : ""} selected</span>
@@ -82,10 +189,99 @@ export default function BookingForm({ onClose, onProceed, fullPage = false, bloc
           )}
         </div>
 
+        {/* TIER + QUANTITY (only when no seats were picked) */}
+        {!hasSeats && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-purple-700 text-white font-bold text-[11px] flex items-center justify-center">1</span>
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Ticket & Quantity</h4>
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-2xl border border-purple-100 bg-purple-50/50">
+              <div>
+                <p className="text-xs font-black text-slate-900 tracking-wide">{tier.name}</p>
+                <p className="text-[10px] font-semibold text-slate-500">
+                  ₹{tier.price} per ticket &bull; {tier.gate}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-600 font-black flex items-center justify-center active:scale-95"
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <span className="w-6 text-center text-sm font-black text-slate-900">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.min(10, q + 1))}
+                  className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-600 font-black flex items-center justify-center active:scale-95"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* YOUR DETAILS — stored on `bookings` so the admin panel and the
+            gate scanner can show who the ticket belongs to. */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-purple-700 text-white font-bold text-[11px] flex items-center justify-center">
+              {hasSeats ? "1" : "2"}
+            </span>
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Your Details</h4>
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <label htmlFor="bk-customer-name" className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                Full Name *
+              </label>
+              <input
+                id="bk-customer-name"
+                type="text"
+                autoComplete="name"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Enter your full name"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-600 focus:bg-white transition-all"
+              />
+            </div>
+            <div>
+              <label htmlFor="bk-customer-phone" className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                Mobile Number *
+              </label>
+              <input
+                id="bk-customer-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="Enter your mobile number"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-600 focus:bg-white transition-all"
+              />
+            </div>
+            {error && (
+              <p className="text-[11px] font-bold text-rose-500 flex items-center gap-1">
+                <i className="fa-solid fa-circle-exclamation text-[10px]" />
+                {error}
+              </p>
+            )}
+          </div>
+        </div>
+
         {/* PAYMENT METHOD */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-purple-700 text-white font-bold text-[11px] flex items-center justify-center">1</span>
+            <span className="w-5 h-5 rounded-full bg-purple-700 text-white font-bold text-[11px] flex items-center justify-center">
+              {hasSeats ? "2" : "3"}
+            </span>
             <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Payment Method</h4>
           </div>
 
@@ -110,8 +306,8 @@ export default function BookingForm({ onClose, onProceed, fullPage = false, bloc
                   <i className={opt.icon} />
                   <div>
                     <p className="text-xs font-black text-slate-900 leading-tight">{opt.title}</p>
-                    <p className="text-[9px] text-slate-500 font-medium">{opt.desc}</p>
-                    {opt.disabled && <p className="text-[8px] text-slate-400 font-bold mt-0.5">Coming soon</p>}
+                    <p className="text-[9px] font-medium text-slate-500">{opt.desc}</p>
+                    {opt.disabled && <p className="text-[8px] font-bold text-slate-400 mt-0.5">Coming soon</p>}
                   </div>
                 </div>
                 <input type="radio" checked={paymentMethod === opt.key} disabled={opt.disabled} readOnly className="text-purple-600 focus:ring-purple-500" />
@@ -124,7 +320,7 @@ export default function BookingForm({ onClose, onProceed, fullPage = false, bloc
       {/* BOTTOM CTA STRIP */}
       <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-20 space-y-2.5">
         <button
-          onClick={() => onProceed?.({ paymentMethod })}
+          onClick={handleProceed}
           className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold text-xs py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
         >
           <span>Confirm & Book • ₹{totalAmount}</span>

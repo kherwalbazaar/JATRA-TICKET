@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Header from "../../components/Header";
 import { fetchBookingByTicketNumber } from "../../../lib/bookings";
+import { ticketQrUrl } from "../../../lib/ticket-qr";
 
 export default function TicketDetailPage({ params }) {
   const { id } = use(params);
@@ -81,8 +82,6 @@ export default function TicketDetailPage({ params }) {
     );
   }
 
-  const qrData = `${ticket.serial || ticket.ticketNumber}-${(ticket.eventName || ticket.ticketTypeName || "").toUpperCase().replace(/\s+/g, "-")}${ticket.seat ? `-${String(ticket.seat).toUpperCase().replace(/[^A-Z0-9]/g, "")}` : ""}`;
-
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
       <div className="w-full bg-[#f8faff] min-h-screen relative pb-10 shadow-2xl flex flex-col overflow-hidden">
@@ -158,7 +157,7 @@ export default function TicketDetailPage({ params }) {
             <div className="relative inline-flex items-center justify-center p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-indigo-200 shadow-inner my-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}`}
+                src={ticketQrUrl(ticket, 300)}
                 alt="Large QR Ticket"
                 className="w-60 h-60 object-contain rounded-lg"
               />
