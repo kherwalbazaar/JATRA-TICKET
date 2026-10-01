@@ -3,7 +3,12 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Header from "../../components/Header";
-import { fetchBookingByTicketNumber } from "../../../lib/bookings";
+import {
+  fetchBookingByTicketNumber,
+  subscribeBookingByTicketNumber,
+  subscribeTicketEntries,
+  getTicketStatus,
+} from "../../../lib/bookings";
 import { ticketQrUrl } from "../../../lib/ticket-qr";
 
 export default function TicketDetailPage({ params }) {
@@ -11,50 +16,116 @@ export default function TicketDetailPage({ params }) {
   const router = useRouter();
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      // id can be a booking number (NJ26-00001) or a per-seat ticket
-      // number (NJ26-00001-2) — resolve both back to one booking.
-      let data = await fetchBookingByTicketNumber(id);
+    let active = true;
+    let unsubBooking = () => {};
+    let unsubEntries = () => {};
+    let latestBookingData = null;
+    let currentEntriesSet = new Set();
+
+    // id can be a booking number (NJ26-00001) or a per-seat ticket
+    // number (NJ26-00001-2) — resolve base booking number.
+    const baseNumber = String(id).replace(/-\d+$/, "");
+
+    function updateTicketState() {
+      if (!active) return;
+      const data = latestBookingData;
+      if (!data) {
+        setTicket(null);
+        setLoading(false);
+        return;
+      }
+
       let seat = null;
       let seatIndex = null;
       let seatCount = 0;
 
-      if (data) {
-        const seats = Array.isArray(data.seats) ? data.seats.filter(Boolean) : [];
-        if (seats.length === 1) {
-          seat = seats[0];
-          seatIndex = 1;
-          seatCount = 1;
+      const seats = Array.isArray(data.seats) ? data.seats.filter(Boolean) : [];
+      const m = String(id).match(/^(.+)-(\d+)$/);
+      if (m) {
+        const idx = Number(m[2]) - 1;
+        if (seats[idx]) {
+          seat = seats[idx];
+          seatIndex = idx + 1;
+          seatCount = seats.length;
+        } else {
+          seatIndex = idx + 1;
+          seatCount = Number(data.quantity) || 1;
         }
-      } else {
-        const m = String(id).match(/^(.+)-(\d+)$/);
-        if (m) {
-          data = await fetchBookingByTicketNumber(m[1]);
-          if (data) {
-            const seats = Array.isArray(data.seats) ? data.seats.filter(Boolean) : [];
-            const idx = Number(m[2]) - 1;
-            if (seats[idx]) {
-              seat = seats[idx];
-              seatIndex = idx + 1;
-              seatCount = seats.length;
-            }
-          }
-        }
+      } else if (seats.length === 1) {
+        seat = seats[0];
+        seatIndex = 1;
+        seatCount = 1;
+      } else if (seats.length > 1) {
+        seat = seats[0];
+        seatIndex = 1;
+        seatCount = seats.length;
       }
 
-      setTicket(
-        data
-          ? { ...data, seat, seatIndex, seatCount, serial: String(id) }
-          : null
-      );
+      const itemTicket = {
+        ...data,
+        seat,
+        seatIndex,
+        seatCount,
+        serial: String(id),
+        ticketNumber: String(id),
+        baseTicketNumber: data.ticketNumber || baseNumber,
+      };
+
+      setTicket({
+        ...itemTicket,
+        derivedStatus: getTicketStatus(itemTicket, currentEntriesSet, data),
+      });
       setLoading(false);
     }
-    load();
-  }, [id]);
 
-  const [copied, setCopied] = useState(false);
+    try {
+      unsubBooking = subscribeBookingByTicketNumber(baseNumber, (data) => {
+        if (!data) {
+          fetchBookingByTicketNumber(id).then((fetched) => {
+            latestBookingData = fetched;
+            updateTicketState();
+          });
+        } else {
+          latestBookingData = data;
+          updateTicketState();
+        }
+      });
+    } catch (err) {
+      console.warn("Booking subscription failed, fallback to fetch:", err);
+      fetchBookingByTicketNumber(baseNumber).then((fetched) => {
+        latestBookingData = fetched;
+        updateTicketState();
+      });
+    }
+
+    try {
+      unsubEntries = subscribeTicketEntries((entries) => {
+        const set = new Set();
+        entries.forEach((entry) => {
+          const status = String(entry.status || entry.entryStatus || "").toLowerCase();
+          const result = String(entry.scanResult || "").toUpperCase();
+          if (status === "entered" || result === "SUCCESS" || !status) {
+            if (entry.ticketNumber) set.add(String(entry.ticketNumber).toUpperCase());
+            if (entry.ticketId) set.add(String(entry.ticketId).toUpperCase());
+            if (entry.bookingId) set.add(String(entry.bookingId).toUpperCase());
+          }
+        });
+        currentEntriesSet = set;
+        updateTicketState();
+      });
+    } catch (err) {
+      console.warn("Entries subscription failed:", err);
+    }
+
+    return () => {
+      active = false;
+      unsubBooking();
+      unsubEntries();
+    };
+  }, [id]);
 
   const copy = async (text) => {
     try {
@@ -77,10 +148,14 @@ export default function TicketDetailPage({ params }) {
       <div className="bg-[#f8faff] min-h-screen flex flex-col items-center justify-center">
         <i className="fa-solid fa-ticket-slash text-4xl text-slate-300 mb-3" />
         <p className="text-sm text-slate-500 font-medium">Ticket not found</p>
-        <button onClick={() => router.back()} className="mt-3 text-xs text-indigo-600 font-bold">Go Back</button>
+        <button onClick={() => router.back()} className="mt-3 text-xs text-indigo-600 font-bold">
+          Go Back
+        </button>
       </div>
     );
   }
+
+  const status = ticket.derivedStatus || "upcoming";
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
@@ -89,13 +164,34 @@ export default function TicketDetailPage({ params }) {
           showBack
           showShare
           title="Ticket Details"
-          onShare={() => copy(`${ticket.eventName || ticket.ticketTypeName} | ${ticket.serial || ticket.ticketNumber} | ${ticket.assignedGate}${ticket.seat ? ` | Seat ${ticket.seat}` : ""} | ${ticket.date}`)}
+          onShare={() =>
+            copy(
+              `${ticket.eventName || ticket.ticketTypeName} | ${ticket.serial || ticket.ticketNumber} | ${ticket.assignedGate}${ticket.seat ? ` | Seat ${ticket.seat}` : ""} | ${ticket.date}`,
+            )
+          }
         />
 
-        <div className="bg-amber-400/90 text-slate-950 px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
-          <i className="fa-regular fa-clock text-sm" />
-          <span>Show this ticket at the entry gate</span>
-        </div>
+        {status === "used" ? (
+          <div className="bg-emerald-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
+            <i className="fa-solid fa-circle-check text-sm" />
+            <span>Entry Completed • Ticket Used</span>
+          </div>
+        ) : status === "expired" ? (
+          <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
+            <i className="fa-solid fa-clock-rotate-left text-sm" />
+            <span>Event Ended • Ticket Expired</span>
+          </div>
+        ) : status === "cancelled" ? (
+          <div className="bg-rose-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
+            <i className="fa-solid fa-ban text-sm" />
+            <span>Ticket Cancelled</span>
+          </div>
+        ) : (
+          <div className="bg-amber-400/90 text-slate-950 px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
+            <i className="fa-regular fa-clock text-sm" />
+            <span>Show this ticket at the entry gate</span>
+          </div>
+        )}
 
         <main className="p-4 space-y-4">
           <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-xs">
@@ -106,17 +202,19 @@ export default function TicketDetailPage({ params }) {
               className="w-16 h-16 rounded-xl object-cover ring-1 ring-slate-100 flex-shrink-0"
             />
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">{ticket.eventName || "Event Booking"}</h3>
+              <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">
+                {ticket.eventName || "Event Booking"}
+              </h3>
               <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 truncate">
                   <i className="fa-regular fa-calendar text-rose-500 text-[11px]" />
                   <span>{ticket.date}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 truncate">
                   <i className="fa-regular fa-clock text-indigo-600 text-[11px]" />
                   <span>{ticket.time}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 truncate">
                   <i className="fa-solid fa-location-dot text-rose-500 text-[11px]" />
                   <span className="truncate">{ticket.assignedGate}</span>
                 </div>
@@ -126,7 +224,10 @@ export default function TicketDetailPage({ params }) {
 
           <div className="flex items-center justify-between bg-white px-3.5 py-2 rounded-xl border border-slate-100 text-xs font-extrabold text-slate-700">
             <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">BOOKING ID</span>
-            <button onClick={() => copy(ticket.ticketNumber)} className="flex items-center gap-1.5 text-indigo-900 hover:text-indigo-600">
+            <button
+              onClick={() => copy(ticket.ticketNumber)}
+              className="flex items-center gap-1.5 text-indigo-900 hover:text-indigo-600"
+            >
               <span>{copied ? "Copied" : ticket.ticketNumber}</span>
               <i className={`${copied ? "fa-solid fa-check text-emerald-600" : "fa-regular fa-copy"} text-xs`} />
             </button>
@@ -148,7 +249,12 @@ export default function TicketDetailPage({ params }) {
                 {ticket.seat ? (
                   <>
                     {" "}• <span className="font-black text-indigo-700">Seat {ticket.seat}</span>
-                    {ticket.seatCount ? <span className="text-slate-400"> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
+                    {ticket.seatCount ? (
+                      <span className="text-slate-400">
+                        {" "}
+                        ({ticket.seatIndex}/{ticket.seatCount})
+                      </span>
+                    ) : null}
                   </>
                 ) : null}
               </p>
@@ -159,8 +265,29 @@ export default function TicketDetailPage({ params }) {
               <img
                 src={ticketQrUrl(ticket, 300)}
                 alt="Large QR Ticket"
-                className="w-60 h-60 object-contain rounded-lg"
+                className={`w-60 h-60 object-contain rounded-lg ${
+                  status === "used"
+                    ? "grayscale opacity-50"
+                    : status === "expired"
+                      ? "grayscale opacity-50"
+                      : status === "cancelled"
+                        ? "grayscale opacity-30"
+                        : ""
+                }`}
               />
+              {status !== "upcoming" && (
+                <span
+                  className={`absolute inset-0 m-auto w-fit h-fit border-4 ${
+                    status === "used"
+                      ? "border-red-500 bg-white/95 text-red-600"
+                      : status === "expired"
+                        ? "border-amber-600 bg-white/95 text-amber-600"
+                        : "border-red-600 bg-white/95 text-red-600"
+                  } text-2xl font-black px-4 py-1.5 rounded-xl -rotate-12 uppercase shadow-xl tracking-wider select-none`}
+                >
+                  {status === "used" ? "USED" : status === "expired" ? "EXPIRED" : "CANCELLED"}
+                </span>
+              )}
             </div>
 
             <div className="mt-4 bg-slate-100 rounded-xl py-2 px-4 border border-slate-200">
@@ -172,9 +299,35 @@ export default function TicketDetailPage({ params }) {
               </p>
             </div>
 
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-emerald-600 font-bold">
-              <i className="fa-solid fa-circle-check" />
-              <span>Valid for single entry</span>
+            <div className="mt-4 flex flex-col items-center justify-center gap-1 text-xs font-bold">
+              {status === "used" ? (
+                <>
+                  <div className="flex items-center gap-1.5 text-red-600 font-extrabold">
+                    <i className="fa-solid fa-circle-check" />
+                    <span>Entry Completed — Already Scanned</span>
+                  </div>
+                  {ticket.usedAt && (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Scanned at {new Date(ticket.usedAt).toLocaleString("en-IN")}
+                    </span>
+                  )}
+                </>
+              ) : status === "expired" ? (
+                <div className="flex items-center gap-1.5 text-amber-600 font-extrabold">
+                  <i className="fa-solid fa-clock-rotate-left" />
+                  <span>Event Ended — Validity Expired</span>
+                </div>
+              ) : status === "cancelled" ? (
+                <div className="flex items-center gap-1.5 text-rose-600 font-extrabold">
+                  <i className="fa-solid fa-ban" />
+                  <span>Booking Cancelled</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-emerald-600">
+                  <i className="fa-solid fa-circle-check" />
+                  <span>Valid for single entry</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -186,7 +339,9 @@ export default function TicketDetailPage({ params }) {
             <div className="space-y-2 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Event</span>
-                <span className="font-extrabold text-slate-900 truncate max-w-[60%] text-right">{ticket.eventName || "—"}</span>
+                <span className="font-extrabold text-slate-900 truncate max-w-[60%] text-right">
+                  {ticket.eventName || "—"}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Category</span>
@@ -194,14 +349,21 @@ export default function TicketDetailPage({ params }) {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Block</span>
-                <span className="font-extrabold text-emerald-700">{ticket.block || ticket.assignedGate}</span>
+                <span className="font-extrabold text-emerald-700">
+                  {ticket.block || ticket.assignedGate}
+                </span>
               </div>
               {ticket.seat ? (
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Seat</span>
                   <span className="font-extrabold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md">
                     {ticket.seat}
-                    {ticket.seatCount ? <span className="text-slate-400 font-bold"> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
+                    {ticket.seatCount ? (
+                      <span className="text-slate-400 font-bold">
+                        {" "}
+                        ({ticket.seatIndex}/{ticket.seatCount})
+                      </span>
+                    ) : null}
                   </span>
                 </div>
               ) : null}
@@ -239,7 +401,25 @@ export default function TicketDetailPage({ params }) {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Status</span>
-                <span className={`font-extrabold ${ticket.status === "Confirmed" ? "text-emerald-600" : "text-slate-900"}`}>{ticket.status}</span>
+                <span
+                  className={`font-black text-[11px] px-2 py-0.5 rounded-md border uppercase ${
+                    status === "used"
+                      ? "text-red-600 bg-red-50 border-red-200"
+                      : status === "expired"
+                        ? "text-amber-600 bg-amber-50 border-amber-200"
+                        : status === "cancelled"
+                          ? "text-rose-600 bg-rose-50 border-rose-200"
+                          : "text-emerald-600 bg-emerald-50 border-emerald-200"
+                  }`}
+                >
+                  {status === "used"
+                    ? "USED"
+                    : status === "expired"
+                      ? "EXPIRED"
+                      : status === "cancelled"
+                        ? "CANCELLED"
+                        : "CONFIRMED"}
+                </span>
               </div>
             </div>
           </div>
@@ -266,9 +446,17 @@ export default function TicketDetailPage({ params }) {
                 { id: "CANCELLED", label: "CANCELLED", labelClass: "text-red-600", desc: "Cancelled", boxBorder: "border-red-300", badge: "border-red-600 text-red-600 text-[7px] px-0.5" },
               ].map((s) => (
                 <div key={s.id} className="flex flex-col items-center">
-                  <div className={`relative w-12 h-12 p-1 bg-white border ${s.boxBorder} rounded-lg flex items-center justify-center mb-1 ${s.badge ? "opacity-70" : ""}`}>
+                  <div
+                    className={`relative w-12 h-12 p-1 bg-white border ${s.boxBorder} rounded-lg flex items-center justify-center mb-1 ${
+                      s.badge ? "opacity-70" : ""
+                    }`}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${s.id}`} alt={s.label} className={`w-full h-full object-contain ${s.badge ? "grayscale" : ""}`} />
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${s.id}`}
+                      alt={s.label}
+                      className={`w-full h-full object-contain ${s.badge ? "grayscale" : ""}`}
+                    />
                     {s.badge && (
                       <span className={`absolute inset-0 m-auto w-fit h-fit border-2 bg-white/95 ${s.badge} font-black px-1 rounded -rotate-12 uppercase`}>
                         {s.label}
