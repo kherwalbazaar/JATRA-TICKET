@@ -11,6 +11,7 @@ import {
   getTicketStatus,
   isEventDateExpired,
 } from "../../lib/bookings";
+import { subscribeEvents } from "../../lib/events";
 import { ticketQrUrl } from "../../lib/ticket-qr";
 
 const cardGradients = [
@@ -24,7 +25,7 @@ const cardGradients = [
 
 // Split a booking into one ticket per seat so each seat gets its own card,
 // QR code and ticket id, ensuring each ticket has its own used/active status.
-function expandTickets(list, usedCodesSet = new Set(), ticketEntries = []) {
+function expandTickets(list, usedCodesSet = new Set(), ticketEntries = [], eventsMap = {}) {
   const entriesCountByParent = new Map();
   ticketEntries.forEach((e) => {
     const rawNum = String(e.parentTicketNumber || e.ticketNumber || e.ticketId || "").toUpperCase();
@@ -34,7 +35,19 @@ function expandTickets(list, usedCodesSet = new Set(), ticketEntries = []) {
     }
   });
 
-  return list.flatMap((b) => {
+  return list.flatMap((rawB) => {
+    const evt = eventsMap[rawB.eventId] || null;
+    const effectiveDate = evt?.date || rawB.date;
+    const effectiveTime = evt?.time || rawB.time;
+    const effectiveEventName = evt?.eventTitle || evt?.name || evt?.title || rawB.eventName;
+
+    const b = {
+      ...rawB,
+      date: effectiveDate,
+      time: effectiveTime,
+      eventName: effectiveEventName,
+    };
+
     const seats = Array.isArray(b.seats) ? b.seats.filter(Boolean) : [];
     const count = seats.length || Number(b.quantity) || 1;
     const baseTicketNumber = b.ticketNumber;
@@ -123,11 +136,13 @@ export default function TicketsPage() {
   const [copied, setCopied] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [ticketEntries, setTicketEntries] = useState([]);
+  const [eventsMap, setEventsMap] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unsubBookings = () => {};
     let unsubEntries = () => {};
+    let unsubEvents = () => {};
 
     try {
       unsubBookings = subscribeBookings((data) => {
@@ -150,9 +165,23 @@ export default function TicketsPage() {
       console.warn("Failed to subscribe to ticketEntries:", err);
     }
 
+    try {
+      unsubEvents = subscribeEvents((list) => {
+        const map = {};
+        (list || []).forEach((e) => {
+          if (e.key) map[e.key] = e;
+          if (e.id) map[e.id] = e;
+        });
+        setEventsMap(map);
+      });
+    } catch (err) {
+      console.warn("Failed to subscribe to events in TicketsPage:", err);
+    }
+
     return () => {
       unsubBookings();
       unsubEntries();
+      unsubEvents();
     };
   }, []);
 
@@ -171,8 +200,8 @@ export default function TicketsPage() {
   }, [ticketEntries]);
 
   const allTickets = useMemo(() => {
-    return expandTickets(bookings, usedCodesSet, ticketEntries);
-  }, [bookings, usedCodesSet, ticketEntries]);
+    return expandTickets(bookings, usedCodesSet, ticketEntries, eventsMap);
+  }, [bookings, usedCodesSet, ticketEntries, eventsMap]);
 
   const upcomingTickets = useMemo(
     () => allTickets.filter((b) => b.derivedStatus === "upcoming"),

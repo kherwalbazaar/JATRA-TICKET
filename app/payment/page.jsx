@@ -10,6 +10,8 @@ function PaymentContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId") ?? "";
   const eventName = searchParams.get("event") ?? "";
+  const date = searchParams.get("date") ?? "";
+  const time = searchParams.get("time") ?? "";
   const block = searchParams.get("block") ?? "";
   const seats = searchParams.get("seats") ?? "";
   const seatPrice = Number(searchParams.get("seatPrice")) || 100;
@@ -31,6 +33,8 @@ function PaymentContent() {
         paymentMethod,
         totalAmount,
         eventId,
+        date,
+        time,
         seats: seatList,
         eventName,
         customerName,

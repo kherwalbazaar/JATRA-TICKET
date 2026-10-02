@@ -471,6 +471,8 @@ export default function Home() {
                   featuredEvent?.name ||
                   data.eventName ||
                   "",
+                date: featuredEvent?.date || "",
+                time: featuredEvent?.time || "",
               });
             } catch (err) {
               console.error("Failed to save booking", err);

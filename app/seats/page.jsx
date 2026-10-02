@@ -15,6 +15,7 @@ function SeatSelectionContent() {
   const eventIdParam = searchParams.get("eventId") || "";
   const [eventId, setEventId] = useState(eventIdParam);
   const [eventName, setEventName] = useState(searchParams.get("event") || "Event");
+  const [currentEventData, setCurrentEventData] = useState(null);
   const [eventOptions, setEventOptions] = useState([]);
   const [selected, setSelected] = useState([]);
   const [activeBlock, setActiveBlock] = useState(null);
@@ -67,10 +68,8 @@ function SeatSelectionContent() {
     }
   };
 
-  // Resolve event id when the page is opened without query params
-  // (e.g. opened directly at "/seats"), otherwise seats are never fetched.
+  // Resolve event and event details
   useEffect(() => {
-    if (eventIdParam) return;
     let cancelled = false;
     (async () => {
       let saved = "";
@@ -79,7 +78,9 @@ function SeatSelectionContent() {
       } catch (error) {
         saved = "";
       }
-      if (saved) setEventId(saved);
+      const targetId = eventIdParam || eventId || saved;
+      if (saved && !eventId) setEventId(saved);
+
       try {
         const list = await fetchEvents();
         if (cancelled) return;
@@ -87,13 +88,18 @@ function SeatSelectionContent() {
           .filter((e) => e?.key)
           .map((e) => ({ id: e.key, name: e.name || e.eventTitle || e.key }));
         setEventOptions(opts);
-        if (!saved && opts[0]) {
-          setEventId(opts[0].id);
-          setEventName(opts[0].name);
-          try {
-            window.localStorage.setItem(EVENT_ID_KEY, opts[0].id);
-          } catch (error) {
-            /* ignore */
+
+        const matched = list.find((e) => e.key === targetId || e.id === targetId) || list[0];
+        if (matched) {
+          setCurrentEventData(matched);
+          if (!eventId) {
+            setEventId(matched.key || matched.id);
+            setEventName(matched.name || matched.eventTitle || "Event");
+            try {
+              window.localStorage.setItem(EVENT_ID_KEY, matched.key || matched.id);
+            } catch (error) {
+              /* ignore */
+            }
           }
         }
       } catch (error) {
@@ -105,7 +111,7 @@ function SeatSelectionContent() {
     return () => {
       cancelled = true;
     };
-  }, [eventIdParam]);
+  }, [eventIdParam, eventId]);
 
   // Fetch seats from Firestore whenever the event changes
   useEffect(() => {
@@ -720,7 +726,9 @@ function SeatSelectionContent() {
                 if (m) return `${m[1].toUpperCase()}-${m[2]}`;
                 return key;
               });
-              router.push(`/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&block=${activeBlock}&seats=${displaySeats.join(',')}&seatPrice=${seatPrice}`);
+              const eventDate = currentEventData?.date || "";
+              const eventTime = currentEventData?.time || "";
+              router.push(`/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&date=${encodeURIComponent(eventDate)}&time=${encodeURIComponent(eventTime)}&block=${activeBlock}&seats=${displaySeats.join(',')}&seatPrice=${seatPrice}`);
             }}
             disabled={selected.length === 0}
             className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"

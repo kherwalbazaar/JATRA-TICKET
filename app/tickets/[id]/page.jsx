@@ -9,6 +9,7 @@ import {
   subscribeTicketEntries,
   getTicketStatus,
 } from "../../../lib/bookings";
+import { fetchEvents } from "../../../lib/events";
 import { ticketQrUrl } from "../../../lib/ticket-qr";
 
 export default function TicketDetailPage({ params }) {
@@ -29,6 +30,21 @@ export default function TicketDetailPage({ params }) {
     // number (NJ26-00001-2) — resolve base booking number.
     const baseNumber = String(id).replace(/-\d+$/, "");
 
+    let eventsMap = {};
+
+    fetchEvents()
+      .then((list) => {
+        if (!active || !Array.isArray(list)) return;
+        const map = {};
+        list.forEach((e) => {
+          if (e.key) map[e.key] = e;
+          if (e.id) map[e.id] = e;
+        });
+        eventsMap = map;
+        updateTicketState();
+      })
+      .catch(() => {});
+
     function updateTicketState() {
       if (!active) return;
       const data = latestBookingData;
@@ -37,6 +53,11 @@ export default function TicketDetailPage({ params }) {
         setLoading(false);
         return;
       }
+
+      const evt = eventsMap[data.eventId] || null;
+      const effectiveDate = evt?.date || data.date;
+      const effectiveTime = evt?.time || data.time;
+      const effectiveEventName = evt?.eventTitle || evt?.name || evt?.title || data.eventName;
 
       let seat = null;
       let seatIndex = null;
@@ -66,6 +87,9 @@ export default function TicketDetailPage({ params }) {
 
       const itemTicket = {
         ...data,
+        date: effectiveDate,
+        time: effectiveTime,
+        eventName: effectiveEventName,
         seat,
         seatIndex,
         seatCount,
@@ -74,9 +98,16 @@ export default function TicketDetailPage({ params }) {
         baseTicketNumber: data.ticketNumber || baseNumber,
       };
 
+      const parentBooking = {
+        ...data,
+        date: effectiveDate,
+        time: effectiveTime,
+        eventName: effectiveEventName,
+      };
+
       setTicket({
         ...itemTicket,
-        derivedStatus: getTicketStatus(itemTicket, currentEntriesSet, data),
+        derivedStatus: getTicketStatus(itemTicket, currentEntriesSet, parentBooking),
       });
       setLoading(false);
     }
