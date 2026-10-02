@@ -7,6 +7,7 @@ import Header from "../components/Header";
 import {
   fetchBookings,
   subscribeBookings,
+  subscribeAllTickets,
   subscribeTicketEntries,
   getTicketStatus,
   isEventDateExpired,
@@ -23,19 +24,19 @@ const cardGradients = [
   "bg-gradient-to-br from-fuchsia-500 via-purple-500 to-indigo-600",
 ];
 
-// Split a booking into one ticket per seat so each seat gets its own card,
-// QR code and ticket id, ensuring each ticket has its own used/active status.
-function expandTickets(list, usedCodesSet = new Set(), ticketEntries = [], eventsMap = {}) {
-  const entriesCountByParent = new Map();
-  ticketEntries.forEach((e) => {
-    const rawNum = String(e.parentTicketNumber || e.ticketNumber || e.ticketId || "").toUpperCase();
-    const base = rawNum.replace(/-\d+$/, "");
-    if (base) {
-      entriesCountByParent.set(base, (entriesCountByParent.get(base) || 0) + 1);
+function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = new Set(), ticketEntries = [], eventsMap = {}) {
+  const ticketsByBookingId = new Map();
+  storedTickets.forEach((t) => {
+    const bId = String(t.bookingId || t.baseTicketNumber || "").toUpperCase();
+    if (bId) {
+      if (!ticketsByBookingId.has(bId)) {
+        ticketsByBookingId.set(bId, []);
+      }
+      ticketsByBookingId.get(bId).push(t);
     }
   });
 
-  return list.flatMap((rawB) => {
+  return bookings.map((rawB) => {
     const evt = eventsMap[rawB.eventId] || null;
     const effectiveDate = evt?.date || rawB.date;
     const effectiveTime = evt?.time || rawB.time;
@@ -43,104 +44,112 @@ function expandTickets(list, usedCodesSet = new Set(), ticketEntries = [], event
 
     const b = {
       ...rawB,
+      bookingId: rawB.bookingId || rawB.ticketNumber,
       date: effectiveDate,
       time: effectiveTime,
       eventName: effectiveEventName,
     };
 
-    const seats = Array.isArray(b.seats) ? b.seats.filter(Boolean) : [];
-    const count = seats.length || Number(b.quantity) || 1;
-    const baseTicketNumber = b.ticketNumber;
-    const baseUpper = String(baseTicketNumber || "").toUpperCase();
-    const entriesForThisBooking = entriesCountByParent.get(baseUpper) || 0;
+    const bIdUpper = String(b.bookingId || "").toUpperCase();
+    let ticketsForBooking = ticketsByBookingId.get(bIdUpper) || [];
 
-    const bUsedTickets = (Array.isArray(b.usedTickets) ? b.usedTickets : []).map((s) => String(s).toUpperCase());
-    const bUsedSeats = (Array.isArray(b.usedSeats) ? b.usedSeats : []).map((s) => String(s).toUpperCase());
+    // If no records in tickets collection (legacy booking), synthesize them:
+    if (ticketsForBooking.length === 0) {
+      const seats = Array.isArray(b.seats) ? b.seats.filter(Boolean) : [];
+      const count = seats.length || Number(b.quantity) || 1;
+      const bUsedTickets = (Array.isArray(b.usedTickets) ? b.usedTickets : []).map((s) => String(s).toUpperCase());
+      const bUsedSeats = (Array.isArray(b.usedSeats) ? b.usedSeats : []).map((s) => String(s).toUpperCase());
+      const effectiveUsedCount = Number(b.usedCount || 0);
 
-    let effectiveUsedCount = Number(b.usedCount || 0);
-    if (!effectiveUsedCount && (bUsedTickets.length || bUsedSeats.length)) {
-      effectiveUsedCount = Math.max(bUsedTickets.length, bUsedSeats.length);
-    }
-    if (!effectiveUsedCount && entriesForThisBooking > 0) {
-      effectiveUsedCount = Math.min(entriesForThisBooking, count);
-    }
-    if (!effectiveUsedCount && String(b.status || "").toLowerCase() === "used" && entriesForThisBooking === 1) {
-      effectiveUsedCount = 1;
-    }
+      ticketsForBooking = Array.from({ length: count }, (_, i) => {
+        const seat = seats[i] || null;
+        const ticketId = count === 1 ? b.ticketNumber : `${b.ticketNumber}-${i + 1}`;
+        const upperTicketId = ticketId.toUpperCase();
+        const upperSeat = seat ? String(seat).toUpperCase() : "";
 
-    if (count <= 1) {
-      const seat = seats[0] || null;
-      const derivedStatus = getTicketStatus(b, usedCodesSet, b);
-      return [
-        {
+        let isUsed = false;
+        if (usedCodesSet.has(upperTicketId) || bUsedTickets.includes(upperTicketId)) {
+          isUsed = true;
+        } else if (upperSeat && bUsedSeats.includes(upperSeat)) {
+          isUsed = true;
+        } else if (effectiveUsedCount > 0 && i < effectiveUsedCount) {
+          isUsed = true;
+        } else if (count === 1 && (b.status === "Checked-in" || b.status === "Used")) {
+          isUsed = true;
+        }
+
+        let status = "ACTIVE";
+        if (b.status === "Cancelled" || b.status === "Refunded") {
+          status = "CANCELLED";
+        } else if (isUsed) {
+          status = "ENTERED";
+        }
+
+        return {
           ...b,
+          ticketId,
+          ticketNumber: ticketId,
           seat,
-          seatIndex: seat ? 1 : null,
-          seatCount: seat ? 1 : null,
-          baseTicketNumber,
-          derivedStatus,
-        },
-      ];
+          seatIndex: i + 1,
+          seatCount: count,
+          ticketIndex: i + 1,
+          totalTickets: count,
+          serialNumber: ticketId,
+          qrToken: ticketId,
+          status,
+          derivedStatus: isUsed ? "used" : status === "CANCELLED" ? "cancelled" : isEventDateExpired(b.date, b.time) ? "expired" : "upcoming",
+        };
+      });
+    } else {
+      // Map stored tickets
+      ticketsForBooking = ticketsForBooking.map((t, idx) => {
+        const derived = getTicketStatus(t, usedCodesSet, b);
+        return {
+          ...t,
+          ticketNumber: t.ticketId,
+          seatIndex: t.ticketIndex || idx + 1,
+          seatCount: ticketsForBooking.length,
+          derivedStatus: derived,
+        };
+      });
     }
 
-    return Array.from({ length: count }, (_, i) => {
-      const seat = seats[i] || null;
-      const perSeatTicketNumber = `${baseTicketNumber}-${i + 1}`;
-      const upperTicketNumber = perSeatTicketNumber.toUpperCase();
-      const upperSeat = seat ? String(seat).toUpperCase() : "";
+    // Sort tickets by sequence
+    ticketsForBooking.sort((a, b) => (a.seatIndex || a.ticketIndex || 0) - (b.seatIndex || b.ticketIndex || 0));
 
-      const item = {
-        ...b,
-        seat,
-        seatIndex: i + 1,
-        seatCount: count,
-        baseTicketNumber,
-        ticketNumber: perSeatTicketNumber,
-      };
+    const enteredCount = ticketsForBooking.filter((t) => t.derivedStatus === "used" || t.status === "ENTERED").length;
+    const totalCount = ticketsForBooking.length;
+    const remainingCount = Math.max(0, totalCount - enteredCount);
 
-      let isThisSeatUsed = false;
-      if (usedCodesSet.has(upperTicketNumber) || bUsedTickets.includes(upperTicketNumber)) {
-        isThisSeatUsed = true;
-      } else if (upperSeat && bUsedSeats.includes(upperSeat)) {
-        isThisSeatUsed = true;
-      } else if (effectiveUsedCount > 0 && i < effectiveUsedCount) {
-        isThisSeatUsed = true;
-      }
-
-      const rawStatus = String(b.status || "").toLowerCase();
-      let derivedStatus = "upcoming";
-      if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "refunded") {
-        derivedStatus = "cancelled";
-      } else if (isThisSeatUsed) {
-        derivedStatus = "used";
-      } else if (rawStatus === "expired" || isEventDateExpired(b.date, b.time)) {
-        derivedStatus = "expired";
-      } else {
-        derivedStatus = "upcoming";
-      }
-
-      item.derivedStatus = derivedStatus;
-      return item;
-    });
+    return {
+      booking: b,
+      tickets: ticketsForBooking,
+      totalCount,
+      enteredCount,
+      remainingCount,
+      allEntered: enteredCount === totalCount && totalCount > 0,
+    };
   });
 }
 
 // Unique React key — one booking expands to several per-seat tickets that
 // all share the same Firestore doc id (`key`).
 function ticketKey(t) {
-  return `${t.key || t.id || t.baseTicketNumber || t.ticketNumber}-${t.seatIndex || 0}-${t.seat || "0"}`;
+  return `${t.key || t.id || t.baseTicketNumber || t.ticketNumber}-${t.ticketIndex || t.seatIndex || 0}-${t.seat || "0"}`;
 }
 
 export default function TicketsPage() {
   const [tab, setTab] = useState("upcoming");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState("");
   const [bookings, setBookings] = useState([]);
+  const [storedTickets, setStoredTickets] = useState([]);
   const [ticketEntries, setTicketEntries] = useState([]);
   const [eventsMap, setEventsMap] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let unsubBookings = () => {};
+    let unsubTickets = () => {};
     let unsubEntries = () => {};
     let unsubEvents = () => {};
 
@@ -155,6 +164,14 @@ export default function TicketsPage() {
         .then((data) => setBookings(data || []))
         .catch(() => {})
         .finally(() => setLoading(false));
+    }
+
+    try {
+      unsubTickets = subscribeAllTickets((tList) => {
+        setStoredTickets(tList || []);
+      });
+    } catch (err) {
+      console.warn("Failed to subscribe to tickets:", err);
     }
 
     try {
@@ -180,6 +197,7 @@ export default function TicketsPage() {
 
     return () => {
       unsubBookings();
+      unsubTickets();
       unsubEntries();
       unsubEvents();
     };
@@ -199,9 +217,13 @@ export default function TicketsPage() {
     return set;
   }, [ticketEntries]);
 
+  const bookingGroups = useMemo(() => {
+    return buildBookingTicketGroups(bookings, storedTickets, usedCodesSet, ticketEntries, eventsMap);
+  }, [bookings, storedTickets, usedCodesSet, ticketEntries, eventsMap]);
+
   const allTickets = useMemo(() => {
-    return expandTickets(bookings, usedCodesSet, ticketEntries, eventsMap);
-  }, [bookings, usedCodesSet, ticketEntries, eventsMap]);
+    return bookingGroups.flatMap((g) => g.tickets);
+  }, [bookingGroups]);
 
   const upcomingTickets = useMemo(
     () => allTickets.filter((b) => b.derivedStatus === "upcoming"),
@@ -236,7 +258,17 @@ export default function TicketsPage() {
           ? expiredTickets
           : cancelledTickets;
 
-  const latestBooking = upcomingTickets[0];
+  const activeBookingGroups = useMemo(() => {
+    return bookingGroups.filter((g) => g.tickets.some((t) => t.derivedStatus === "upcoming"));
+  }, [bookingGroups]);
+
+  const copyToClipboard = async (text, id) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id || text);
+      setTimeout(() => setCopied(""), 1500);
+    } catch {}
+  };
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
@@ -269,7 +301,7 @@ export default function TicketsPage() {
           </div>
         </div>
 
-        <div className="p-4 space-y-3.5 flex-1">
+        <div className="p-4 space-y-4 flex-1">
           {loading ? (
             <div className="text-center py-12">
               <i className="fa-solid fa-spinner fa-spin text-2xl text-slate-400 mb-2" />
@@ -319,119 +351,271 @@ export default function TicketsPage() {
               </div>
             )
           ) : tab === "upcoming" ? (
-            <>
-              {latestBooking && (
-                <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200/80 space-y-3">
-                  <div className="flex gap-3 items-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"
-                      alt="Event Banner"
-                      className="w-20 h-20 rounded-xl object-cover ring-1 ring-slate-100 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md uppercase">Booking ID</span>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(latestBooking.baseTicketNumber || latestBooking.ticketNumber);
-                              setCopied(true);
-                              setTimeout(() => setCopied(false), 1500);
-                            } catch {}
-                          }}
-                          className="flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900"
-                        >
-                          <span>{copied ? "Copied" : (latestBooking.baseTicketNumber || latestBooking.ticketNumber)}</span>
-                          <i className={`${copied ? "fa-solid fa-check text-emerald-600" : "fa-regular fa-copy"} text-xs`} />
-                        </button>
-                      </div>
-                      <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">{latestBooking.eventName || "Event Booking"}</h3>
-                      <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <i className="fa-regular fa-calendar text-rose-500 text-[11px]" />
-                          <span>{latestBooking.date}</span>
-                          <span className="text-slate-300">•</span>
-                          <i className="fa-regular fa-clock text-indigo-600 text-[11px]" />
-                          <span>{latestBooking.time}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 truncate">
-                          <i className="fa-solid fa-location-dot text-rose-500 text-[11px]" />
-                          <span className="truncate">{latestBooking.assignedGate}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-4 divide-x divide-slate-100 bg-slate-50/80 rounded-xl p-2 text-center border border-slate-100">
-                    <div>
-                      <span className="text-sm font-black text-slate-900 leading-tight block">{upcomingTickets.length}</span>
-                      <span className="text-[10px] text-slate-500 font-semibold">Tickets</span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-black text-purple-900 leading-tight block">{latestBooking.ticketTypeName}</span>
-                      <span className="text-[10px] text-slate-500 font-semibold">Category</span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-black text-indigo-900 leading-tight block">{latestBooking.assignedGate}</span>
-                      <span className="text-[10px] text-slate-500 font-semibold">Entry Gate</span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-black text-emerald-600 leading-tight block">₹{latestBooking.amount}</span>
-                      <span className="text-[10px] text-slate-500 font-semibold">Total Amount</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2.5 max-w-md mx-auto w-full">
-                {upcomingTickets.map((ticket, index) => (
-                  <Link
-                    key={ticketKey(ticket)}
-                    href={`/tickets/${ticket.ticketNumber}`}
-                    className={`relative rounded-2xl p-3 shadow-md border border-white/20 flex items-center justify-between gap-3 overflow-hidden text-white bg-gradient-to-br ${cardGradients[index % cardGradients.length]} transition-transform active:scale-[0.98]`}
+            <div className="space-y-6 max-w-md mx-auto w-full">
+              {activeBookingGroups.map((group) => {
+                const b = group.booking;
+                const bookingId = b.bookingId || b.ticketNumber;
+                return (
+                  <div
+                    key={bookingId}
+                    className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200/80 space-y-3.5"
                   >
-                    <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
-                    <div className="absolute -left-8 -bottom-10 w-32 h-32 rounded-full bg-white/10" />
-                    <div className="absolute right-14 bottom-1 opacity-20">
-                      <i className="fa-solid fa-ticket-simple text-5xl -rotate-12" />
-                    </div>
-
-                    <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
-                      <span className="w-6 h-6 rounded-full bg-white/25 backdrop-blur text-white font-black text-xs flex items-center justify-center flex-shrink-0 ring-1 ring-white/30">{index + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <i className="fa-regular fa-circle-user text-white/80 text-sm" />
-                          <h4 className="text-xs font-black text-white truncate drop-shadow">{ticket.eventName || "Ticket Holder"}</h4>
+                    {/* Booking Summary Card */}
+                    <div className="bg-[#12193b] text-white rounded-2xl p-4 shadow-md space-y-3 relative overflow-hidden">
+                      <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-white/5 pointer-events-none" />
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-md">
+                              Booking ID
+                            </span>
+                            <button
+                              onClick={() => copyToClipboard(bookingId, bookingId)}
+                              className="flex items-center gap-1 text-xs font-bold text-slate-200 hover:text-white"
+                              title="Copy Booking ID"
+                            >
+                              <span className="font-mono">{copied === bookingId ? "Copied!" : bookingId}</span>
+                              <i
+                                className={`${
+                                  copied === bookingId ? "fa-solid fa-check text-emerald-400" : "fa-regular fa-copy"
+                                } text-xs`}
+                              />
+                            </button>
+                          </div>
+                          <h3 className="text-sm font-black text-white font-brand uppercase tracking-tight truncate">
+                            {b.eventName || "Jatra Event"}
+                          </h3>
+                          <p className="text-xs text-slate-300 font-semibold mt-0.5 truncate">
+                            {b.customerName || b.attendeeName || "Customer"}
+                          </p>
                         </div>
-                        <p className="text-[11px] font-bold text-white/80 mt-0.5">
-                          {ticket.ticketTypeName} <span className="text-white/40">•</span> {ticket.assignedGate}
-                          {ticket.seat ? (
-                            <>
-                              {" "}<span className="text-white/40">•</span>{" "}
-                              <span className="bg-white/25 px-1 rounded">Seat {ticket.seat}</span>
-                            </>
-                          ) : null}
-                        </p>
-                        <p className="text-[11px] font-extrabold text-white mt-0.5 drop-shadow">
-                          Ticket ID: {ticket.ticketNumber}
-                          {ticket.seatCount ? <span className="font-bold text-white/70"> ({ticket.seatIndex}/{ticket.seatCount})</span> : null}
-                        </p>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white mt-1 bg-white/20 backdrop-blur px-1.5 py-0.5 rounded-md ring-1 ring-white/30">
-                          <i className="fa-solid fa-circle-check text-xs" />
-                          <span>ACTIVE <span className="font-semibold text-white/75 text-[9px]">- Ready for entry</span></span>
-                        </span>
+
+                        <div className="text-right flex-shrink-0">
+                          <span className="text-base font-black text-emerald-400 block">₹{b.amount}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">Total Amount</span>
+                        </div>
+                      </div>
+
+                      {/* Booking Metadata Grid */}
+                      <div className="grid grid-cols-3 divide-x divide-white/10 bg-white/5 rounded-xl p-2.5 text-center border border-white/10">
+                        <div>
+                          <span className="text-sm font-black text-white block">
+                            {group.totalCount} {group.totalCount === 1 ? "Ticket" : "Tickets"}
+                          </span>
+                          <span className="text-[10px] text-slate-300 font-medium">Quantity</span>
+                        </div>
+                        <div>
+                          <span className="text-sm font-black text-amber-300 block truncate px-1">
+                            {b.ticketTypeName || "SEATED"}
+                            {b.block ? ` • ${b.block}` : ""}
+                          </span>
+                          <span className="text-[10px] text-slate-300 font-medium">Block / Cat</span>
+                        </div>
+                        <div>
+                          <span className="text-sm font-black text-indigo-200 block truncate px-1">
+                            {b.assignedGate || "Gate 1"}
+                          </span>
+                          <span className="text-[10px] text-slate-300 font-medium">Entry Gate</span>
+                        </div>
+                      </div>
+
+                      {/* Entry Status Progress */}
+                      <div className="bg-white/10 rounded-xl p-2.5 border border-white/10 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <div className="flex items-center gap-1.5 text-slate-300 text-[11px] uppercase tracking-wider">
+                            <i className="fa-solid fa-door-open text-xs text-amber-400" />
+                            <span>Entry Status</span>
+                          </div>
+                          <div>
+                            {group.allEntered ? (
+                              <span className="text-emerald-400 font-extrabold flex items-center gap-1">
+                                <i className="fa-solid fa-circle-check" />
+                                <span>✓ ALL TICKETS ENTERED</span>
+                              </span>
+                            ) : (
+                              <span className="text-white font-extrabold">
+                                {group.enteredCount} / {group.totalCount} TICKETS ENTERED
+                                <span className="text-slate-300 font-normal ml-1.5 text-[11px]">
+                                  • Remaining: <strong className="text-amber-300">{group.remainingCount}</strong>
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Visual Progress Bar */}
+                        <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 rounded-full ${
+                              group.allEntered ? "bg-emerald-400" : "bg-gradient-to-r from-amber-400 to-rose-400"
+                            }`}
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Math.round((group.enteredCount / Math.max(1, group.totalCount)) * 100)
+                              )}%`,
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="relative w-16 h-16 p-1 bg-white/90 rounded-xl shadow-lg flex-shrink-0 flex items-center justify-center ring-2 ring-white/40">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={ticketQrUrl(ticket, 150)} alt="QR Code" className="w-full h-full object-contain" />
+                    {/* Individual Tickets inside this Booking */}
+                    <div className="space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
+                          Individual Tickets ({group.tickets.length})
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">Click ticket for entry QR pass</span>
+                      </div>
+
+                      {group.tickets.map((ticket, ticketIdx) => {
+                        const isEntered = ticket.derivedStatus === "used" || ticket.status === "ENTERED";
+                        const isCancelled = ticket.derivedStatus === "cancelled" || ticket.status === "CANCELLED";
+
+                        return (
+                          <Link
+                            key={ticketKey(ticket)}
+                            href={`/tickets/${ticket.ticketId || ticket.ticketNumber}`}
+                            className={`relative rounded-2xl p-3 shadow-sm border flex items-center justify-between gap-3 overflow-hidden transition-all active:scale-[0.98] ${
+                              isEntered
+                                ? "bg-slate-100 border-slate-200 text-slate-700"
+                                : isCancelled
+                                  ? "bg-slate-800 text-white border-slate-700 opacity-75"
+                                  : `text-white bg-gradient-to-br ${
+                                      cardGradients[ticketIdx % cardGradients.length]
+                                    } border-white/20 shadow-md`
+                            }`}
+                          >
+                            <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none" />
+                            <div className="absolute -left-8 -bottom-10 w-32 h-32 rounded-full bg-white/10 pointer-events-none" />
+
+                            <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
+                              <span
+                                className={`w-6 h-6 rounded-full font-black text-xs flex items-center justify-center flex-shrink-0 ring-1 ${
+                                  isEntered
+                                    ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
+                                    : isCancelled
+                                      ? "bg-slate-700 text-slate-300 ring-slate-600"
+                                      : "bg-white/25 backdrop-blur text-white ring-white/30"
+                                }`}
+                              >
+                                {ticket.ticketIndex || ticket.seatIndex || ticketIdx + 1}
+                              </span>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <i
+                                    className={`fa-regular fa-circle-user text-sm ${
+                                      isEntered ? "text-slate-500" : "text-white/80"
+                                    }`}
+                                  />
+                                  <h4
+                                    className={`text-xs font-black truncate drop-shadow-xs ${
+                                      isEntered ? "text-slate-800" : "text-white"
+                                    }`}
+                                  >
+                                    {ticket.customerName || ticket.eventName || "Ticket Holder"}
+                                  </h4>
+                                </div>
+
+                                <p
+                                  className={`text-[11px] font-bold mt-0.5 ${
+                                    isEntered ? "text-slate-600" : "text-white/90"
+                                  }`}
+                                >
+                                  {ticket.ticketTypeName || "SEATED"}
+                                  {ticket.block ? ` • ${ticket.block}` : ""}
+                                  {ticket.seat ? (
+                                    <>
+                                      {" "}•{" "}
+                                      <span
+                                        className={
+                                          isEntered
+                                            ? "bg-slate-200 px-1 rounded text-slate-800"
+                                            : "bg-white/25 px-1 rounded text-white"
+                                        }
+                                      >
+                                        Seat {ticket.seat}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                </p>
+
+                                <p
+                                  className={`text-[11px] font-extrabold mt-0.5 ${
+                                    isEntered ? "text-slate-700" : "text-white"
+                                  }`}
+                                >
+                                  Ticket ID: {ticket.ticketId || ticket.ticketNumber}
+                                </p>
+
+                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  {isEntered ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                      <i className="fa-solid fa-circle-check text-emerald-600" />
+                                      <span>
+                                        ✓ ENTERED{" "}
+                                        {ticket.scannedAt || ticket.usedAt
+                                          ? `• ${
+                                              ticket.scanTime ||
+                                              new Date(ticket.scannedAt || ticket.usedAt).toLocaleTimeString("en-IN", {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                                hour12: true,
+                                              })
+                                            }`
+                                          : ""}
+                                      </span>
+                                    </span>
+                                  ) : isCancelled ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-300 bg-red-950/60 border border-red-800 px-2 py-0.5 rounded-md">
+                                      <i className="fa-solid fa-ban text-red-400" />
+                                      <span>✕ CANCELLED</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-white/20 backdrop-blur px-2 py-0.5 rounded-md ring-1 ring-white/30">
+                                      <i className="fa-solid fa-circle-check text-emerald-300 text-xs" />
+                                      <span>
+                                        ✓ ACTIVE{" "}
+                                        <span className="font-semibold text-white/75 text-[9px]">
+                                          • Ready for entry
+                                        </span>
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="relative w-16 h-16 p-1 bg-white/95 rounded-xl shadow-md flex-shrink-0 flex items-center justify-center ring-2 ring-white/40">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={ticketQrUrl(ticket, 150)}
+                                alt="QR Code"
+                                className={`w-full h-full object-contain ${
+                                  isEntered ? "grayscale opacity-50" : isCancelled ? "grayscale opacity-40" : ""
+                                }`}
+                              />
+                              {isEntered && (
+                                <span className="absolute inset-0 m-auto w-fit h-fit border-2 border-emerald-600 bg-white/95 text-emerald-700 text-[8px] font-black px-1 rounded -rotate-12 uppercase select-none">
+                                  ENTERED
+                                </span>
+                              )}
+                              {isCancelled && (
+                                <span className="absolute inset-0 m-auto w-fit h-fit border-2 border-red-600 bg-white/95 text-red-600 text-[8px] font-black px-1 rounded -rotate-12 uppercase select-none">
+                                  CANCELLED
+                                </span>
+                              )}
+                            </div>
+                          </Link>
+                        );
+                      })}
                     </div>
-                  </Link>
-                ))}
-              </div>
-            </>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <TicketStatusList list={currentList} tab={tab} />
           )}
@@ -487,7 +671,7 @@ function TicketStatusList({ list, tab }) {
       {list.map((ticket) => (
         <Link
           key={ticketKey(ticket)}
-          href={`/tickets/${ticket.ticketNumber}`}
+          href={`/tickets/${ticket.ticketId || ticket.ticketNumber}`}
           className={`relative rounded-2xl p-3 shadow-md border border-white/20 flex items-center justify-between gap-3 overflow-hidden text-slate-800 bg-gradient-to-br ${statusConfig.gradient} ${tab === "cancelled" ? "opacity-90 text-white" : ""} transition-transform active:scale-[0.98] block`}
         >
           <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10 pointer-events-none" />
@@ -513,7 +697,7 @@ function TicketStatusList({ list, tab }) {
                     tab === "cancelled" ? "text-white" : "text-slate-800"
                   } truncate drop-shadow-xs`}
                 >
-                  {ticket.eventName || "Ticket Holder"}
+                  {ticket.customerName || ticket.eventName || "Ticket Holder"}
                 </h4>
               </div>
               <p
@@ -546,7 +730,7 @@ function TicketStatusList({ list, tab }) {
                   tab === "cancelled" ? "text-white" : "text-slate-700"
                 } mt-0.5 drop-shadow-xs`}
               >
-                Ticket ID: {ticket.ticketNumber}
+                Ticket ID: {ticket.ticketId || ticket.ticketNumber}
                 {ticket.seatCount ? (
                   <span
                     className={

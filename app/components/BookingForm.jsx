@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { subscribeTicketTypes } from "../../lib/ticketTypes";
+import { calculateCustomerCharges } from "../../lib/pricing";
 
 // Pricing cards on the home page use these ids when they call
 // setBooking({ tierId }). Keep them in sync with that list.
@@ -86,9 +87,11 @@ export default function BookingForm({
   );
 
   const hasSeats = seatList.length > 0;
-  const totalAmount = hasSeats
+  const rawTicketAmount = hasSeats
     ? seatPrice * seatList.length
     : tier.price * quantity;
+  const pricing = useMemo(() => calculateCustomerCharges(rawTicketAmount), [rawTicketAmount]);
+  const totalAmount = pricing.finalCustomerAmount;
 
   useEffect(() => {
     const onKey = (e) => {
@@ -115,7 +118,12 @@ export default function BookingForm({
         ? { id: "seated", name: `SEATED (${block})`, price: seatPrice, gate: `Block ${block}` }
         : tier,
       quantity: hasSeats ? seatList.length : quantity,
-      totalAmount,
+      ticketAmount: pricing.ticketAmount,
+      convenienceFee: pricing.convenienceFee,
+      gstOnConvenienceFee: pricing.gstOnConvenienceFee,
+      platformCharge: pricing.platformCharge,
+      totalAmount: pricing.finalCustomerAmount,
+      pricing,
       seats: seatList,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
@@ -315,6 +323,51 @@ export default function BookingForm({
             ))}
           </div>
         </div>
+
+        {/* PRICE SUMMARY */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-purple-700 text-white font-bold text-[11px] flex items-center justify-center">
+              {hasSeats ? "3" : "4"}
+            </span>
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">Payment Breakdown</h4>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-4 space-y-2.5">
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-600 font-medium">
+                <span>Ticket Amount ({hasSeats ? `${seatList.length} seat${seatList.length !== 1 ? "s" : ""}` : `${quantity} ticket${quantity !== 1 ? "s" : ""}`})</span>
+                <span className="font-bold text-slate-900">₹{pricing.ticketAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 font-medium">
+                <span className="flex items-center gap-1">
+                  <span>Convenience Fee</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">(2.70%)</span>
+                </span>
+                <span className="font-semibold text-slate-800">₹{pricing.convenienceFee.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 font-medium">
+                <span className="flex items-center gap-1">
+                  <span>GST on Convenience Fee</span>
+                  <span className="text-[10px] text-slate-400 font-semibold">(18%)</span>
+                </span>
+                <span className="font-semibold text-slate-800">₹{pricing.gstOnConvenienceFee.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600 font-medium">
+                <span>Platform Charge</span>
+                <span className="font-semibold text-slate-800">₹{pricing.platformCharge.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 pt-2.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-black text-slate-900 block leading-tight">Final Customer Amount</span>
+                <span className="text-[9px] text-slate-400 font-semibold">Inclusive of all fees & GST</span>
+              </div>
+              <span className="text-base font-black text-emerald-600">₹{pricing.finalCustomerAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* BOTTOM CTA STRIP */}
@@ -323,7 +376,7 @@ export default function BookingForm({
           onClick={handleProceed}
           className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold text-xs py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
         >
-          <span>Confirm & Book • ₹{totalAmount}</span>
+          <span>Confirm & Book • ₹{totalAmount.toFixed(2)}</span>
           <i className="fa-solid fa-chevron-right text-[10px]" />
         </button>
 

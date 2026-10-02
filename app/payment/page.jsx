@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { saveBooking } from "../../lib/bookings";
 import { markSeatsBooked } from "../../lib/seats";
+import { calculateCustomerCharges } from "../../lib/pricing";
 
 function PaymentContent() {
   const router = useRouter();
@@ -19,7 +20,8 @@ function PaymentContent() {
   const customerPhone = searchParams.get("customerPhone") ?? "";
   const [paymentMethod, setPaymentMethod] = useState("phonepe");
   const seatCount = seats ? seats.split(",").filter(Boolean).length : 0;
-  const totalAmount = seatPrice * seatCount;
+  const rawTicketAmount = seatPrice * seatCount;
+  const pricing = calculateCustomerCharges(rawTicketAmount);
   const seatList = seats ? seats.split(",").filter(Boolean) : [];
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,11 @@ function PaymentContent() {
         tier: { id: "seated", name: "SEATED", price: seatPrice, gate: `Block ${block}` },
         quantity: seatCount,
         paymentMethod,
-        totalAmount,
+        ticketAmount: pricing.ticketAmount,
+        convenienceFee: pricing.convenienceFee,
+        gstOnConvenienceFee: pricing.gstOnConvenienceFee,
+        platformCharge: pricing.platformCharge,
+        totalAmount: pricing.finalCustomerAmount,
         eventId,
         date,
         time,
@@ -71,8 +77,16 @@ function PaymentContent() {
                 <span className="font-bold text-slate-900">{seatList.join(", ")}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Amount</span>
-                <span className="font-bold text-emerald-600">₹{totalAmount}</span>
+                <span className="text-slate-500">Ticket Amount</span>
+                <span className="font-semibold text-slate-800">₹{pricing.ticketAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Convenience & Fees</span>
+                <span className="font-semibold text-slate-800">₹{pricing.totalFees.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-slate-200 pt-1 flex justify-between text-xs">
+                <span className="font-bold text-slate-700">Final Paid</span>
+                <span className="font-black text-emerald-600">₹{pricing.finalCustomerAmount.toFixed(2)}</span>
               </div>
             </div>
             <button
@@ -124,9 +138,39 @@ function PaymentContent() {
             <span className="text-slate-500">Quantity</span>
             <span className="font-bold text-slate-900">{seatCount}</span>
           </div>
-          <div className="border-t border-slate-100 pt-2 flex items-center justify-between">
-            <span className="text-xs font-black text-slate-900">Total</span>
-            <span className="text-lg font-black text-emerald-600">₹{totalAmount}</span>
+
+          {/* Itemized Fee Breakdown */}
+          <div className="border-t border-slate-100 pt-3 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600 font-semibold">Ticket Amount</span>
+              <span className="font-bold text-slate-900">₹{pricing.ticketAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600">
+              <span className="flex items-center gap-1">
+                <span>Convenience Fee</span>
+                <span className="text-[10px] text-slate-400 font-medium">(2.70%)</span>
+              </span>
+              <span className="font-semibold text-slate-700">₹{pricing.convenienceFee.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600">
+              <span className="flex items-center gap-1">
+                <span>GST on Convenience Fee</span>
+                <span className="text-[10px] text-slate-400 font-medium">(18%)</span>
+              </span>
+              <span className="font-semibold text-slate-700">₹{pricing.gstOnConvenienceFee.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600">
+              <span>Platform Charge</span>
+              <span className="font-semibold text-slate-700">₹{pricing.platformCharge.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-2.5 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-black text-slate-900 block leading-tight">Final Customer Amount</span>
+              <span className="text-[9px] text-slate-400 font-semibold">All fees & taxes included</span>
+            </div>
+            <span className="text-lg font-black text-emerald-600">₹{pricing.finalCustomerAmount.toFixed(2)}</span>
           </div>
         </div>
 
@@ -258,7 +302,7 @@ function PaymentContent() {
           ) : (
             <>
               <i className="fa-solid fa-check" />
-              <span>Proceed To Payment • ₹{totalAmount}</span>
+              <span>Proceed To Payment • ₹{pricing.finalCustomerAmount.toFixed(2)}</span>
             </>
           )}
         </button>

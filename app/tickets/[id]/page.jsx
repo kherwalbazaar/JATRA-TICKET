@@ -8,6 +8,8 @@ import {
   subscribeBookingByTicketNumber,
   subscribeTicketEntries,
   getTicketStatus,
+  fetchTicketById,
+  subscribeTicketById,
 } from "../../../lib/bookings";
 import { fetchEvents } from "../../../lib/events";
 import { ticketQrUrl } from "../../../lib/ticket-qr";
@@ -59,13 +61,13 @@ export default function TicketDetailPage({ params }) {
       const effectiveTime = evt?.time || data.time;
       const effectiveEventName = evt?.eventTitle || evt?.name || evt?.title || data.eventName;
 
-      let seat = null;
-      let seatIndex = null;
-      let seatCount = 0;
+      let seat = data.seat || null;
+      let seatIndex = data.seatIndex || null;
+      let seatCount = data.totalTickets || data.seatCount || 0;
 
       const seats = Array.isArray(data.seats) ? data.seats.filter(Boolean) : [];
       const m = String(id).match(/^(.+)-(\d+)$/);
-      if (m) {
+      if (m && !seat) {
         const idx = Number(m[2]) - 1;
         if (seats[idx]) {
           seat = seats[idx];
@@ -75,11 +77,11 @@ export default function TicketDetailPage({ params }) {
           seatIndex = idx + 1;
           seatCount = Number(data.quantity) || 1;
         }
-      } else if (seats.length === 1) {
+      } else if (!seat && seats.length === 1) {
         seat = seats[0];
         seatIndex = 1;
         seatCount = 1;
-      } else if (seats.length > 1) {
+      } else if (!seat && seats.length > 1) {
         seat = seats[0];
         seatIndex = 1;
         seatCount = seats.length;
@@ -93,9 +95,11 @@ export default function TicketDetailPage({ params }) {
         seat,
         seatIndex,
         seatCount,
-        serial: String(id),
-        ticketNumber: String(id),
-        baseTicketNumber: data.ticketNumber || baseNumber,
+        serial: data.serialNumber || String(id),
+        ticketId: data.ticketId || String(id),
+        ticketNumber: data.ticketId || String(id),
+        bookingId: data.bookingId || data.ticketNumber || baseNumber,
+        baseTicketNumber: data.bookingId || data.ticketNumber || baseNumber,
       };
 
       const parentBooking = {
@@ -113,21 +117,21 @@ export default function TicketDetailPage({ params }) {
     }
 
     try {
-      unsubBooking = subscribeBookingByTicketNumber(baseNumber, (data) => {
-        if (!data) {
-          fetchBookingByTicketNumber(id).then((fetched) => {
-            latestBookingData = fetched;
+      unsubBooking = subscribeTicketById(id, (tData) => {
+        if (tData) {
+          latestBookingData = tData;
+          updateTicketState();
+        } else {
+          fetchBookingByTicketNumber(baseNumber).then((bData) => {
+            latestBookingData = bData;
             updateTicketState();
           });
-        } else {
-          latestBookingData = data;
-          updateTicketState();
         }
       });
     } catch (err) {
-      console.warn("Booking subscription failed, fallback to fetch:", err);
-      fetchBookingByTicketNumber(baseNumber).then((fetched) => {
-        latestBookingData = fetched;
+      console.warn("Ticket subscription failed, fallback to booking:", err);
+      unsubBooking = subscribeBookingByTicketNumber(baseNumber, (data) => {
+        latestBookingData = data;
         updateTicketState();
       });
     }
@@ -205,7 +209,7 @@ export default function TicketDetailPage({ params }) {
         {status === "used" ? (
           <div className="bg-emerald-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
             <i className="fa-solid fa-circle-check text-sm" />
-            <span>Entry Completed • Ticket Used</span>
+            <span>✓ ENTRY USED • This ticket has already been used</span>
           </div>
         ) : status === "expired" ? (
           <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
@@ -215,12 +219,12 @@ export default function TicketDetailPage({ params }) {
         ) : status === "cancelled" ? (
           <div className="bg-rose-600 text-white px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
             <i className="fa-solid fa-ban text-sm" />
-            <span>Ticket Cancelled</span>
+            <span>✕ CANCELLED TICKET • This ticket is not valid for entry</span>
           </div>
         ) : (
-          <div className="bg-amber-400/90 text-slate-950 px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
-            <i className="fa-regular fa-clock text-sm" />
-            <span>Show this ticket at the entry gate</span>
+          <div className="bg-emerald-500 text-slate-950 px-4 py-2 flex items-center justify-center gap-2 text-xs font-extrabold tracking-wide shadow-inner">
+            <i className="fa-solid fa-circle-check text-sm" />
+            <span>✓ ACTIVE • Ready for entry • Show at gate</span>
           </div>
         )}
 
@@ -253,15 +257,22 @@ export default function TicketDetailPage({ params }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between bg-white px-3.5 py-2 rounded-xl border border-slate-100 text-xs font-extrabold text-slate-700">
-            <span className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">BOOKING ID</span>
-            <button
-              onClick={() => copy(ticket.ticketNumber)}
-              className="flex items-center gap-1.5 text-indigo-900 hover:text-indigo-600"
-            >
-              <span>{copied ? "Copied" : ticket.ticketNumber}</span>
-              <i className={`${copied ? "fa-solid fa-check text-emerald-600" : "fa-regular fa-copy"} text-xs`} />
-            </button>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 text-xs font-extrabold text-slate-700 shadow-2xs">
+              <span className="text-slate-400 font-black uppercase tracking-wider text-[9px]">BOOKING ID</span>
+              <span className="font-mono font-black text-slate-900">{ticket.bookingId || ticket.baseTicketNumber}</span>
+            </div>
+            <div className="flex items-center justify-between bg-indigo-50/60 px-3.5 py-2.5 rounded-xl border border-indigo-200 text-xs font-extrabold text-indigo-950 shadow-2xs">
+              <span className="text-indigo-600 font-black uppercase tracking-wider text-[9px]">TICKET ID</span>
+              <button
+                onClick={() => copy(ticket.ticketId || ticket.ticketNumber)}
+                className="flex items-center gap-1 text-indigo-900 hover:text-indigo-600 font-mono font-black"
+                title="Copy Ticket ID"
+              >
+                <span>{copied ? "Copied" : (ticket.ticketId || ticket.ticketNumber)}</span>
+                <i className={`${copied ? "fa-solid fa-check text-emerald-600" : "fa-regular fa-copy"} text-[10px]`} />
+              </button>
+            </div>
           </div>
 
           <div className="relative bg-white rounded-3xl p-5 border-2 border-indigo-100 shadow-md text-center overflow-hidden">
@@ -326,7 +337,7 @@ export default function TicketDetailPage({ params }) {
                 Serial / Security Number
               </span>
               <p className="text-lg font-mono font-black tracking-widest text-indigo-950 select-all">
-                {ticket.serial || ticket.ticketNumber}
+                {ticket.ticketId || ticket.serial || ticket.ticketNumber}
               </p>
             </div>
 
@@ -334,12 +345,13 @@ export default function TicketDetailPage({ params }) {
               {status === "used" ? (
                 <>
                   <div className="flex items-center gap-1.5 text-red-600 font-extrabold">
-                    <i className="fa-solid fa-circle-check" />
-                    <span>Entry Completed — Already Scanned</span>
+                    <i className="fa-solid fa-circle-check text-emerald-600" />
+                    <span>✓ ENTRY USED — This ticket has already been used</span>
                   </div>
-                  {ticket.usedAt && (
+                  {(ticket.scannedAt || ticket.usedAt) && (
                     <span className="text-[10px] text-slate-400 font-medium">
-                      Scanned at {new Date(ticket.usedAt).toLocaleString("en-IN")}
+                      Scanned at {new Date(ticket.scannedAt || ticket.usedAt).toLocaleString("en-IN")}
+                      {ticket.scannedBy ? ` by ${ticket.scannedBy}` : ""}
                     </span>
                   )}
                 </>
@@ -351,12 +363,12 @@ export default function TicketDetailPage({ params }) {
               ) : status === "cancelled" ? (
                 <div className="flex items-center gap-1.5 text-rose-600 font-extrabold">
                   <i className="fa-solid fa-ban" />
-                  <span>Booking Cancelled</span>
+                  <span>Ticket Cancelled</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 text-emerald-600">
                   <i className="fa-solid fa-circle-check" />
-                  <span>Valid for single entry</span>
+                  <span>✓ Valid for single entry</span>
                 </div>
               )}
             </div>
@@ -422,8 +434,36 @@ export default function TicketDetailPage({ params }) {
                 <span className="text-slate-500 font-medium">Quantity</span>
                 <span className="font-extrabold text-slate-900">{ticket.quantity}</span>
               </div>
+              {ticket.convenienceFee !== undefined || ticket.ticketAmount !== undefined ? (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Ticket Amount</span>
+                    <span className="font-bold text-slate-900">
+                      ₹{Number(ticket.ticketAmount ?? ticket.baseAmount ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Convenience Fee (2.7%)</span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{Number(ticket.convenienceFee || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">GST on Fee (18%)</span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{Number(ticket.gstOnConvenienceFee || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Platform Charge</span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{Number(ticket.platformCharge || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </>
+              ) : null}
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Amount Paid</span>
+                <span className="text-slate-500 font-medium">Total Paid</span>
                 <span className="font-extrabold text-emerald-600">₹{ticket.amount}</span>
               </div>
               <div className="flex justify-between items-center">
