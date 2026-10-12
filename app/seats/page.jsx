@@ -1,13 +1,21 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
-import { fetchSeats, BLOCK_GROUPS } from "../../lib/seats";
+import UserSeatGrid from "../components/UserSeatGrid";
+import { subscribeSeats, BLOCK_GROUPS, holdSeat, releaseSeatHold, getHoldSessionId, isHoldFresh } from "../../lib/seats";
 import { fetchEvents } from "../../lib/events";
+import {
+  subscribeBlockCategories,
+  isBlockOnline,
+  blockDisplayName,
+  blockChannelText,
+} from "../../lib/blockCategories";
 
 const EVENT_ID_KEY = "jatra:eventId";
+const HOLD_KEY = "jatra:seatHold";
 
 function SeatSelectionContent() {
   const router = useRouter();
@@ -25,7 +33,29 @@ function SeatSelectionContent() {
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
   const [eventReady, setEventReady] = useState(!!eventIdParam);
-  const loadingRef = useRef(false);
+  const [blockCats, setBlockCats] = useState([]);
+
+  // Live block-category config from Firestore (admin/counter/online rules + names)
+  useEffect(() => subscribeBlockCategories(setBlockCats), []);
+
+  const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
+  const blockLabel = (id) => blockDisplayName(blockCats, id);
+  // Diagram sub-label: "Counter" (amber) when counter selling, "Online" (sky) otherwise.
+  const subLabel = (id) => blockChannelText(blockCats, id);
+  const channelColor = (id) => (isOnlineBlock(blockCats, id) ? "#dcfce7" : "#fffbeb");
+  // Diagram block colours: fully sold out (booked or fresh holds) → red,
+  // Counter → yellow, Online → green.
+  const blockFill = (id) => {
+    const list = seatsByBlock[id] || [];
+    const seatTaken = (s) => {
+      const st = String(s.status || "").toLowerCase();
+      if (st === "booked" || st === "sold") return true;
+      if (st === "reserved" && isHoldFresh(s)) return true;
+      return false;
+    };
+    if (list.length && list.every(seatTaken)) return "#ef4444";
+    return isOnlineBlock(id) ? "#16a34a" : "#d97706";
+  };
 
   const findSeatInBlock = (blockId, key) => {
     const list = seatsByBlock[blockId] || [];
@@ -37,6 +67,8 @@ function SeatSelectionContent() {
         `${s.rowId}${s.seatNumber}` === key
     );
   };
+
+  const findFsSeat = (blockId, key) => findSeatInBlock(blockId, key);
 
   const seatPrice =
     (seatsByBlock[activeBlock] || []).find((s) => s.price != null)?.price ?? 0;
@@ -52,21 +84,21 @@ function SeatSelectionContent() {
   };
   const selectedRows = getSelectedRowLetters();
 
-  const loadSeats = async (silent = false) => {
+  // Live seat subscription — any change in the admin panel (new rows,
+  // bookings, cancellations) streams straight into this grid without a refresh.
+  useEffect(() => {
     if (!eventId) return;
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    if (!silent) setLoading(true);
-    try {
-      const seats = await fetchSeats(eventId);
+    setLoading(true);
+    let firstSnapshot = true;
+    const unsubscribe = subscribeSeats(eventId, (seats) => {
       setSeatsByBlock(seats);
-    } catch (error) {
-      console.error("Error loading seats:", error);
-    } finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  };
+      if (firstSnapshot) {
+        firstSnapshot = false;
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [eventId]);
 
   // Resolve event and event details
   useEffect(() => {
@@ -113,18 +145,13 @@ function SeatSelectionContent() {
     };
   }, [eventIdParam, eventId]);
 
-  // Fetch seats from Firestore whenever the event changes
-  useEffect(() => {
-    loadSeats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId]);
-
   // No event could be resolved → stop the loading state
   useEffect(() => {
     if (eventReady && !eventId) setLoading(false);
   }, [eventReady, eventId]);
 
   const chooseEvent = (opt) => {
+    selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
     setEventId(opt.id);
     setEventName(opt.name);
     setSelected([]);
@@ -146,23 +173,102 @@ function SeatSelectionContent() {
 
   const toggleSeat = (key) => {
     const fs = findFsSeat(activeBlock, key);
-    if (fs && fs.status === "booked") return;
+    const st = String(fs?.status || "").toLowerCase();
+    const sid = getHoldSessionId();
+    if (fs && (st === "booked" || st === "locked")) return;
+    // Freshly reserved by another session (someone else mid-checkout) → blocked.
+    if (fs && st === "reserved" && fs.reservedBy !== sid && isHoldFresh(fs)) return;
+    const removing = selected.includes(key);
+    if (!removing && selected.length >= 10) return;
     setSelected((prev) => {
       if (prev.includes(key)) return prev.filter((k) => k !== key);
       if (prev.length >= 10) return prev;
       return [...prev, key];
     });
+    if (removing) {
+      releaseSeatHold(eventId, activeBlock, key);
+    } else {
+      holdSeat(eventId, activeBlock, key);
+    }
   };
 
   const handleBlockSelect = (blockId) => {
+    // Blocks flipped to Counter selling in the admin panel can't be booked online.
+    if (!isOnlineBlock(blockId)) return;
+    selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
     setActiveBlock(blockId);
     setSelected([]);
     setShowSeatPanel(true);
     setClickedFromMap(true);
     setShowBlockSelector(true);
-    // refresh from Firestore so seats created from admin show up immediately
-    loadSeats(true);
   };
+
+  // If the admin flips the selected block to Counter-only, drop the selection.
+  useEffect(() => {
+    if (activeBlock && blockCats.length && !isOnlineBlock(activeBlock)) {
+      selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
+      setActiveBlock(null);
+      setSelected([]);
+      setShowSeatPanel(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockCats]);
+
+  // Persist the in-progress hold so navigating back to this page restores the
+  // selection (seats stay reserved for this session until paid or expired).
+  useEffect(() => {
+    if (!eventReady || !eventId) return;
+    try {
+      if (selected.length && activeBlock) {
+        window.sessionStorage.setItem(
+          HOLD_KEY,
+          JSON.stringify({ eventId, block: activeBlock, keys: selected })
+        );
+      } else {
+        window.sessionStorage.removeItem(HOLD_KEY);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }, [selected, activeBlock, eventId, eventReady]);
+
+  useEffect(() => {
+    if (!eventReady || !eventId) return;
+    try {
+      const raw = window.sessionStorage.getItem(HOLD_KEY);
+      if (!raw) return;
+      const h = JSON.parse(raw);
+      if (h?.eventId === eventId && h?.block && Array.isArray(h.keys) && h.keys.length) {
+        setActiveBlock(h.block);
+        setSelected(h.keys);
+        setShowSeatPanel(true);
+        setShowBlockSelector(true);
+        setClickedFromMap(true);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventReady]);
+
+  // Give the holds back when the tab/page actually closes (abandoned checkout).
+  useEffect(() => {
+    const releaseAll = () => {
+      try {
+        const raw = window.sessionStorage.getItem(HOLD_KEY);
+        if (!raw) return;
+        const h = JSON.parse(raw);
+        if (h?.eventId && h?.block && Array.isArray(h.keys)) {
+          h.keys.forEach((k) => releaseSeatHold(h.eventId, h.block, k));
+        }
+        window.sessionStorage.removeItem(HOLD_KEY);
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    window.addEventListener("pagehide", releaseAll);
+    return () => window.removeEventListener("pagehide", releaseAll);
+  }, []);
 
   const getAvailableBlocks = () => {
     const fsBlocks = Object.keys(seatsByBlock)
@@ -187,6 +293,11 @@ function SeatSelectionContent() {
         !all.leftSide.includes(b)
     );
     if (extra.length) all.frontCenter = [...all.frontCenter, ...extra];
+
+    // Online app: hide blocks that are counter-only in the admin panel.
+    all.rightSide = all.rightSide.filter(isOnlineBlock);
+    all.frontCenter = all.frontCenter.filter(isOnlineBlock);
+    all.leftSide = all.leftSide.filter(isOnlineBlock);
 
     if (!activeBlock) return all;
 
@@ -231,22 +342,24 @@ function SeatSelectionContent() {
       }));
   };
 
-  const findFsSeat = (blockId, key) => findSeatInBlock(blockId, key);
-
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
       <style jsx>{`
         .block-path:hover {
-          fill: #0284c7 !important;
+          filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.95));
         }
         .block-path text {
           fill: #ffffff !important;
           stroke: none !important;
         }
         .block-active {
-          fill: #0369a1 !important;
           stroke: #38bdf8 !important;
-          stroke-width: 2.5 !important;
+          stroke-width: 3 !important;
+          filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9));
+        }
+        .block-off {
+          opacity: 0.35;
+          pointer-events: none;
         }
         @keyframes pulse-glow {
           0%, 100% {
@@ -295,6 +408,11 @@ function SeatSelectionContent() {
             <p className="text-center text-slate-400 text-xs mb-4">
               Click on any block (especially <span className="text-sky-300 font-semibold">Block B1</span>) to view and book seats
             </p>
+            <div className="flex items-center justify-center gap-3 mb-3 text-[10px] font-bold text-slate-400">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#d97706] inline-block" /> Counter</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#16a34a] inline-block" /> Online</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ef4444] inline-block" /> All Booked</span>
+            </div>
             
             <svg
               viewBox="0 0 1000 900"
@@ -354,154 +472,136 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK C2 (Top Left) */}
-              <g onClick={() => handleBlockSelect('C2')} className={`block-path ${activeBlock === 'C2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C2')} className={`block-path ${isOnlineBlock('C2') ? '' : 'block-off '}${activeBlock === 'C2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <rect
                   x="40"
                   y="40"
                   width="310"
                   height="190"
-                  fill={activeBlock === 'C2' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('C2')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                   rx="6"
                 />
-                <text x="195" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  C2
-                </text>
-                <text x="195" y="165" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Left Side
+                <text x="195" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C2')}</text>
+                <text x="195" y="165" textAnchor="middle" fill={channelColor('C2')} fontSize="14" pointerEvents="none">
+                  {subLabel('C2')}
                 </text>
               </g>
 
               {/* BLOCK A2 (Top Right) */}
-              <g onClick={() => handleBlockSelect('A2')} className={`block-path ${activeBlock === 'A2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A2')} className={`block-path ${isOnlineBlock('A2') ? '' : 'block-off '}${activeBlock === 'A2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <rect
                   x="650"
                   y="40"
                   width="310"
                   height="190"
-                  fill={activeBlock === 'A2' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('A2')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                   rx="6"
                 />
-                <text x="805" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  A2
-                </text>
-                <text x="805" y="165" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Right Side
+                <text x="805" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A2')}</text>
+                <text x="805" y="165" textAnchor="middle" fill={channelColor('A2')} fontSize="14" pointerEvents="none">
+                  {subLabel('A2')}
                 </text>
               </g>
 
               {/* BLOCK C3 (Outer Left) */}
-              <g onClick={() => handleBlockSelect('C3')} className={`block-path ${activeBlock === 'C3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C3')} className={`block-path ${isOnlineBlock('C3') ? '' : 'block-off '}${activeBlock === 'C3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="40,250 170,250 170,680 40,840"
-                  fill={activeBlock === 'C3' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('C3')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="105" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  C3
-                </text>
-                <text x="105" y="550" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Left Side
+                <text x="105" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C3')}</text>
+                <text x="105" y="550" textAnchor="middle" fill={channelColor('C3')} fontSize="14" pointerEvents="none">
+                  {subLabel('C3')}
                 </text>
               </g>
 
               {/* BLOCK C1 (Inner Left) */}
-              <g onClick={() => handleBlockSelect('C1')} className={`block-path ${activeBlock === 'C1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C1')} className={`block-path ${isOnlineBlock('C1') ? '' : 'block-off '}${activeBlock === 'C1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="190,250 350,250 350,420 190,660"
-                  fill={activeBlock === 'C1' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('C1')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="270" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  C1
-                </text>
-                <text x="270" y="470" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Left Side
+                <text x="270" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C1')}</text>
+                <text x="270" y="470" textAnchor="middle" fill={channelColor('C1')} fontSize="14" pointerEvents="none">
+                  {subLabel('C1')}
                 </text>
               </g>
 
               {/* BLOCK A1 (Inner Right) */}
-              <g onClick={() => handleBlockSelect('A1')} className={`block-path ${activeBlock === 'A1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A1')} className={`block-path ${isOnlineBlock('A1') ? '' : 'block-off '}${activeBlock === 'A1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="650,250 810,250 810,660 650,420"
-                  fill={activeBlock === 'A1' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('A1')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="730" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  A1
-                </text>
-                <text x="730" y="470" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Right Side
+                <text x="730" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A1')}</text>
+                <text x="730" y="470" textAnchor="middle" fill={channelColor('A1')} fontSize="14" pointerEvents="none">
+                  {subLabel('A1')}
                 </text>
               </g>
 
               {/* BLOCK A3 (Outer Right) */}
-              <g onClick={() => handleBlockSelect('A3')} className={`block-path ${activeBlock === 'A3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A3')} className={`block-path ${isOnlineBlock('A3') ? '' : 'block-off '}${activeBlock === 'A3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="830,250 960,250 960,840 830,680"
-                  fill={activeBlock === 'A3' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('A3')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="895" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  A3
-                </text>
-                <text x="895" y="550" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Right Side
+                <text x="895" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A3')}</text>
+                <text x="895" y="550" textAnchor="middle" fill={channelColor('A3')} fontSize="14" pointerEvents="none">
+                  {subLabel('A3')}
                 </text>
               </g>
 
               {/* BLOCK B1 (Main Center Front Trapezoid) */}
-              <g onClick={() => handleBlockSelect('B1')} className={`block-path ${activeBlock === 'B1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B1')} className={`block-path ${isOnlineBlock('B1') ? '' : 'block-off '}${activeBlock === 'B1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="370,420 630,420 780,660 220,660"
-                  fill={activeBlock === 'B1' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('B1')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="500" y="540" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  B1
-                </text>
-                <text x="500" y="575" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Front Center
+                <text x="500" y="540" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B1')}</text>
+                <text x="500" y="575" textAnchor="middle" fill={channelColor('B1')} fontSize="14" pointerEvents="none">
+                  {subLabel('B1')}
                 </text>
               </g>
 
               {/* BLOCK B2 (Bottom Left) */}
-              <g onClick={() => handleBlockSelect('B2')} className={`block-path ${activeBlock === 'B2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B2')} className={`block-path ${isOnlineBlock('B2') ? '' : 'block-off '}${activeBlock === 'B2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="200,680 480,680 480,860 60,860"
-                  fill={activeBlock === 'B2' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('B2')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="290" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  B2
-                </text>
-                <text x="290" y="800" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Front Center
+                <text x="290" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B2')}</text>
+                <text x="290" y="800" textAnchor="middle" fill={channelColor('B2')} fontSize="14" pointerEvents="none">
+                  {subLabel('B2')}
                 </text>
               </g>
 
               {/* BLOCK B3 (Bottom Right) */}
-              <g onClick={() => handleBlockSelect('B3')} className={`block-path ${activeBlock === 'B3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B3')} className={`block-path ${isOnlineBlock('B3') ? '' : 'block-off '}${activeBlock === 'B3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="520,680 800,680 940,860 520,860"
-                  fill={activeBlock === 'B3' ? '#0369a1' : '#1e293b'}
+                  fill={blockFill('B3')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
                 />
-                <text x="710" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">
-                  B3
-                </text>
-                <text x="710" y="800" textAnchor="middle" fill="#94a3b8" fontSize="14" pointerEvents="none">
-                  Front Center
+                <text x="710" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B3')}</text>
+                <text x="710" y="800" textAnchor="middle" fill={channelColor('B3')} fontSize="14" pointerEvents="none">
+                  {subLabel('B3')}
                 </text>
               </g>
             </svg>
@@ -615,72 +715,20 @@ function SeatSelectionContent() {
             )}
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center justify-center gap-4 text-[10px] font-bold text-slate-600">
-            <span className="flex items-center gap-0.5.5">
-              <span className="w-3 h-3 rounded-[4px] bg-green-400 border-2 border-slate-900 inline-block" /> Available
-            </span>
-            <span className="flex items-center gap-0.5.5">
-              <span className="w-3 h-3 rounded-[4px] bg-amber-400 border-2 border-slate-900 inline-block" /> Selected
-            </span>
-            <span className="flex items-center gap-0.5.5">
-              <span className="w-3 h-3 rounded-[4px] bg-gray-300 border-2 border-slate-900 inline-block" /> Booked
-            </span>
-          </div>
-
-          {/* Seating Area */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
-            {loading || !eventReady ? (
-              <div className="text-center py-8">
-                <p className="text-sm text-slate-500 font-medium">Loading seats...</p>
-              </div>
-            ) : activeBlock && getFsRows(activeBlock) ? (
-              (() => {
-                const fsRows = getFsRows(activeBlock);
-                return fsRows.map((row) => (
-                    <div key={row.id} className="flex items-center gap-0.5">
-                      <span className="w-6 text-right pr-1 text-[10px] font-black text-slate-400">
-                        {row.id}
-                      </span>
-                      <div className="flex-1 overflow-x-hidden">
-                        <div className="flex w-max mx-auto gap-0.5">
-                          {row.seats.map((seat) => {
-                            const key =
-                              seat.id || `${seat.rowId}-${seat.seatNumber}`;
-                            const isBooked = seat.status === "booked";
-                            return (
-                              <div key={key} className="flex flex-col items-center shrink-0">
-                                <ChairSvg
-                                  isBooked={isBooked}
-                                  isSelected={selected.includes(key)}
-                                  onClick={() => toggleSeat(key)}
-                                  label={seat.seatNumber}
-                                  sizeClass="w-4 h-5"
-                                  disabled={!clickedFromMap}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ));
-              })()
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-sm text-slate-500 font-medium">
-                  {!eventId
-                    ? "No event selected — seats cannot be loaded"
-                    : activeBlock
-                    ? `No seats found in Firestore for block ${activeBlock}`
-                    : "Click on a block to view seats"}
-                </p>
-              </div>
-            )}
-          </div>
+          {/* UserSeatGrid: Reactive real-time seat availability map */}
+          <UserSeatGrid
+            showId={eventId}
+            eventId={eventId}
+            activeBlock={activeBlock}
+            selected={selected}
+            onToggleSeat={(seatKey) => toggleSeat(seatKey)}
+            disabled={!clickedFromMap}
+            seatsByBlock={seatsByBlock}
+            onSeatsUpdate={setSeatsByBlock}
+          />
 
           <p className="text-center text-[11px] text-slate-400 font-medium">
-            Tap a seat to select. Block: <span className="font-black text-amber-600">{activeBlock}</span> • Selected: <span className="font-black text-amber-600">{selected.length}</span>
+            Tap a seat to select. Block: <span className="font-black text-amber-600">{activeBlock || "-"}</span> • Selected: <span className="font-black text-amber-600">{selected.length}</span>
           </p>
         </div>
 
@@ -743,6 +791,8 @@ function SeatSelectionContent() {
     </div>
   );
 }
+
+export { default as UserSeatGrid } from "../components/UserSeatGrid";
 
 export default function SeatSelectionPage() {
   return (

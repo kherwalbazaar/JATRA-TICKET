@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "../components/Header";
 import BannerImage from "../components/BannerImage";
+import { subscribeEvents } from "../../lib/events";
 
 const TABS = [
   { key: "today", label: "Today's" },
@@ -11,7 +12,7 @@ const TABS = [
   { key: "past", label: "Past" },
 ];
 
-const allShows = [
+const fallbackShows = [
   {
     key: "1",
     name: "ADIM OWAR JARPA OPERA",
@@ -52,8 +53,51 @@ const allShows = [
 
 export default function TodaysShowPage() {
   const [tab, setTab] = useState("today");
+  const [liveShows, setLiveShows] = useState([]);
 
-  const filteredShows = allShows.filter((s) => s.type === tab);
+  useEffect(() => {
+    try {
+      const unsub = subscribeEvents((list) => {
+        if (Array.isArray(list) && list.length > 0) {
+          const todayDate = new Date();
+          todayDate.setHours(0, 0, 0, 0);
+          const tomorrowDate = new Date(todayDate);
+          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+
+          const mapped = list.map((ev) => {
+            const evDate = new Date(`${ev.month || "OCT"} ${ev.day || "22"}, ${ev.year || "2026"}`);
+            evDate.setHours(0, 0, 0, 0);
+
+            let evType = "upcoming";
+            if (!isNaN(evDate.getTime())) {
+              if (evDate.getTime() === todayDate.getTime()) evType = "today";
+              else if (evDate < todayDate) evType = "past";
+            }
+
+            return {
+              key: ev.key || ev.id,
+              name: ev.name || ev.eventTitle || "Jatra Show",
+              partyName: ev.partyName || ev.organizationName || "Adim Opera Group",
+              month: ev.month || "OCT",
+              day: ev.day || "22",
+              year: ev.year || "2026",
+              location: ev.location || "Mayurbhanj, Odisha",
+              banner: ev.banner || "/jarpa.png",
+              time: ev.time || ev.startTime || "10:00 PM",
+              type: evType,
+            };
+          });
+          setLiveShows(mapped);
+        }
+      });
+      return () => unsub();
+    } catch (e) {
+      /* ignore */
+    }
+  }, []);
+
+  const shows = liveShows.length > 0 ? liveShows : fallbackShows;
+  const filteredShows = shows.filter((s) => s.type === tab);
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">

@@ -2,19 +2,77 @@
 
 import React from "react";
 
-export default function ChairSvg({ isBooked = false, isSelected = false, onClick, label, sizeClass = "w-4 h-5", disabled = false }) {
-  const stroke = disabled ? "#E5E7EB" : isBooked ? "#9CA3AF" : isSelected ? "#B45309" : "#065F46";
-  const fill = disabled ? "#F3F4F6" : isBooked ? "#D1D5DB" : isSelected ? "#FBBF24" : "#4ADE80";
-  const cushionFill = disabled ? "#E5E7EB" : isBooked ? "#9CA3AF" : isSelected ? "#F59E0B" : "#22C55E";
-  const textColor = disabled ? "#9CA3AF" : isBooked ? "#6B7280" : isSelected ? "#7C2D12" : "#065F46";
-  
+export default function ChairSvg({
+  isBooked = false,
+  isLocked = false,
+  isReserved = false,
+  isSelected = false,
+  onClick,
+  label,
+  sizeClass = "w-4 h-5",
+  disabled = false,
+}) {
+  const isUnavailable = isBooked || isLocked || isReserved;
+  const stroke = disabled
+    ? "#E5E7EB"
+    : isBooked
+    ? "#9CA3AF"
+    : isReserved
+    ? "#A16207"
+    : isLocked
+    ? "#D97706"
+    : isSelected
+    ? "#B45309"
+    : "#065F46";
+  const fill = disabled
+    ? "#F3F4F6"
+    : isBooked
+    ? "#D1D5DB"
+    : isReserved
+    ? "#FDE047"
+    : isLocked
+    ? "#FDE68A"
+    : isSelected
+    ? "#FBBF24"
+    : "#4ADE80";
+  const cushionFill = disabled
+    ? "#E5E7EB"
+    : isBooked
+    ? "#9CA3AF"
+    : isReserved
+    ? "#EAB308"
+    : isLocked
+    ? "#F59E0B"
+    : isSelected
+    ? "#F59E0B"
+    : "#22C55E";
+  const textColor = disabled
+    ? "#9CA3AF"
+    : isBooked
+    ? "#6B7280"
+    : isReserved
+    ? "#713F12"
+    : isLocked
+    ? "#78350F"
+    : isSelected
+    ? "#7C2D12"
+    : "#065F46";
+
   return (
     <svg
       viewBox="0 0 100 120"
       className={`${sizeClass} transition-all duration-200 select-none ${
-        disabled ? "cursor-not-allowed opacity-50" : isBooked ? "cursor-not-allowed opacity-80" : "cursor-pointer active:scale-95"
+        disabled
+          ? "cursor-not-allowed opacity-50"
+          : isBooked
+          ? "cursor-not-allowed opacity-80"
+          : isReserved
+          ? "cursor-not-allowed opacity-85"
+          : isLocked
+          ? "cursor-not-allowed opacity-85"
+          : "cursor-pointer active:scale-95"
       }`}
-      onClick={!disabled && !isBooked ? onClick : undefined}
+      onClick={!disabled && !isUnavailable ? onClick : undefined}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >

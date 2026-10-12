@@ -4,6 +4,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { subscribeTicketTypes } from "../../lib/ticketTypes";
 import { calculateCustomerCharges } from "../../lib/pricing";
+import {
+  subscribeBlockCategories,
+  blockDisplayName,
+  isBlockOnline,
+} from "../../lib/blockCategories";
 
 // Pricing cards on the home page use these ids when they call
 // setBooking({ tierId }). Keep them in sync with that list.
@@ -58,6 +63,13 @@ export default function BookingForm({
   const [customerPhone, setCustomerPhone] = useState("");
   const [error, setError] = useState("");
   const [remoteTiers, setRemoteTiers] = useState([]);
+  const [blockCats, setBlockCats] = useState([]);
+
+  // Block rules from the admin panel (counter-only blocks can't sell online).
+  useEffect(() => subscribeBlockCategories(setBlockCats), []);
+
+  const blockLabel = block ? blockDisplayName(blockCats, block) : "";
+  const blockIsCounterOnly = block ? !isBlockOnline(blockCats, block) : false;
 
   // Prices/tier ids come from the ADMIN panel's `ticketTypes` collection so
   // the amount charged here is always the amount the admin configured.
@@ -102,6 +114,10 @@ export default function BookingForm({
   }, [onClose]);
 
   const handleProceed = () => {
+    if (blockIsCounterOnly) {
+      setError(`Block ${blockLabel || block} is only sold at the counter. Please choose another block.`);
+      return;
+    }
     if (!customerName.trim()) {
       setError("Please enter your full name");
       return;
@@ -115,7 +131,7 @@ export default function BookingForm({
     onProceed?.({
       paymentMethod,
       tier: hasSeats
-        ? { id: "seated", name: `SEATED (${block})`, price: seatPrice, gate: `Block ${block}` }
+        ? { id: "seated", name: `SEATED (${blockLabel || block})`, price: seatPrice, gate: `Block ${blockLabel || block}` }
         : tier,
       quantity: hasSeats ? seatList.length : quantity,
       ticketAmount: pricing.ticketAmount,

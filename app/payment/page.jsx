@@ -1,10 +1,15 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { saveBooking } from "../../lib/bookings";
-import { markSeatsBooked } from "../../lib/seats";
+import { reserveSeatsTransaction, markSeatsBooked } from "../../lib/seats";
 import { calculateCustomerCharges } from "../../lib/pricing";
+import {
+  subscribeBlockCategories,
+  blockDisplayName,
+  isBlockOnline,
+} from "../../lib/blockCategories";
 
 function PaymentContent() {
   const router = useRouter();
@@ -25,35 +30,77 @@ function PaymentContent() {
   const seatList = seats ? seats.split(",").filter(Boolean) : [];
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [payError, setPayError] = useState("");
+  const [blockCats, setBlockCats] = useState([]);
+
+  // Block rules + display name from the admin panel (shared Firestore config)
+  useEffect(() => subscribeBlockCategories(setBlockCats), []);
+  const blockLabel = block ? blockDisplayName(blockCats, block) : "";
+  const blockIsCounterOnly = block ? !isBlockOnline(blockCats, block) : false;
 
   const handlePayment = async () => {
+    if (blockIsCounterOnly) {
+      setPayError(`Block ${blockLabel || block} is only sold at the counter.`);
+      return;
+    }
+    setPayError("");
     setLoading(true);
     try {
-      await saveBooking({
-        tier: { id: "seated", name: "SEATED", price: seatPrice, gate: `Block ${block}` },
-        quantity: seatCount,
-        paymentMethod,
-        ticketAmount: pricing.ticketAmount,
-        convenienceFee: pricing.convenienceFee,
-        gstOnConvenienceFee: pricing.gstOnConvenienceFee,
-        platformCharge: pricing.platformCharge,
-        totalAmount: pricing.finalCustomerAmount,
-        eventId,
-        date,
-        time,
-        seats: seatList,
-        eventName,
-        customerName,
-        customerPhone,
-      });
       if (block && seatList.length > 0) {
-        await markSeatsBooked(eventId, block, seatList);
+        // Concurrency Safety: Atomic runTransaction verifying seat availability before booking
+        await reserveSeatsTransaction({
+          showId: eventId,
+          block,
+          seats: seatList,
+          customerName,
+          customerPhone,
+          paymentMethod,
+          tier: { id: "seated", name: "SEATED", price: seatPrice, gate: `Block ${blockLabel || block}` },
+          eventName,
+          date,
+          time,
+          ticketAmount: pricing.ticketAmount,
+          convenienceFee: pricing.convenienceFee,
+          gstOnConvenienceFee: pricing.gstOnConvenienceFee,
+          platformCharge: pricing.platformCharge,
+          totalAmount: pricing.finalCustomerAmount,
+        });
+      } else {
+        await saveBooking({
+          tier: { id: "seated", name: "SEATED", price: seatPrice, gate: `Block ${blockLabel || block}` },
+          quantity: seatCount,
+          paymentMethod,
+          ticketAmount: pricing.ticketAmount,
+          convenienceFee: pricing.convenienceFee,
+          gstOnConvenienceFee: pricing.gstOnConvenienceFee,
+          platformCharge: pricing.platformCharge,
+          totalAmount: pricing.finalCustomerAmount,
+          eventId,
+          showId: eventId,
+          date,
+          time,
+          seats: seatList,
+          eventName,
+          customerName,
+          customerPhone,
+        });
       }
+      setLoading(false);
+      try {
+        window.sessionStorage.removeItem("jatra:seatHold");
+      } catch (e) {
+        /* ignore */
+      }
+      setShowSuccess(true);
     } catch (err) {
-      console.error("Failed to save booking", err);
+      console.error("Failed to complete booking transaction:", err);
+      setLoading(false);
+      if (err.code === "SEAT_COLLISION") {
+        setPayError(err.message || "One or more selected seats were just booked by someone else. Please choose other seats.");
+      } else {
+        setPayError(err.message || "Failed to process payment and confirm booking. Please try again.");
+      }
     }
-    setLoading(false);
-    setShowSuccess(true);
   };
 
   return (
@@ -70,7 +117,7 @@ function PaymentContent() {
             <div className="w-full bg-slate-50 rounded-xl p-3 space-y-1.5">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Block</span>
-                <span className="font-bold text-slate-900">{block}</span>
+                <span className="font-bold text-slate-900">{blockLabel || block}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Seats</span>
@@ -118,7 +165,7 @@ function PaymentContent() {
           <h3 className="text-xs font-black text-slate-900 uppercase">Order Summary</h3>
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500">Block</span>
-            <span className="font-bold text-slate-900">{block}</span>
+            <span className="font-bold text-slate-900">{blockLabel || block}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500">Seats</span>
@@ -291,7 +338,24 @@ function PaymentContent() {
       </div>
 
       {/* Bottom CTA */}
-      <div className="p-4 bg-white border-t border-slate-100 sticky bottom-0">
+      <div className="p-4 bg-white border-t border-slate-100 sticky bottom-0 space-y-2">
+        {payError && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-center">
+              {payError}
+            </p>
+            {(payError.includes("Collision") || payError.includes("booked") || payError.includes("another user")) && (
+              <button
+                type="button"
+                onClick={() => router.push(`/seats?eventId=${eventId}&event=${encodeURIComponent(eventName)}`)}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <i className="fa-solid fa-arrow-left" />
+                <span>Return to Seat Map & Choose Other Seats</span>
+              </button>
+            )}
+          </div>
+        )}
         <button
           onClick={handlePayment}
           disabled={loading}
