@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
@@ -21,15 +21,16 @@ function SeatSelectionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const eventIdParam = searchParams.get("eventId") || "";
+  const blockParam = searchParams.get("block") || "";
   const [eventId, setEventId] = useState(eventIdParam);
   const [eventName, setEventName] = useState(searchParams.get("event") || "Event");
   const [currentEventData, setCurrentEventData] = useState(null);
   const [eventOptions, setEventOptions] = useState([]);
   const [selected, setSelected] = useState([]);
-  const [activeBlock, setActiveBlock] = useState(null);
-  const [showSeatPanel, setShowSeatPanel] = useState(false);
-  const [showBlockSelector, setShowBlockSelector] = useState(false);
-  const [clickedFromMap, setClickedFromMap] = useState(false);
+  const [activeBlock, setActiveBlock] = useState(blockParam || null);
+  const [showSeatPanel, setShowSeatPanel] = useState(!!blockParam);
+  const [showBlockSelector, setShowBlockSelector] = useState(!!blockParam);
+  const [clickedFromMap, setClickedFromMap] = useState(!!blockParam);
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
   const [eventReady, setEventReady] = useState(!!eventIdParam);
@@ -99,6 +100,21 @@ function SeatSelectionContent() {
     });
     return () => unsubscribe();
   }, [eventId]);
+
+  // Auto-select first available block with seats if none is selected
+  useEffect(() => {
+    if (!activeBlock && Object.keys(seatsByBlock).length > 0) {
+      const firstWithSeats = Object.keys(seatsByBlock).find(
+        (b) => (seatsByBlock[b] || []).length > 0
+      );
+      if (firstWithSeats) {
+        setActiveBlock(firstWithSeats);
+        setShowSeatPanel(true);
+        setShowBlockSelector(true);
+        setClickedFromMap(true);
+      }
+    }
+  }, [seatsByBlock, activeBlock]);
 
   // Resolve event and event details
   useEffect(() => {
@@ -171,7 +187,7 @@ function SeatSelectionContent() {
     );
   };
 
-  const toggleSeat = (key) => {
+  const toggleSeat = useCallback((key) => {
     const fs = findFsSeat(activeBlock, key);
     const st = String(fs?.status || "").toLowerCase();
     const sid = getHoldSessionId();
@@ -190,7 +206,7 @@ function SeatSelectionContent() {
     } else {
       holdSeat(eventId, activeBlock, key);
     }
-  };
+  }, [activeBlock, selected, eventId, seatsByBlock]);
 
   const handleBlockSelect = (blockId) => {
     // Blocks flipped to Counter selling in the admin panel can't be booked online.
@@ -721,10 +737,10 @@ function SeatSelectionContent() {
             eventId={eventId}
             activeBlock={activeBlock}
             selected={selected}
-            onToggleSeat={(seatKey) => toggleSeat(seatKey)}
+            onToggleSeat={toggleSeat}
             disabled={!clickedFromMap}
             seatsByBlock={seatsByBlock}
-            onSeatsUpdate={setSeatsByBlock}
+            loading={loading}
           />
 
           <p className="text-center text-[11px] text-slate-400 font-medium">

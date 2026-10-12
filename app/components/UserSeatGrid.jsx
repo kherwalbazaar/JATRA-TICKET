@@ -20,15 +20,27 @@ export default function UserSeatGrid({
   onToggleSeat,
   disabled = false,
   seatsByBlock: externalSeatsByBlock,
+  loading: externalLoading,
   onSeatsUpdate,
   onError,
 }) {
   const targetId = showId || eventId || "";
   const [internalSeats, setInternalSeats] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [internalLoading, setInternalLoading] = useState(true);
   const [error, setError] = useState(null);
+
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+
+  const onToggleSeatRef = useRef(onToggleSeat);
+  onToggleSeatRef.current = onToggleSeat;
+
+  const onSeatsUpdateRef = useRef(onSeatsUpdate);
+  onSeatsUpdateRef.current = onSeatsUpdate;
+
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   const sessionId = useMemo(() => getHoldSessionId(), []);
 
   // Reserved by another session and still fresh → blocked for this user too.
@@ -37,19 +49,24 @@ export default function UserSeatGrid({
     seat.reservedBy !== sessionId &&
     isHoldFresh(seat);
 
-  // Use external seats if provided, otherwise internal subscription
-  const seatsByBlock = externalSeatsByBlock && Object.keys(externalSeatsByBlock).length > 0
-    ? externalSeatsByBlock
-    : internalSeats;
+  // Controlled mode: if externalSeatsByBlock is provided, parent manages seat state
+  const isControlled = externalSeatsByBlock !== undefined;
+  const seatsByBlock = isControlled ? (externalSeatsByBlock || {}) : internalSeats;
+  const loading = externalLoading !== undefined ? externalLoading : internalLoading;
 
-  // Real-time Firestore onSnapshot subscription on shows/{showId}/seats
+  // Real-time Firestore onSnapshot subscription (only runs when NOT controlled externally)
   useEffect(() => {
-    if (!targetId) {
-      setLoading(false);
+    if (isControlled) {
+      setInternalLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!targetId) {
+      setInternalLoading(false);
+      return;
+    }
+
+    setInternalLoading(true);
     setError(null);
     let isFirst = true;
 
@@ -57,47 +74,46 @@ export default function UserSeatGrid({
       targetId,
       (newSeats) => {
         setInternalSeats(newSeats);
-        if (onSeatsUpdate) {
-          onSeatsUpdate(newSeats);
-        }
-
-        // Concurrency Safety: Check if any currently selected seat just got booked or locked
-        if (activeBlock && newSeats[activeBlock] && onToggleSeat) {
-          const blockSeats = newSeats[activeBlock];
-          const currSelected = selectedRef.current || [];
-          for (const sKey of currSelected) {
-            const found = blockSeats.find(
-              (s) =>
-                s.id === sKey ||
-                s.seatLabel === sKey ||
-                `${s.rowId}-${s.seatNumber}` === sKey ||
-                `${s.rowId}${s.seatNumber}` === sKey
-            );
-            if (found && (found.status === "booked" || found.status === "locked" || reservedByOther(found))) {
-              // Automatically unselect collided seat
-              onToggleSeat(sKey, found);
-            }
-          }
+        if (onSeatsUpdateRef.current) {
+          onSeatsUpdateRef.current(newSeats);
         }
 
         if (isFirst) {
           isFirst = false;
-          setLoading(false);
+          setInternalLoading(false);
         }
       },
       (err) => {
         console.error("UserSeatGrid subscription error:", err);
         setError("Live seat updates disconnected. Retrying...");
-        if (onError) onError(err);
-        setLoading(false);
+        if (onErrorRef.current) onErrorRef.current(err);
+        setInternalLoading(false);
       }
     );
 
-    // Lifecycle & Memory Management: Always return cleanup handler
     return () => {
       unsubscribe();
     };
-  }, [targetId, activeBlock, onSeatsUpdate, onToggleSeat, onError]);
+  }, [targetId, isControlled]);
+
+  // Concurrency collision check: deselect any seat that became booked / locked / reserved
+  useEffect(() => {
+    if (!activeBlock || !seatsByBlock[activeBlock] || !onToggleSeatRef.current) return;
+    const blockSeats = seatsByBlock[activeBlock];
+    const currSelected = selectedRef.current || [];
+    for (const sKey of currSelected) {
+      const found = blockSeats.find(
+        (s) =>
+          s.id === sKey ||
+          s.seatLabel === sKey ||
+          `${s.rowId}-${s.seatNumber}` === sKey ||
+          `${s.rowId}${s.seatNumber}` === sKey
+      );
+      if (found && (found.status === "booked" || found.status === "locked" || reservedByOther(found))) {
+        onToggleSeatRef.current(sKey, found);
+      }
+    }
+  }, [seatsByBlock, activeBlock]);
 
   // Group seats by row for data-driven rendering of the active block
   const rows = useMemo(() => {

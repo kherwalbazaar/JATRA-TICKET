@@ -1,0 +1,42 @@
+export default function manifest() {
+  return {
+    name: "JATRA BAZAAR",
+    short_name: "JATRA BAZAAR",
+    description:
+      "Book live Jatra show tickets online. Fast, secure, and hassle-free ticketing for JATRA BAZAAR.",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#0f172a",
+    theme_color: "#0f172a",
+    orientation: "portrait-primary",
+    scope: "/",
+    id: "com.jatrabazaar.app",
+    categories: ["entertainment", "ticketing", "events"],
+    icons: [
+      {
+        src: "/icons/icon-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-maskable-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      {
+        src: "/icons/icon-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/icon-maskable-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
+      },
+    ],
+  };
+}
