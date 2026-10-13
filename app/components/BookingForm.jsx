@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import UserSeatGrid from "./UserSeatGrid";
 import {
   subscribeSeats,
   holdSeat,
@@ -278,6 +277,21 @@ export default function BookingForm({
     );
     setSelectedSeats([]);
     setActiveBlock(b);
+  };
+
+  // Navigate to dedicated seat-selection page (diagram → block → seats → proceed)
+  const goToSeatSelection = () => {
+    const params = new URLSearchParams();
+    if (resolvedEventId) params.set("eventId", resolvedEventId);
+    if (resolvedEventName) params.set("event", resolvedEventName);
+    if (eventDate) params.set("date", eventDate);
+    if (eventTime) params.set("time", eventTime);
+    const returnPath =
+      typeof window !== "undefined"
+        ? window.location.pathname + window.location.search
+        : "/book";
+    params.set("return", returnPath);
+    router.push(`/select-seats?${params.toString()}`);
   };
 
   // Step 4 Confirm & Book Submission
@@ -672,7 +686,7 @@ export default function BookingForm({
                 <p className="text-[10px] text-slate-500 font-semibold">
                   {isStep1Completed
                     ? `Block ${getBlockName(activeBlock) || activeBlock} • ${quantity} seat${quantity > 1 ? "s" : ""} selected`
-                    : "Select your block and seats on the seat map"}
+                    : "Pick your seats on the seating map"}
                 </p>
               </div>
             </div>
@@ -694,129 +708,64 @@ export default function BookingForm({
           {/* Section Body */}
           {activeStep === 1 && (
             <div className="p-4 space-y-4">
-              {/* Block Selection Pills */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  Select Seating Block:
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableBlocks.map((b) => {
-                    const isSelected = activeBlock === b;
-                    const blockCount = (seatsByBlock[b] || []).length;
-                    return (
-                      <button
-                        key={b}
-                        type="button"
-                        onClick={() => handleSelectBlock(b)}
-                        className={`py-1.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer border ${
-                          isSelected
-                            ? "bg-indigo-900 text-white border-indigo-900 shadow-xs"
-                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        <span>Block {getBlockName(b) || b}</span>
-                        {blockCount > 0 && (
-                          <span
-                            className={`text-[9px] px-1 rounded font-normal ${
-                              isSelected
-                                ? "bg-white/20 text-white"
-                                : "bg-slate-200 text-slate-600"
-                            }`}
-                          >
-                            ₹{seatPrice}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Already selected → summary + change seats */}
+              {quantity > 0 ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-black text-slate-900">
+                        Block {getBlockName(activeBlock) || activeBlock}
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {quantity} seat{quantity > 1 ? "s" : ""} selected
+                      </p>
+                    </div>
+                    <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-black px-2.5 py-1 rounded-lg">
+                      ₹{seatPrice} / seat
+                    </span>
+                  </div>
 
-              {/* Reactive Live Seat Grid */}
-              <div className="bg-slate-900 rounded-2xl p-3 border border-slate-800 shadow-inner overflow-hidden">
-                <div className="text-center pb-2 text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-center gap-3">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-white" /> Available
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /> Selected
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-rose-600" /> Booked
-                  </span>
-                </div>
-
-                <UserSeatGrid
-                  showId={resolvedEventId}
-                  eventId={resolvedEventId}
-                  activeBlock={activeBlock}
-                  selected={selectedSeats}
-                  onToggleSeat={toggleSeat}
-                  disabled={false}
-                  seatsByBlock={seatsByBlock}
-                  loading={loadingSeats}
-                />
-              </div>
-
-              {/* Selected Seats Chips Bar */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">
-                    Selected Seats ({quantity}/10)
-                  </span>
-                  {quantity > 0 && (
-                    <button
-                      onClick={() => {
-                        selectedSeats.forEach((k) =>
-                          releaseSeatHold(resolvedEventId, activeBlock, k)
-                        );
-                        setSelectedSeats([]);
-                      }}
-                      className="text-[10px] font-bold text-rose-500 hover:underline"
-                    >
-                      Clear Selection
-                    </button>
-                  )}
-                </div>
-
-                {quantity > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {selectedSeats.map((s) => (
                       <span
                         key={s}
-                        className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black px-2 py-0.5 rounded-lg flex items-center gap-1.5"
+                        className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black px-2 py-0.5 rounded-lg"
                       >
-                        <span>{s}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleSeat(s)}
-                          className="text-amber-700 hover:text-rose-600"
-                        >
-                          <i className="fa-solid fa-xmark text-[9px]" />
-                        </button>
+                        {s}
                       </span>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-400 font-medium italic">
-                    Tap any available seat above to select. (Max 10 seats)
-                  </p>
-                )}
-              </div>
 
-              {/* Step 1 Completion Button */}
-              <button
-                type="button"
-                onClick={() => setActiveStep(2)}
-                disabled={!isStep1Completed}
-                className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs py-3 rounded-2xl shadow-sm flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <span>
-                  Confirm Seats & Proceed ({quantity} Selected &bull; ₹
-                  {ticketSubtotal})
-                </span>
-                <i className="fa-solid fa-chevron-right text-[10px]" />
-              </button>
+                  <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2">
+                    <span className="text-[11px] text-slate-600 font-semibold">
+                      Ticket Subtotal
+                    </span>
+                    <span className="text-sm font-black text-slate-900">
+                      ₹{ticketSubtotal}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={goToSeatSelection}
+                    className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl hover:bg-slate-50 flex items-center justify-center gap-2"
+                  >
+                    <i className="fa-solid fa-chair" />
+                    Change Seats
+                  </button>
+                </div>
+              ) : (
+                /* No seats yet → only Select Seat CTA */
+                <button
+                  type="button"
+                  onClick={goToSeatSelection}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-extrabold text-sm py-4 rounded-2xl shadow-lg shadow-indigo-200 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-chair" />
+                  <span>Select Seat</span>
+                  <i className="fa-solid fa-arrow-right text-xs" />
+                </button>
+              )}
             </div>
           )}
         </div>

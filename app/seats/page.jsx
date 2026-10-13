@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
@@ -36,6 +36,7 @@ function SeatSelectionContent() {
   const [loading, setLoading] = useState(true);
   const [eventReady, setEventReady] = useState(!!eventIdParam);
   const [blockCats, setBlockCats] = useState([]);
+  const seatGridRef = useRef(null);
 
   // Live block-category config from Firestore (admin/counter/online rules + names)
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
@@ -73,7 +74,7 @@ function SeatSelectionContent() {
   const findFsSeat = (blockId, key) => findSeatInBlock(blockId, key);
 
   const seatPrice =
-    (seatsByBlock[activeBlock] || []).find((s) => s.price != null)?.price ?? 0;
+    (seatsByBlock[activeBlock] || []).find((s) => s.price != null)?.price || 100;
 
   const getSelectedRowLetters = () => {
     if (!selected.length) return "";
@@ -210,26 +211,19 @@ function SeatSelectionContent() {
   }, [activeBlock, selected, eventId, seatsByBlock]);
 
   const handleBlockSelect = (blockId) => {
-    // Blocks flipped to Counter selling in the admin panel can't be booked online.
-    if (!isOnlineBlock(blockId)) return;
-    selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
+    if (activeBlock !== blockId) {
+      selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
+      setSelected([]);
+    }
     setActiveBlock(blockId);
-    setSelected([]);
     setShowSeatPanel(true);
     setClickedFromMap(true);
     setShowBlockSelector(true);
-  };
 
-  // If the admin flips the selected block to Counter-only, drop the selection.
-  useEffect(() => {
-    if (activeBlock && blockCats.length && !isOnlineBlock(activeBlock)) {
-      selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
-      setActiveBlock(null);
-      setSelected([]);
-      setShowSeatPanel(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockCats]);
+    setTimeout(() => {
+      seatGridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
 
   // Persist the in-progress hold so navigating back to this page restores the
   // selection (seats stay reserved for this session until paid or expired).
@@ -362,8 +356,13 @@ function SeatSelectionContent() {
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
       <style jsx>{`
+        .block-path {
+          cursor: pointer;
+          transition: all 0.2s ease-in-out;
+        }
         .block-path:hover {
-          filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.95));
+          filter: drop-shadow(0 0 10px rgba(56, 189, 248, 1));
+          opacity: 0.95;
         }
         .block-path text {
           fill: #ffffff !important;
@@ -371,21 +370,22 @@ function SeatSelectionContent() {
         }
         .block-active {
           stroke: #38bdf8 !important;
-          stroke-width: 3 !important;
-          filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9));
+          stroke-width: 4 !important;
+          filter: drop-shadow(0 0 14px rgba(56, 189, 248, 1)) !important;
+          animation: pulse-glow 2s infinite ease-in-out;
         }
         .block-off {
-          opacity: 0.35;
-          pointer-events: none;
+          opacity: 0.85;
+          cursor: pointer;
         }
         @keyframes pulse-glow {
           0%, 100% {
             opacity: 1;
-            filter: brightness(1) drop-shadow(0 0 0 rgba(56, 189, 248, 0));
+            filter: brightness(1) drop-shadow(0 0 14px rgba(56, 189, 248, 0.9));
           }
           50% {
-            opacity: 0.85;
-            filter: brightness(1.2) drop-shadow(0 0 8px rgba(56, 189, 248, 0.6));
+            opacity: 0.9;
+            filter: brightness(1.2) drop-shadow(0 0 20px rgba(56, 189, 248, 1));
           }
         }
       `}</style>
@@ -489,7 +489,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK C2 (Top Left) */}
-              <g onClick={() => handleBlockSelect('C2')} className={`block-path ${isOnlineBlock('C2') ? '' : 'block-off '}${activeBlock === 'C2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C2')} className={`block-path ${activeBlock === 'C2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <rect
                   x="40"
                   y="40"
@@ -507,7 +507,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK A2 (Top Right) */}
-              <g onClick={() => handleBlockSelect('A2')} className={`block-path ${isOnlineBlock('A2') ? '' : 'block-off '}${activeBlock === 'A2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A2')} className={`block-path ${activeBlock === 'A2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <rect
                   x="650"
                   y="40"
@@ -525,7 +525,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK C3 (Outer Left) */}
-              <g onClick={() => handleBlockSelect('C3')} className={`block-path ${isOnlineBlock('C3') ? '' : 'block-off '}${activeBlock === 'C3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C3')} className={`block-path ${activeBlock === 'C3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="40,250 170,250 170,680 40,840"
                   fill={blockFill('C3')}
@@ -539,7 +539,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK C1 (Inner Left) */}
-              <g onClick={() => handleBlockSelect('C1')} className={`block-path ${isOnlineBlock('C1') ? '' : 'block-off '}${activeBlock === 'C1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C1')} className={`block-path ${activeBlock === 'C1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="190,250 350,250 350,420 190,660"
                   fill={blockFill('C1')}
@@ -553,7 +553,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK A1 (Inner Right) */}
-              <g onClick={() => handleBlockSelect('A1')} className={`block-path ${isOnlineBlock('A1') ? '' : 'block-off '}${activeBlock === 'A1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A1')} className={`block-path ${activeBlock === 'A1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="650,250 810,250 810,660 650,420"
                   fill={blockFill('A1')}
@@ -567,7 +567,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK A3 (Outer Right) */}
-              <g onClick={() => handleBlockSelect('A3')} className={`block-path ${isOnlineBlock('A3') ? '' : 'block-off '}${activeBlock === 'A3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A3')} className={`block-path ${activeBlock === 'A3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="830,250 960,250 960,840 830,680"
                   fill={blockFill('A3')}
@@ -581,7 +581,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK B1 (Main Center Front Trapezoid) */}
-              <g onClick={() => handleBlockSelect('B1')} className={`block-path ${isOnlineBlock('B1') ? '' : 'block-off '}${activeBlock === 'B1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B1')} className={`block-path ${activeBlock === 'B1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="370,420 630,420 780,660 220,660"
                   fill={blockFill('B1')}
@@ -595,7 +595,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK B2 (Bottom Left) */}
-              <g onClick={() => handleBlockSelect('B2')} className={`block-path ${isOnlineBlock('B2') ? '' : 'block-off '}${activeBlock === 'B2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B2')} className={`block-path ${activeBlock === 'B2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="200,680 480,680 480,860 60,860"
                   fill={blockFill('B2')}
@@ -609,7 +609,7 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK B3 (Bottom Right) */}
-              <g onClick={() => handleBlockSelect('B3')} className={`block-path ${isOnlineBlock('B3') ? '' : 'block-off '}${activeBlock === 'B3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B3')} className={`block-path ${activeBlock === 'B3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
                 <polygon
                   points="520,680 800,680 940,860 520,860"
                   fill={blockFill('B3')}
@@ -733,16 +733,19 @@ function SeatSelectionContent() {
           </div>
 
           {/* UserSeatGrid: Reactive real-time seat availability map */}
-          <UserSeatGrid
-            showId={eventId}
-            eventId={eventId}
-            activeBlock={activeBlock}
-            selected={selected}
-            onToggleSeat={toggleSeat}
-            disabled={!clickedFromMap}
-            seatsByBlock={seatsByBlock}
-            loading={loading}
-          />
+          <div ref={seatGridRef} id="seat-grid-container" className="scroll-mt-6 pt-1">
+            <UserSeatGrid
+              showId={eventId}
+              eventId={eventId}
+              activeBlock={activeBlock}
+              selected={selected}
+              onToggleSeat={toggleSeat}
+              disabled={false}
+              seatsByBlock={seatsByBlock}
+              loading={loading}
+              seatPrice={seatPrice}
+            />
+          </div>
 
           <p className="text-center text-[11px] text-slate-400 font-medium">
             Tap a seat to select. Block: <span className="font-black text-amber-600">{activeBlock || "-"}</span> • Selected: <span className="font-black text-amber-600">{selected.length}</span>

@@ -78,8 +78,43 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const TARGET = new Date("2026-10-22T23:00:00");
+    if (!featuredEvent) return;
+
+    const MONTH_MAP = {
+      JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+      JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+    };
+
+    const buildTarget = () => {
+      const pad = (n) => String(n).padStart(2, "0");
+      let y, m, d;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(featuredEvent.date || ""))) {
+        const parts = String(featuredEvent.date).split("-");
+        y = Number(parts[0]);
+        m = Number(parts[1]) - 1;
+        d = Number(parts[2]);
+      } else {
+        y = Number(featuredEvent.year) || new Date().getFullYear();
+        m = MONTH_MAP[String(featuredEvent.month || "").toUpperCase()] ?? 9;
+        d = Number(featuredEvent.day) || 1;
+      }
+
+      const timeStr = String(
+        featuredEvent.startTime || featuredEvent.start_time || featuredEvent.time || "11:00 PM",
+      );
+      const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      let hours = 23;
+      let minutes = 0;
+      if (timeMatch) {
+        hours = Number(timeMatch[1]) % 12;
+        if (/pm/i.test(timeMatch[3])) hours += 12;
+        minutes = Number(timeMatch[2]);
+      }
+      return new Date(y, m, d, hours, minutes, 0, 0);
+    };
+
     const tick = () => {
+      const TARGET = buildTarget();
       const diff = Math.max(0, TARGET.getTime() - Date.now());
       const pad = (n) => String(Math.floor(n)).padStart(2, "0");
       setCountdown({
@@ -92,7 +127,7 @@ export default function Home() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [featuredEvent]);
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
@@ -520,64 +555,51 @@ export default function Home() {
 function TodaysShow() {
   const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
 
-  const defaultShows = [
-    {
-      key: "1",
-      name: "ADIM LAHAH MANDAWA",
-      partyName: "Adim Lahah Mandawa",
-      organizationName: "ADIM LAHAH MANDAWA",
-      month: "OCT",
-      day: "1",
-      year: "2026",
-      location: "TBD",
-      banner: "/jarpa.png",
-      time: "08:30 PM - 04:30 AM",
-    },
-    {
-      key: "2",
-      name: "RAMRAJ GAYAN MOHAL",
-      partyName: "Ramraj Opera",
-      organizationName: "Ramraj Opera",
-      month: "OCT",
-      day: "23",
-      year: "2026",
-      location: "Bahanada, Khunta, Mayurbhanj",
-      banner: "/ramraj.png",
-      time: "10:00 PM - 05:00 AM",
-    },
-  ];
-
-  const [allShows, setAllShows] = useState(defaultShows);
+  const [allShows, setAllShows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     try {
       const unsub = subscribeEvents((data) => {
-        console.log("TodaysShow received data:", data);
         if (data && data.length > 0) {
-          const shows = data.map(ev => ({
-            key: ev.key,
-            name: ev.name || "Event",
-            partyName: ev.partyName || ev.organizer || "TBD",
-            month: ev.month || "OCT",
-            day: ev.day || "22",
-            year: ev.year || "2026",
-            location: ev.location || "TBD",
-            banner: ev.banner || ev.img || "/jarpa.png",
-            time: ev.time || ev.entryTime || "TBD"
-          }));
-          console.log("TodaysShow processed shows:", shows);
+          const shows = data.map((ev) => {
+            const eventKey = ev.key || ev.id || "";
+            const eventTitle = ev.eventTitle || ev.name || "Jatra Show";
+            const storyTitle = ev.title && ev.title !== eventTitle ? ev.title : "";
+            const partyName = ev.partyName || ev.organizer || "";
+            const organizationName = ev.organizationName || ev.committeeName || "";
+            const location = ev.location || ev.venue || ev.address || "Mayurbhanj, Odisha";
+            const banner = ev.poster || ev.banner || ev.img || "/jarpa.png";
+            const time = ev.time || ev.startTime || ev.entryTime || "11:00 PM";
+
+            return {
+              ...ev,
+              key: eventKey,
+              id: eventKey,
+              name: eventTitle,
+              eventTitle,
+              storyTitle,
+              title: ev.title || eventTitle,
+              partyName,
+              organizationName,
+              month: ev.month || "OCT",
+              day: ev.day || ev.dayOfMonth || "22",
+              year: ev.year || "2026",
+              location,
+              banner,
+              time,
+            };
+          });
           setAllShows(shows);
         } else {
-          console.log("TodaysShow: No data from database, using defaults");
-          setAllShows(defaultShows);
+          setAllShows([]);
         }
         setLoading(false);
       });
       return () => unsub();
     } catch (err) {
       console.error("Failed to load shows:", err);
-      setAllShows(defaultShows);
+      setAllShows([]);
       setLoading(false);
       return () => {};
     }
@@ -658,53 +680,47 @@ function TodaysShow() {
 }
 
 function HeroCarousel() {
-  const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-
-  const defaultSlides = [
-    { img: "/jarpa.png", month: "SEP", day: "14", year: "2026" },
-    { img: "/ramraj.png", month: "OCT", day: "23", year: "2026" },
-  ];
-
-  const [allSlides, setAllSlides] = useState(defaultSlides);
+  const [allSlides, setAllSlides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     try {
       const unsub = subscribeEvents((data) => {
-        console.log("HeroCarousel received data:", data);
         if (data && data.length > 0) {
-          const slides = data.map(ev => ({
-            img: ev.banner || ev.img || "/jarpa.png",
-            month: ev.month || "OCT",
-            day: ev.day || "22",
-            year: ev.year || "2026"
-          }));
-          console.log("HeroCarousel processed slides:", slides);
+          const slides = data
+            .map((ev) => {
+              const eventKey = ev.key || ev.id || "";
+              const img = ev.poster || ev.banner || ev.img || "";
+              return {
+                ...ev,
+                key: eventKey,
+                id: eventKey,
+                img,
+                month: ev.month || "OCT",
+                day: ev.day || ev.dayOfMonth || "22",
+                year: ev.year || "2026",
+                name: ev.eventTitle || ev.name || "",
+              };
+            })
+            .filter((s) => Boolean(s.img));
           setAllSlides(slides);
         } else {
-          console.log("HeroCarousel: No data from database, using defaults");
-          setAllSlides(defaultSlides);
+          setAllSlides([]);
         }
         setLoading(false);
       });
       return () => unsub();
     } catch (err) {
       console.error("Failed to load banners:", err);
-      setAllSlides(defaultSlides);
+      setAllSlides([]);
       setLoading(false);
       return () => {};
     }
   }, []);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Show all slides (remove date filtering for banners)
   const slides = allSlides;
   const singleSlide = slides.length === 1;
-
-  console.log("HeroCarousel filtered slides:", slides);
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -715,11 +731,24 @@ function HeroCarousel() {
   if (loading) return null;
   if (slides.length === 0) return null;
 
+  const handleSlideClick = (slide) => {
+    const eventKey = slide?.key || slide?.id;
+    if (eventKey) {
+      try {
+        sessionStorage.setItem(`event_${eventKey}`, JSON.stringify(slide));
+      } catch {}
+      window.location.href = `/event-details?id=${encodeURIComponent(eventKey)}`;
+    }
+  };
+
   return (
     <div>
       <div className="relative w-full h-[200px] overflow-hidden bg-slate-900">
         {singleSlide ? (
-          <div className="relative w-full h-full overflow-hidden">
+          <div
+            onClick={() => handleSlideClick(slides[0])}
+            className="relative w-full h-full overflow-hidden cursor-pointer"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <BannerImage
               src={slides[0].img}
@@ -733,7 +762,11 @@ function HeroCarousel() {
             style={{ transform: `translateX(-${index * 100}%)` }}
           >
             {slides.map((slide, i) => (
-              <div key={i} className="w-full flex-shrink-0 h-full">
+              <div
+                key={slide.key || i}
+                onClick={() => handleSlideClick(slide)}
+                className="w-full flex-shrink-0 h-full cursor-pointer"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <BannerImage
                   src={slide.img}
@@ -796,73 +829,62 @@ function HeroCarousel() {
 }
 
 function EventCarousel() {
-  const defaultEvents = [
-    {
-      month: "OCT",
-      day: "1",
-      year: "2026",
-      name: "ADIM LAHAH MANDAWA",
-      partyName: "Adim Lahah Mandawa",
-      organizationName: "ADIM LAHAH MANDAWA",
-      emoji: "🔥",
-      location: "TBD",
-      entryTime: "08:30 PM",
-      startTime: "04:30 AM",
-    },
-    {
-      month: "OCT",
-      day: "23",
-      year: "2026",
-      name: "RAMRAJ GAYAN MOHAL",
-      emoji: "🔥",
-      location: "Bahanada, Khunta, Mayurbhanj",
-      entryTime: "10:00 PM",
-      startTime: "11:00 PM",
-    },
-  ];
-
-  const [events, setEvents] = useState(defaultEvents);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     try {
       const unsub = subscribeEvents((data) => {
-        console.log("EventCarousel received data:", data);
         if (data && data.length > 0) {
-          const processedEvents = data.map(ev => ({
-            month: ev.month || "OCT",
-            day: ev.day || "22",
-            year: ev.year || "2026",
-            name: ev.name || "Event",
-            emoji: ev.emoji || "🔥",
-            location: ev.location || "TBD",
-            entryTime: ev.entryTime || "TBD",
-            startTime: ev.startTime || ev.time || "TBD"
-          }));
-          console.log("EventCarousel processed events:", processedEvents);
+          const processedEvents = data.map((ev) => {
+            const eventKey = ev.key || ev.id || "";
+            const eventTitle = ev.eventTitle || ev.name || "Jatra Show";
+            const storyTitle = ev.title && ev.title !== eventTitle ? ev.title : "";
+            const partyName = ev.partyName || ev.organizer || "";
+            const organizationName = ev.organizationName || ev.committeeName || "";
+            const location = ev.location || ev.venue || ev.address || "Mayurbhanj, Odisha";
+            const entryTime = ev.entryTime || ev.entry_time || "9:00 PM";
+            const startTime = ev.startTime || ev.start_time || ev.time || "11:00 PM";
+
+            return {
+              ...ev,
+              key: eventKey,
+              id: eventKey,
+              name: eventTitle,
+              eventTitle,
+              storyTitle,
+              title: ev.title || eventTitle,
+              emoji: ev.emoji || "🔥",
+              partyName,
+              organizationName,
+              month: ev.month || "OCT",
+              day: ev.day || ev.dayOfMonth || "22",
+              year: ev.year || "2026",
+              location,
+              entryTime,
+              startTime,
+            };
+          });
           setEvents(processedEvents);
           setIndex(0);
         } else {
-          console.log("EventCarousel: No data from database, using defaults");
-          setEvents(defaultEvents);
+          setEvents([]);
         }
         setLoading(false);
       });
       return () => unsub();
     } catch (err) {
       console.error("Failed to load events:", err);
-      setEvents(defaultEvents);
+      setEvents([]);
       setLoading(false);
       return () => {};
     }
   }, []);
 
-  console.log("EventCarousel final events:", events);
-
   useEffect(() => {
-    if (events.length === 0) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % events.length), 4000);
+    if (events.length <= 1) return;
+    const id = setInterval(() => setIndex((i) => (i + 1) % events.length), 5000);
     return () => clearInterval(id);
   }, [events.length]);
 
@@ -877,8 +899,20 @@ function EventCarousel() {
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
           {events.map((ev, i) => (
-            <div key={i} className="w-full flex-shrink-0">
-              <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 relative overflow-hidden">
+            <div
+              key={ev.key || ev.id || i}
+              onClick={() => {
+                const eventKey = ev.key || ev.id;
+                if (eventKey) {
+                  try {
+                    sessionStorage.setItem(`event_${eventKey}`, JSON.stringify(ev));
+                  } catch {}
+                  window.location.href = `/event-details?id=${encodeURIComponent(eventKey)}`;
+                }
+              }}
+              className="w-full flex-shrink-0 cursor-pointer active:scale-[0.99] transition-transform"
+            >
+              <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 relative overflow-hidden hover:border-indigo-200 transition-colors">
                 <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none translate-x-3 translate-y-2">
                   <i className="fa-solid fa-users text-8xl text-indigo-900" />
                 </div>
@@ -896,21 +930,28 @@ function EventCarousel() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-1.5">
+                    <div className="flex items-start justify-between mb-1">
                       <h3 className="text-base font-black text-slate-900 truncate font-brand flex items-center gap-1">
                         {ev.name} <span>{ev.emoji}</span>
                       </h3>
                       <div className="w-6" />
                     </div>
 
+                    {ev.storyTitle && (
+                      <p className="text-[10px] font-bold text-rose-600 truncate mb-1">
+                        <i className="fa-solid fa-masks-theater text-[9px] mr-1" />
+                        {ev.storyTitle}
+                      </p>
+                    )}
+
                     <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
                       <i className="fa-solid fa-user-group text-indigo-500 text-xs flex-shrink-0" />
-                      <span className="truncate">{ev.partyName || ev.organizationName || "TBD"}</span>
+                      <span className="truncate">{ev.partyName || "Party TBD"}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
                       <i className="fa-solid fa-building text-rose-500 text-xs flex-shrink-0" />
-                      <span className="truncate">{ev.organizationName || ev.partyName || "TBD"}</span>
+                      <span className="truncate">{ev.organizationName || "Committee TBD"}</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
@@ -918,10 +959,15 @@ function EventCarousel() {
                       <span className="truncate">{ev.location}</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold">
-                      <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
-                      <span>
-                        Entry {ev.entryTime} <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start {ev.startTime}
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold truncate">
+                        <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
+                        <span>
+                          Entry {ev.entryTime} <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start {ev.startTime}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-indigo-600 flex items-center gap-0.5 whitespace-nowrap bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 flex-shrink-0">
+                        Details <i className="fa-solid fa-arrow-right text-[8px]" />
                       </span>
                     </div>
                   </div>
@@ -932,16 +978,18 @@ function EventCarousel() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-1.5 mt-2">
-        {events.map((_, si) => (
-          <button
-            key={si}
-            aria-label={`Go to event ${si + 1}`}
-            onClick={() => setIndex(si)}
-            className={`${si === index ? "w-2.5 h-2.5 rounded-full bg-indigo-600" : "w-2 h-2 rounded-full bg-slate-200"} transition-all`}
-          />
-        ))}
-      </div>
+      {events.length > 1 && (
+        <div className="flex items-center justify-center gap-1.5 mt-2">
+          {events.map((_, si) => (
+            <button
+              key={si}
+              aria-label={`Go to event ${si + 1}`}
+              onClick={() => setIndex(si)}
+              className={`${si === index ? "w-2.5 h-2.5 rounded-full bg-indigo-600" : "w-2 h-2 rounded-full bg-slate-200"} transition-all`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

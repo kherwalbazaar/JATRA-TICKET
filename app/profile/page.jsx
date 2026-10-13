@@ -307,11 +307,13 @@ function ProfileContent() {
         <Header />
 
         <div className="flex-1 p-4 space-y-4">
-          {/* Page Title */}
-          <div>
-            <h2 className="text-2xl font-black text-slate-900 font-brand">My Profile</h2>
-            <p className="text-xs text-slate-500 font-medium">Manage your account & preferences</p>
-          </div>
+          {/* Page Title — hidden on the centered login card for a clean full-screen feel */}
+          {step !== "ENTER_MOBILE" && (
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 font-brand">My Profile</h2>
+              <p className="text-xs text-slate-500 font-medium">Manage your account & preferences</p>
+            </div>
+          )}
 
           {/* Booking Flow In-Progress Banner */}
           {redirectUrl && (
@@ -319,12 +321,7 @@ function ProfileContent() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-rose-500 text-white flex items-center justify-center text-sm shadow-xs flex-shrink-0">
                 <i className="fa-solid fa-ticket -rotate-12" />
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-black text-slate-900">Step 1 of Booking: Create Profile</p>
-                <p className="text-[11px] text-slate-600 font-medium leading-tight">
-                  Please verify your mobile and profile details. Once saved, you will be taken immediately to complete your ticket booking.
-                </p>
-              </div>
+              <p className="text-xs font-black text-slate-900">Step 1 of Booking: Create Profile</p>
             </div>
           )}
 
@@ -353,46 +350,61 @@ function ProfileContent() {
 
           {/* FLOW STEP 1: ENTER MOBILE */}
           {!initialLoading && step === "ENTER_MOBILE" && (
-            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-md space-y-4">
-              <div className="text-center space-y-1">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl mx-auto mb-2">
-                  <i className="fa-solid fa-mobile-screen" />
-                </div>
-                <h3 className="text-base font-black text-slate-900 font-brand">Login or Create Profile</h3>
-                <p className="text-xs text-slate-500">Enter your 10-digit mobile number to verify with OTP</p>
-              </div>
-
-              <form onSubmit={handleRequestOtp} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Mobile Number</label>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3 text-xs font-extrabold text-slate-500">+91</span>
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-                      placeholder="98765 43210"
-                      className="w-full pl-12 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      autoFocus
-                    />
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <div className="w-full max-w-sm bg-white rounded-3xl p-7 border border-slate-100 shadow-xl space-y-6 text-center">
+                <div className="space-y-2">
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-200">
+                    <i className="fa-solid fa-mobile-screen-button" />
                   </div>
+                  <h3 className="text-xl font-black text-slate-900 font-brand pt-1">Login or Create Profile</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Enter your 10-digit mobile number
+                    <br />
+                    to verify with OTP
+                  </p>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-800 flex items-start gap-2">
-                  <i className="fa-solid fa-shield-halved text-amber-600 mt-0.5" />
-                  <span>Development mode active: Enter any 10-digit number. Fixed testing OTP is <strong>123456</strong>.</span>
-                </div>
+                <form onSubmit={handleRequestOtp} className="space-y-4">
+                  <div className="relative">
+                    <div className="flex items-center bg-slate-50 border-2 border-slate-200 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 rounded-xl transition-all overflow-hidden max-w-[280px] mx-auto">
+                      <span className="pl-3 pr-1.5 text-sm font-black text-slate-500 select-none">+91</span>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={mobile}
+                        onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
+                        placeholder="98765 43210"
+                        className="flex-1 bg-transparent py-2.5 pr-3 text-base font-black text-slate-900 tracking-wider placeholder:text-slate-300 placeholder:font-bold focus:outline-none text-center"
+                        autoFocus
+                      />
+                      {mobile.length === 10 && (
+                        <span className="pr-3 text-emerald-500 text-sm">
+                          <i className="fa-solid fa-circle-check" />
+                        </span>
+                      )}
+                    </div>
+                    {mobile.length > 0 && mobile.length < 10 && (
+                      <p className="text-[10px] font-bold text-amber-600 mt-1.5 text-center">
+                        {10 - mobile.length} more digit{10 - mobile.length > 1 ? "s" : ""} remaining
+                      </p>
+                    )}
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || mobile.length < 10}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-50 text-white font-extrabold text-sm py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                >
-                  {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-arrow-right" />}
-                  <span>{loading ? "Sending OTP..." : "Get OTP Verification Code"}</span>
-                </button>
-              </form>
+                  <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-800 flex items-start gap-2 text-left">
+                    <i className="fa-solid fa-shield-halved text-amber-600 mt-0.5" />
+                    <span>Development mode active: Enter any 10-digit number. Fixed testing OTP is <strong>123456</strong>.</span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || mobile.length < 10}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40 text-white font-extrabold text-sm py-4 rounded-2xl shadow-lg shadow-indigo-200 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
+                  >
+                    {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-arrow-right" />}
+                    <span>{loading ? "Sending OTP..." : "Get OTP Verification Code"}</span>
+                  </button>
+                </form>
+              </div>
             </div>
           )}
 

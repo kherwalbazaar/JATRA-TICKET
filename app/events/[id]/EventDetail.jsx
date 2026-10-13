@@ -103,8 +103,14 @@ export default function EventDetail({ id }) {
         const data = await fetchEvents();
         if (cancelled) return;
         const list = Array.isArray(data) ? data : [];
-        setAllEvents(list);
-        const matched = list.find((item) => String(item?.key) === String(id));
+        const cleanId = String(id).trim();
+        const matched = list.find(
+          (item) =>
+            String(item?.key || "").trim() === cleanId ||
+            String(item?.id || "").trim() === cleanId ||
+            String(item?.eventId || "").trim() === cleanId ||
+            String(item?.showId || "").trim() === cleanId,
+        );
         if (matched) {
           setEvent(matched);
           setLoadError("");
@@ -222,6 +228,7 @@ export default function EventDetail({ id }) {
     (item) => String(item?.year || "") === String(event?.year || "")
   );
   const bannerCandidates = [
+    event?.poster,
     ...asArray(event?.banners),
     event?.bannerUrl,
     event?.bannerImg,
@@ -229,7 +236,7 @@ export default function EventDetail({ id }) {
     event?.image,
     event?.img,
     event?.banner,
-    ...sameYearEvents.flatMap((item) => [item?.banner, ...asArray(item?.banners)]),
+    ...sameYearEvents.flatMap((item) => [item?.poster, item?.banner, ...asArray(item?.banners)]),
   ];
   const displayBanners = [...new Set(bannerCandidates.map(toLoadableUrl).filter(Boolean))];
   const topBanner = displayBanners[0] || null;

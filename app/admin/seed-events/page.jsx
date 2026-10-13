@@ -1,22 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { collection, addDoc, getDocs, query, deleteDoc, doc } from "firebase/firestore";
-import { firestore } from "../../../lib/firebase";
+import { supabase } from "../../../lib/supabase";
 
 const DUMMY_EVENTS = [
   {
     name: "ADIM LAHAH MANDAWA",
-    partyName: "Adim Lahah Mandawa",
-    organizationName: "ADIM LAHAH MANDAWA",
+    party_name: "Adim Lahah Mandawa",
+    organization_name: "ADIM LAHAH MANDAWA",
     month: "OCT",
     day: "1",
     year: "2026",
     location: "Balanada Ground, Khunta, Mayurbhanj",
     banner: "/jarpa.png",
     time: "08:30 PM - 04:30 AM",
-    entryTime: "07:45 PM",
-    startTime: "08:30 PM",
+    entry_time: "07:45 PM",
+    start_time: "08:30 PM",
     about: "Adim Lahah Mandawa is a grand Jatra performance featuring traditional folk art, music, and cultural storytelling. Experience the vibrant colors and rhythms of Odisha's rich theatrical heritage.",
     language: "Santali",
     duration: "10:00 PM - 05:00 AM",
@@ -24,7 +23,7 @@ const DUMMY_EVENTS = [
     committee: "Adim Lahah Mandawa Committee",
     address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
     phone: "+91 94370 12345",
-    managingDirector: "Sri Prakash Chandra Sahu",
+    managing_director: "Sri Prakash Chandra Sahu",
     trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
     credits: {
       writer: "Maheswar Soren",
@@ -47,16 +46,16 @@ const DUMMY_EVENTS = [
   },
   {
     name: "RAMRAJ GAYAN MOHAL",
-    partyName: "Ramraj Opera",
-    organizationName: "Ramraj Opera",
+    party_name: "Ramraj Opera",
+    organization_name: "Ramraj Opera",
     month: "OCT",
     day: "23",
     year: "2026",
     location: "Bahanada, Khunta, Mayurbhanj",
     banner: "/ramraj.png",
     time: "10:00 PM - 05:00 AM",
-    entryTime: "09:15 PM",
-    startTime: "10:00 PM",
+    entry_time: "09:15 PM",
+    start_time: "10:00 PM",
     about: "Ramraj Opera presents a spectacular Jatra show with talented artists, beautiful costumes, and mesmerizing performances that captivate the audience through the night.",
     language: "Santali",
     duration: "10:00 PM - 05:00 AM",
@@ -64,7 +63,7 @@ const DUMMY_EVENTS = [
     committee: "Ramraj Gayan Mohal",
     address: "Bahanada, Khunta, Mayurbhanj, Odisha - 757035",
     phone: "+91 94370 67890",
-    managingDirector: "Sri Ramesh Chandra Naik",
+    managing_director: "Sri Ramesh Chandra Naik",
     trailer: "https://www.youtube.com/embed/dQw4w9WgXcQ",
     credits: {
       writer: "Maheswar Soren",
@@ -93,46 +92,13 @@ export default function SeedEventsPage() {
 
   const seedEvents = async () => {
     setLoading(true);
-    setStatus("Seeding events...");
+    setStatus("Seeding events to Supabase...");
     try {
       for (const ev of DUMMY_EVENTS) {
-        await addDoc(collection(firestore, "events"), ev);
+        const id = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        await supabase.from("events").upsert([{ id, ...ev }]);
       }
-      setStatus("✅ Events seeded successfully!");
-    } catch (err) {
-      setStatus("❌ Error: " + err.message);
-    }
-    setLoading(false);
-  };
-
-  const clearEvents = async () => {
-    setLoading(true);
-    setStatus("Clearing events...");
-    try {
-      const snap = await getDocs(query(collection(firestore, "events")));
-      for (const d of snap.docs) {
-        await deleteDoc(doc(firestore, "events", d.id));
-      }
-      setStatus("✅ Events cleared!");
-    } catch (err) {
-      setStatus("❌ Error: " + err.message);
-    }
-    setLoading(false);
-  };
-
-  const reseedEvents = async () => {
-    setLoading(true);
-    setStatus("Clearing old events...");
-    try {
-      const snap = await getDocs(query(collection(firestore, "events")));
-      for (const d of snap.docs) {
-        await deleteDoc(doc(firestore, "events", d.id));
-      }
-      setStatus("Seeding updated events...");
-      for (const ev of DUMMY_EVENTS) {
-        await addDoc(collection(firestore, "events"), ev);
-      }
-      setStatus("✅ All events updated in Firestore!");
+      setStatus("✅ Events seeded to Supabase successfully!");
     } catch (err) {
       setStatus("❌ Error: " + err.message);
     }
@@ -142,16 +108,8 @@ export default function SeedEventsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-md mx-auto bg-white rounded-2xl p-6 space-y-4">
-        <h1 className="text-xl font-black text-slate-900">Seed Events to Firestore</h1>
-        <p className="text-sm text-slate-500">Store dummy event data into Firestore database</p>
-
-        <button
-          onClick={reseedEvents}
-          disabled={loading}
-          className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl disabled:opacity-50"
-        >
-          {loading ? "Working..." : "Re-seed (Clear + Update)"}
-        </button>
+        <h1 className="text-xl font-black text-slate-900">Seed Events to Supabase</h1>
+        <p className="text-sm text-slate-500">Store event data directly into Supabase database</p>
 
         <button
           onClick={seedEvents}
@@ -159,14 +117,6 @@ export default function SeedEventsPage() {
           className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl disabled:opacity-50"
         >
           {loading ? "Working..." : "Seed Events"}
-        </button>
-
-        <button
-          onClick={clearEvents}
-          disabled={loading}
-          className="w-full bg-red-600 text-white font-bold py-3 rounded-xl disabled:opacity-50"
-        >
-          {loading ? "Working..." : "Clear All Events"}
         </button>
 
         {status && (

@@ -31,7 +31,7 @@ export default function SeedSeatsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-8">
       <div className="max-w-md mx-auto bg-white rounded-2xl p-6 shadow-xl">
-        <h1 className="text-xl font-black text-slate-900 mb-4">Seed Seats to Firestore</h1>
+        <h1 className="text-xl font-black text-slate-900 mb-4">Seed Seats to Supabase</h1>
         
         <div className="space-y-4">
           <div>

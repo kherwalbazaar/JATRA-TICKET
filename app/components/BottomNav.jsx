@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 const tabs = [
@@ -17,21 +17,8 @@ export default function BottomNav({ active }) {
   const menuRef = useRef(null);
   const borderRef = useRef(null);
   const glowRef = useRef(null);
-  const [hidden, setHidden] = useState(false);
-  const lastScroll = useRef(0);
 
   const currentPage = active || (pathname.startsWith("/tickets") ? "tickets" : pathname.startsWith("/events") ? "events" : pathname.startsWith("/support") ? "support" : pathname.startsWith("/profile") ? "profile" : "home");
-
-  useEffect(() => {
-    const onScroll = () => {
-      const cur = window.scrollY;
-      if (cur > lastScroll.current && cur > 50) setHidden(true);
-      else if (cur < lastScroll.current) setHidden(false);
-      lastScroll.current = cur;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   useLayoutEffect(() => {
     const updatePositions = () => {
@@ -67,7 +54,7 @@ export default function BottomNav({ active }) {
   };
 
   return (
-    <div className={`nav-wrapper fixed bottom-0 left-0 right-0 transition-transform duration-300 ${hidden ? "translate-y-full" : "translate-y-0"}`}>
+    <div className="nav-wrapper fixed bottom-0 left-0 right-0">
       <menu className="menu" ref={menuRef}>
         <div className="glow-orb" ref={glowRef}>
           <div className="glow-orb__core" />
