@@ -13,6 +13,7 @@ import {
   blockDisplayName,
   blockChannelText,
 } from "../../lib/blockCategories";
+import { getSavedCustomerProfile } from "../../lib/supabase";
 
 const EVENT_ID_KEY = "jatra:eventId";
 const HOLD_KEY = "jatra:seatHold";
@@ -792,7 +793,13 @@ function SeatSelectionContent() {
               });
               const eventDate = currentEventData?.date || "";
               const eventTime = currentEventData?.time || "";
-              router.push(`/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&date=${encodeURIComponent(eventDate)}&time=${encodeURIComponent(eventTime)}&block=${activeBlock}&seats=${displaySeats.join(',')}&seatPrice=${seatPrice}`);
+              const targetUrl = `/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&date=${encodeURIComponent(eventDate)}&time=${encodeURIComponent(eventTime)}&block=${activeBlock}&seats=${displaySeats.join(',')}&seatPrice=${seatPrice}`;
+              const profile = getSavedCustomerProfile();
+              if (!profile || !profile.full_name) {
+                router.push(`/profile?redirect=${encodeURIComponent(targetUrl)}`);
+              } else {
+                router.push(targetUrl);
+              }
             }}
             disabled={selected.length === 0}
             className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"

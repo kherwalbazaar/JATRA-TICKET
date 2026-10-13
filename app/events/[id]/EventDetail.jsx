@@ -5,6 +5,7 @@ import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { subscribeEvents, fetchEvents } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
+import { getSavedCustomerProfile } from "../../../lib/supabase";
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
 
@@ -561,11 +562,24 @@ export default function EventDetail({ id }) {
           {/* Book Ticket Now */}
           <button
             onClick={() => {
-              const eventName = event?.name || "Event";
+              const eventName = event?.name || event?.eventTitle || "Event";
               const eventId = event?.key || id;
-              window.location.href = `/seats?event=${encodeURIComponent(eventName)}&eventId=${eventId}`;
+              const date = event?.date || "";
+              const time = event?.time || "";
+              const params = new URLSearchParams();
+              if (eventId) params.set("eventId", eventId);
+              if (eventName) params.set("event", eventName);
+              if (date) params.set("date", date);
+              if (time) params.set("time", time);
+              const bookingUrl = `/book?${params.toString()}`;
+              const profile = getSavedCustomerProfile();
+              if (!profile || !profile.full_name) {
+                window.location.href = `/profile?redirect=${encodeURIComponent(bookingUrl)}`;
+              } else {
+                window.location.href = bookingUrl;
+              }
             }}
-            className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-base py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-base py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer border-0"
           >
             <i className="fa-solid fa-ticket -rotate-12 text-lg" />
             <span>Book Ticket Now</span>

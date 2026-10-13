@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
@@ -24,7 +25,11 @@ const menuItems = [
   { icon: "fa-shield-halved", title: "Privacy & Security", desc: "Account security & data", color: "text-sky-600 bg-sky-50 border-sky-100", href: "#" },
 ];
 
-export default function ProfilePage() {
+function ProfileContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect") || "";
+
   // Authentication & Profile States
   const [step, setStep] = useState("ENTER_MOBILE"); // ENTER_MOBILE | VERIFY_OTP | COMPLETE_PROFILE | VIEW_PROFILE
   const [mobile, setMobile] = useState("");
@@ -86,6 +91,12 @@ export default function ProfilePage() {
             setPhotoInput(existingProfile.profile_photo || "");
             setStep("VIEW_PROFILE");
             loadCustomerStats(existingProfile.mobile || effectiveMobile);
+
+            // If arrived from "Book Ticket Now", auto-redirect immediately
+            if (redirectUrl && (existingProfile.full_name || "").trim()) {
+              router.replace(redirectUrl);
+              return;
+            }
           } else if (effectiveMobile) {
             setStep("COMPLETE_PROFILE");
           }
@@ -98,7 +109,7 @@ export default function ProfilePage() {
     }
 
     initSession();
-  }, []);
+  }, [redirectUrl, router]);
 
   const loadCustomerStats = async (phone) => {
     if (!phone) return;
@@ -192,6 +203,11 @@ export default function ProfilePage() {
         setSuccessMsg("Welcome back! Your profile was loaded successfully.");
         setStep("VIEW_PROFILE");
         loadCustomerStats(mobile);
+
+        if (redirectUrl && (res.profile.full_name || "").trim()) {
+          router.replace(redirectUrl);
+          return;
+        }
       } else {
         setSuccessMsg("Mobile verified! Please enter your name to complete your profile.");
         setStep("COMPLETE_PROFILE");
@@ -231,6 +247,11 @@ export default function ProfilePage() {
       setSuccessMsg("Profile created successfully!");
       setStep("VIEW_PROFILE");
       loadCustomerStats(mobile);
+
+      if (redirectUrl) {
+        router.replace(redirectUrl);
+        return;
+      }
     } catch (err) {
       setErrorMsg(err.message || "Failed to create profile.");
     } finally {
@@ -291,6 +312,21 @@ export default function ProfilePage() {
             <h2 className="text-2xl font-black text-slate-900 font-brand">My Profile</h2>
             <p className="text-xs text-slate-500 font-medium">Manage your account & preferences</p>
           </div>
+
+          {/* Booking Flow In-Progress Banner */}
+          {redirectUrl && (
+            <div className="bg-gradient-to-r from-amber-50 to-rose-50 border border-amber-200/90 rounded-2xl p-3.5 flex items-center gap-3 shadow-xs">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-rose-500 text-white flex items-center justify-center text-sm shadow-xs flex-shrink-0">
+                <i className="fa-solid fa-ticket -rotate-12" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-black text-slate-900">Step 1 of Booking: Create Profile</p>
+                <p className="text-[11px] text-slate-600 font-medium leading-tight">
+                  Please verify your mobile and profile details. Once saved, you will be taken immediately to complete your ticket booking.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Feedback messages */}
           {errorMsg && (
@@ -713,5 +749,13 @@ export default function ProfilePage() {
         <BottomNav active="profile" />
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={null}>
+      <ProfileContent />
+    </Suspense>
   );
 }

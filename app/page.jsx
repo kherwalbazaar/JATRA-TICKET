@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BookTicketsModal from "./components/BookTicketsModal";
 import BottomNav from "./components/BottomNav";
@@ -10,8 +11,10 @@ import { saveBooking } from "../lib/bookings";
 import { subscribeEvents } from "../lib/events";
 import { subscribeBanners } from "../lib/banners";
 import { subscribeTicketTypes } from "../lib/ticketTypes";
+import { getSavedCustomerProfile } from "../lib/supabase";
 
 export default function Home() {
+  const router = useRouter();
   const [booking, setBooking] = useState(null);
   // The pricing cards are static, but a booking must always carry the real
   // `bookings.eventId` or the admin panel / gate scanner cannot match it.
@@ -20,6 +23,29 @@ export default function Home() {
   // static numbers below are only the fallback when nothing is stored yet.
   const [ticketTypes, setTicketTypes] = useState([]);
   const [countdown, setCountdown] = useState({ d: "00", h: "00", m: "00", s: "00" });
+
+  const handleBookTicketNow = (e, tierId = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const eventId = featuredEvent?.key || featuredEvent?.id || "";
+    const eventName = featuredEvent?.eventTitle || featuredEvent?.name || "Event";
+    const date = featuredEvent?.date || "";
+    const time = featuredEvent?.time || "";
+
+    const params = new URLSearchParams();
+    if (eventId) params.set("eventId", eventId);
+    if (eventName) params.set("event", eventName);
+    if (date) params.set("date", date);
+    if (time) params.set("time", time);
+    if (tierId) params.set("tier", tierId);
+
+    const bookingUrl = `/book?${params.toString()}`;
+    const profile = getSavedCustomerProfile();
+    if (!profile || !profile.full_name) {
+      router.push(`/profile?redirect=${encodeURIComponent(bookingUrl)}`);
+    } else {
+      router.push(bookingUrl);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -183,7 +209,7 @@ export default function Home() {
                 <div className="h-1 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
 
                 <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "standing" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                  <button onClick={(e) => handleBookTicketNow(e, "standing")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
                     <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
@@ -229,7 +255,7 @@ export default function Home() {
                 <div className="h-1 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
 
                 <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "special" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                  <button onClick={(e) => handleBookTicketNow(e, "special")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
                     <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
@@ -279,7 +305,7 @@ export default function Home() {
                 <div className="h-1 w-full bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]" />
 
                 <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "vip" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                  <button onClick={(e) => handleBookTicketNow(e, "vip")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
                     <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
@@ -325,7 +351,7 @@ export default function Home() {
                 <div className="h-1 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
 
                 <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={() => setBooking({ tierId: "star" })} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap">
+                  <button onClick={(e) => handleBookTicketNow(e, "star")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
                     <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
                   </button>
                 </div>
@@ -436,19 +462,25 @@ export default function Home() {
               </span>
             </div>
 
-            <a href="#" className="text-[11px] font-extrabold text-rose-600 flex items-center gap-1 hover:underline whitespace-nowrap">
+            <button
+              onClick={(e) => handleBookTicketNow(e)}
+              className="text-[11px] font-extrabold text-rose-600 flex items-center gap-1 hover:underline whitespace-nowrap bg-transparent border-0 p-0 cursor-pointer"
+            >
               🔥 Book Now Before It's Full! <i className="fa-solid fa-angle-right text-[10px]" />
-            </a>
+            </button>
           </div>
 
           {/* ==============================================
             9. PRIMARY CALL TO ACTION BUTTON
           ============================================== */}
-          <Link href="/book" className="block w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-base py-3.5 px-4 rounded-2xl shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+          <button
+            onClick={(e) => handleBookTicketNow(e)}
+            className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-base py-3.5 px-4 rounded-2xl shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer border-0"
+          >
             <i className="fa-solid fa-ticket -rotate-12 text-lg" />
             <span>Book Ticket Now</span>
             <i className="fa-solid fa-chevron-right text-xs ml-1" />
-          </Link>
+          </button>
         </main>
 
         {/* ==============================================

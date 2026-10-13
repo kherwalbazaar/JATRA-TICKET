@@ -1,10 +1,9 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BookingForm from "../components/BookingForm";
-import { saveBooking } from "../../lib/bookings";
-import { markSeatsBooked } from "../../lib/seats";
+import { getSavedCustomerProfile } from "../../lib/supabase";
 
 function BookContent() {
   const router = useRouter();
@@ -15,33 +14,32 @@ function BookContent() {
   const time = searchParams.get("time") ?? "";
   const block = searchParams.get("block") ?? "";
   const seats = searchParams.get("seats") ?? "";
-  const seatPrice = Number(searchParams.get("seatPrice")) || 100;
-  const seatCount = seats ? seats.split(",").filter(Boolean).length : 0;
-  const totalAmount = seatPrice * seatCount;
+  const seatPrice = Number(searchParams.get("seatPrice")) || 0;
+  const tier = searchParams.get("tier") ?? "vip";
+
+  // Check if profile exists; if not, redirect immediately to /profile?redirect=...
+  useEffect(() => {
+    const profile = getSavedCustomerProfile();
+    if (!profile || !profile.full_name) {
+      if (typeof window !== "undefined") {
+        const fullCurrentPath = window.location.pathname + window.location.search;
+        router.push(`/profile?redirect=${encodeURIComponent(fullCurrentPath)}`);
+      }
+    }
+  }, [router]);
 
   return (
     <BookingForm
       fullPage
+      initialEventId={eventId}
+      initialEventName={eventName}
+      initialDate={date}
+      initialTime={time}
       block={block}
       seats={seats}
       seatPrice={seatPrice}
-      eventName={eventName}
+      initialTierId={tier}
       onClose={() => router.back()}
-      onProceed={async (data) => {
-        const params = new URLSearchParams({
-          eventId,
-          event: eventName,
-          date,
-          time,
-          block,
-          seats,
-          seatPrice: String(seatPrice),
-          paymentMethod: data.paymentMethod,
-          customerName: data.customerName || "",
-          customerPhone: data.customerPhone || "",
-        });
-        router.push(`/payment?${params.toString()}`);
-      }}
     />
   );
 }
