@@ -103,38 +103,29 @@ export default function BlockCategoryDiagram({
   const activeWidth = (id) => (activeBlock === id ? 4 : 1.5);
 
   return (
-    <div
-      className={`bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl border border-slate-700 shadow-lg ${
-        compact ? "p-3" : "p-4"
-      }`}
-    >
-      <h3 className="text-center text-sm font-black text-sky-400 font-brand mb-1">
-        {title}
-      </h3>
-      <p className="text-center text-slate-400 text-[10px] mb-2">
-        Tap a <span className="text-sky-300 font-semibold">green block</span> to
-        select seats
-      </p>
-
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-3 mb-2 text-[9px] font-bold text-slate-400 flex-wrap">
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-[#16a34a] inline-block" /> Online
+    <div className="w-full bg-transparent p-0">
+      {/* Legend Bar (Fills left to right with background) */}
+      <div className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-2.5 flex items-center justify-around text-xs font-bold text-slate-200 shadow-sm">
+        <span className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-sm bg-[#16a34a] inline-block shadow-xs" />
+          <span>Online</span>
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-[#d97706] inline-block" /> Counter
+        <span className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-sm bg-[#d97706] inline-block shadow-xs" />
+          <span>Counter</span>
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded bg-[#ef4444] inline-block" /> All
-          Booked
+        <span className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-sm bg-[#ef4444] inline-block shadow-xs" />
+          <span>All Booked</span>
         </span>
       </div>
 
-      <svg
-        viewBox="0 0 1000 900"
-        className="w-full h-auto select-none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
+      <div className="rounded-2xl overflow-hidden shadow-md border border-slate-700/80 bg-[#0f172a]">
+        <svg
+          viewBox="0 0 1000 900"
+          className="w-full h-auto select-none block"
+          xmlns="http://www.w3.org/2000/svg"
+        >
         <defs>
           <linearGradient
             id="bdiag-stageGradient"
@@ -649,5 +640,6 @@ export default function BlockCategoryDiagram({
         </g>
       </svg>
     </div>
-  );
+  </div>
+);
 }

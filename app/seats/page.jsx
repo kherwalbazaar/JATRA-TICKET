@@ -435,7 +435,7 @@ function SeatSelectionContent() {
 
         <div className="flex-1 p-4 space-y-4">
           {/* Block Selection Map */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-4 shadow-lg border border-slate-700">
+          <div className="w-full bg-transparent p-0 space-y-2">
             {eventOptions.length > 1 && (
               <div className="flex flex-wrap justify-center gap-2 mb-3">
                 {eventOptions.map((opt) => (
@@ -446,7 +446,7 @@ function SeatSelectionContent() {
                     className={`text-[10px] font-black uppercase tracking-wide px-3 py-1.5 rounded-full border transition-all ${
                       eventId === opt.id
                         ? "bg-sky-500 border-sky-300 text-white"
-                        : "bg-slate-700 border-slate-600 text-slate-300"
+                        : "bg-white border-slate-300 text-slate-700 shadow-xs"
                     }`}
                   >
                     {opt.name}
@@ -454,23 +454,33 @@ function SeatSelectionContent() {
                 ))}
               </div>
             )}
-            <h2 className="text-center text-lg font-black text-sky-400 font-brand mb-2">
+            <h2 className="text-center text-lg font-black text-slate-900 font-brand mb-1">
               {eventName} - Seating Map
             </h2>
-            <p className="text-center text-slate-400 text-xs mb-4">
-              Click on any block (especially <span className="text-sky-300 font-semibold">Block B1</span>) to view and book seats
+            <p className="text-center text-slate-500 text-xs mb-3">
+              Click on any block (especially <span className="text-emerald-600 font-semibold">Block B1</span>) to view and book seats
             </p>
-            <div className="flex items-center justify-center gap-3 mb-3 text-[10px] font-bold text-slate-400">
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#d97706] inline-block" /> Counter</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#16a34a] inline-block" /> Online</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ef4444] inline-block" /> All Booked</span>
+            <div className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-2.5 flex items-center justify-around text-xs font-bold text-slate-200 shadow-sm">
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-[#16a34a] inline-block shadow-xs" />
+                <span>Online</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-[#d97706] inline-block shadow-xs" />
+                <span>Counter</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-sm bg-[#ef4444] inline-block shadow-xs" />
+                <span>All Booked</span>
+              </span>
             </div>
             
-            <svg
-              viewBox="0 0 1000 900"
-              className="w-full h-auto select-none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <div className="rounded-2xl overflow-hidden shadow-md border border-slate-700/80 bg-[#0f172a]">
+              <svg
+                viewBox="0 0 1000 900"
+                className="w-full h-auto select-none block"
+                xmlns="http://www.w3.org/2000/svg"
+              >
               {/* Definitions for gradients */}
               <defs>
                 <linearGradient id="stageGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -667,6 +677,7 @@ function SeatSelectionContent() {
                 </text>
               </g>
             </svg>
+            </div>
           </div>
           {/* Stage Area - Top Center */}
           <div className="flex flex-col items-center">
