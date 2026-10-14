@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
 import UserSeatGrid from "../components/UserSeatGrid";
+import MovingSpotlights from "../components/MovingSpotlights";
 import { subscribeSeats, BLOCK_GROUPS, holdSeat, releaseSeatHold, getHoldSessionId, isHoldFresh } from "../../lib/seats";
 import { fetchEvents } from "../../lib/events";
 import {
@@ -17,6 +18,40 @@ import { getSavedCustomerProfile } from "../../lib/supabase";
 
 const EVENT_ID_KEY = "jatra:eventId";
 const HOLD_KEY = "jatra:seatHold";
+
+function roundedPolygon(pointsStr, radius = 10) {
+  const pts = pointsStr.trim().split(/\s+/).map((p) => {
+    const parts = p.split(",").map(Number);
+    return { x: parts[0], y: parts[1] };
+  });
+  const n = pts.length;
+  let d = "";
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+    const vPrev = { x: prev.x - curr.x, y: prev.y - curr.y };
+    const lenPrev = Math.hypot(vPrev.x, vPrev.y);
+    const vNext = { x: next.x - curr.x, y: next.y - curr.y };
+    const lenNext = Math.hypot(vNext.x, vNext.y);
+    const r = Math.min(radius, lenPrev / 2, lenNext / 2);
+    const start = {
+      x: (curr.x + (vPrev.x / lenPrev) * r).toFixed(1),
+      y: (curr.y + (vPrev.y / lenPrev) * r).toFixed(1),
+    };
+    const end = {
+      x: (curr.x + (vNext.x / lenNext) * r).toFixed(1),
+      y: (curr.y + (vNext.y / lenNext) * r).toFixed(1),
+    };
+    if (i === 0) {
+      d += `M ${start.x},${start.y} `;
+    } else {
+      d += `L ${start.x},${start.y} `;
+    }
+    d += `Q ${curr.x},${curr.y} ${end.x},${end.y} `;
+  }
+  return d + "Z";
+}
 
 function SeatSelectionContent() {
   const router = useRouter();
@@ -463,8 +498,9 @@ function SeatSelectionContent() {
                   fill="url(#stageGradient)"
                   stroke="url(#stageBorderGradient)"
                   strokeWidth="4"
-                  rx="10"
+                  rx="14"
                 />
+                <MovingSpotlights idPrefix="seats" />
                 <text
                   x="500"
                   y="185"
@@ -473,6 +509,7 @@ function SeatSelectionContent() {
                   fontSize="28"
                   fontWeight="bold"
                   letterSpacing="2"
+                  style={{ textShadow: "0 2px 10px rgba(0,0,0,0.85)" }}
                 >
                   STAGE
                 </text>
@@ -483,6 +520,7 @@ function SeatSelectionContent() {
                   fill="#ffffff"
                   fontSize="14"
                   letterSpacing="4"
+                  style={{ textShadow: "0 2px 8px rgba(0,0,0,0.85)" }}
                 >
                   FRONT
                 </text>
@@ -498,7 +536,7 @@ function SeatSelectionContent() {
                   fill={blockFill('C2')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
-                  rx="6"
+                  rx="12"
                 />
                 <text x="195" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C2')}</text>
                 <text x="195" y="165" textAnchor="middle" fill={channelColor('C2')} fontSize="14" pointerEvents="none">
@@ -516,7 +554,7 @@ function SeatSelectionContent() {
                   fill={blockFill('A2')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
-                  rx="6"
+                  rx="12"
                 />
                 <text x="805" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A2')}</text>
                 <text x="805" y="165" textAnchor="middle" fill={channelColor('A2')} fontSize="14" pointerEvents="none">
@@ -526,11 +564,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK C3 (Outer Left) */}
               <g onClick={() => handleBlockSelect('C3')} className={`block-path ${activeBlock === 'C3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="40,250 170,250 170,680 40,840"
+                <path
+                  d={roundedPolygon("40,250 170,250 170,680 40,840", 12)}
                   fill={blockFill('C3')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="105" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C3')}</text>
                 <text x="105" y="550" textAnchor="middle" fill={channelColor('C3')} fontSize="14" pointerEvents="none">
@@ -540,11 +579,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK C1 (Inner Left) */}
               <g onClick={() => handleBlockSelect('C1')} className={`block-path ${activeBlock === 'C1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="190,250 350,250 350,420 190,660"
+                <path
+                  d={roundedPolygon("190,250 350,250 350,420 190,660", 12)}
                   fill={blockFill('C1')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="270" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C1')}</text>
                 <text x="270" y="470" textAnchor="middle" fill={channelColor('C1')} fontSize="14" pointerEvents="none">
@@ -554,11 +594,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK A1 (Inner Right) */}
               <g onClick={() => handleBlockSelect('A1')} className={`block-path ${activeBlock === 'A1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="650,250 810,250 810,660 650,420"
+                <path
+                  d={roundedPolygon("650,250 810,250 810,660 650,420", 12)}
                   fill={blockFill('A1')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="730" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A1')}</text>
                 <text x="730" y="470" textAnchor="middle" fill={channelColor('A1')} fontSize="14" pointerEvents="none">
@@ -568,11 +609,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK A3 (Outer Right) */}
               <g onClick={() => handleBlockSelect('A3')} className={`block-path ${activeBlock === 'A3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="830,250 960,250 960,840 830,680"
+                <path
+                  d={roundedPolygon("830,250 960,250 960,840 830,680", 12)}
                   fill={blockFill('A3')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="895" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A3')}</text>
                 <text x="895" y="550" textAnchor="middle" fill={channelColor('A3')} fontSize="14" pointerEvents="none">
@@ -582,11 +624,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK B1 (Main Center Front Trapezoid) */}
               <g onClick={() => handleBlockSelect('B1')} className={`block-path ${activeBlock === 'B1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="370,420 630,420 780,660 220,660"
+                <path
+                  d={roundedPolygon("370,420 630,420 780,660 220,660", 12)}
                   fill={blockFill('B1')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="500" y="540" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B1')}</text>
                 <text x="500" y="575" textAnchor="middle" fill={channelColor('B1')} fontSize="14" pointerEvents="none">
@@ -596,11 +639,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK B2 (Bottom Left) */}
               <g onClick={() => handleBlockSelect('B2')} className={`block-path ${activeBlock === 'B2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="200,680 480,680 480,860 60,860"
+                <path
+                  d={roundedPolygon("200,680 480,680 480,860 60,860", 12)}
                   fill={blockFill('B2')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="290" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B2')}</text>
                 <text x="290" y="800" textAnchor="middle" fill={channelColor('B2')} fontSize="14" pointerEvents="none">
@@ -610,11 +654,12 @@ function SeatSelectionContent() {
 
               {/* BLOCK B3 (Bottom Right) */}
               <g onClick={() => handleBlockSelect('B3')} className={`block-path ${activeBlock === 'B3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
-                <polygon
-                  points="520,680 800,680 940,860 520,860"
+                <path
+                  d={roundedPolygon("520,680 800,680 940,860 520,860", 12)}
                   fill={blockFill('B3')}
                   stroke="#38bdf8"
                   strokeWidth="1.5"
+                  strokeLinejoin="round"
                 />
                 <text x="710" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B3')}</text>
                 <text x="710" y="800" textAnchor="middle" fill={channelColor('B3')} fontSize="14" pointerEvents="none">

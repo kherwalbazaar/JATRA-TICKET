@@ -253,9 +253,28 @@ export default function EventDetail({ id }) {
     return `${date.getDate()} ${date.toLocaleString("en-US", { month: "short" })} ${date.getFullYear()}`;
   };
 
+  const handleBookTicketNow = () => {
+    const eventName = event?.name || event?.eventTitle || "Event";
+    const eventId = event?.key || id;
+    const date = event?.date || "";
+    const time = event?.time || "";
+    const params = new URLSearchParams();
+    if (eventId) params.set("eventId", eventId);
+    if (eventName) params.set("event", eventName);
+    if (date) params.set("date", date);
+    if (time) params.set("time", time);
+    const bookingUrl = `/book?${params.toString()}`;
+    const profile = getSavedCustomerProfile();
+    if (!profile || !profile.full_name) {
+      window.location.href = `/profile?redirect=${encodeURIComponent(bookingUrl)}`;
+    } else {
+      window.location.href = bookingUrl;
+    }
+  };
+
   return (
     <div className="standalone-detail-page bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
-      <div className="bg-[#f8faff] min-h-screen relative pb-6 shadow-2xl flex flex-col overflow-hidden">
+      <div className="bg-[#f8faff] min-h-screen relative pb-24 sm:pb-28 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-[#12193b] text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-50">
           <button onClick={() => window.history.back()} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
@@ -349,6 +368,16 @@ export default function EventDetail({ id }) {
               </div>
             </div>
           )}
+
+          {/* Book Ticket Now (below Show Guide) - Vibrant Pulsing & Shimmering Animation */}
+          <button
+            onClick={handleBookTicketNow}
+            className="btn-book-ticket-glow w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-black text-base py-3.5 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"
+          >
+            <i className="fa-solid fa-ticket ticket-icon-wiggle text-xl" />
+            <span className="tracking-wide uppercase text-sm sm:text-base font-black drop-shadow-sm">Book Ticket Now</span>
+            <i className="fa-solid fa-angles-right text-xs ml-0.5 animate-pulse" />
+          </button>
 
           {/* Trailer - only when the database has one */}
           {trailer && (
@@ -565,33 +594,6 @@ export default function EventDetail({ id }) {
               </div>
             </div>
           )}
-
-          {/* Book Ticket Now */}
-          <button
-            onClick={() => {
-              const eventName = event?.name || event?.eventTitle || "Event";
-              const eventId = event?.key || id;
-              const date = event?.date || "";
-              const time = event?.time || "";
-              const params = new URLSearchParams();
-              if (eventId) params.set("eventId", eventId);
-              if (eventName) params.set("event", eventName);
-              if (date) params.set("date", date);
-              if (time) params.set("time", time);
-              const bookingUrl = `/book?${params.toString()}`;
-              const profile = getSavedCustomerProfile();
-              if (!profile || !profile.full_name) {
-                window.location.href = `/profile?redirect=${encodeURIComponent(bookingUrl)}`;
-              } else {
-                window.location.href = bookingUrl;
-              }
-            }}
-            className="w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-extrabold text-base py-3.5 rounded-2xl shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer border-0"
-          >
-            <i className="fa-solid fa-ticket -rotate-12 text-lg" />
-            <span>Book Ticket Now</span>
-            <i className="fa-solid fa-chevron-right text-xs ml-1" />
-          </button>
         </div>
 
         <BottomNav active="events" />

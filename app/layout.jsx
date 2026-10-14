@@ -1,4 +1,5 @@
 import "./globals.css";
+import StageContactFab from "./components/StageContactFab";
 
 export const metadata = {
   title: "JATRA BAZAAR - Live Show Ticket Booking",
@@ -68,7 +69,10 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <StageContactFab />
+      </body>
     </html>
   );
 }

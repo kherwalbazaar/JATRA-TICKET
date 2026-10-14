@@ -8,6 +8,41 @@ import {
   blockChannelText,
 } from "../../lib/blockCategories";
 import { isHoldFresh } from "../../lib/seats";
+import MovingSpotlights from "./MovingSpotlights";
+
+function roundedPolygon(pointsStr, radius = 10) {
+  const pts = pointsStr.trim().split(/\s+/).map((p) => {
+    const parts = p.split(",").map(Number);
+    return { x: parts[0], y: parts[1] };
+  });
+  const n = pts.length;
+  let d = "";
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+    const vPrev = { x: prev.x - curr.x, y: prev.y - curr.y };
+    const lenPrev = Math.hypot(vPrev.x, vPrev.y);
+    const vNext = { x: next.x - curr.x, y: next.y - curr.y };
+    const lenNext = Math.hypot(vNext.x, vNext.y);
+    const r = Math.min(radius, lenPrev / 2, lenNext / 2);
+    const start = {
+      x: (curr.x + (vPrev.x / lenPrev) * r).toFixed(1),
+      y: (curr.y + (vPrev.y / lenPrev) * r).toFixed(1),
+    };
+    const end = {
+      x: (curr.x + (vNext.x / lenNext) * r).toFixed(1),
+      y: (curr.y + (vNext.y / lenNext) * r).toFixed(1),
+    };
+    if (i === 0) {
+      d += `M ${start.x},${start.y} `;
+    } else {
+      d += `L ${start.x},${start.y} `;
+    }
+    d += `Q ${curr.x},${curr.y} ${end.x},${end.y} `;
+  }
+  return d + "Z";
+}
 
 /**
  * Interactive venue block-category diagram.
@@ -138,8 +173,9 @@ export default function BlockCategoryDiagram({
             fill="url(#bdiag-stageGradient)"
             stroke="url(#bdiag-stageBorderGradient)"
             strokeWidth="4"
-            rx="10"
+            rx="14"
           />
+          <MovingSpotlights idPrefix="bdiag" />
           <text
             x="500"
             y="185"
@@ -148,6 +184,7 @@ export default function BlockCategoryDiagram({
             fontSize="28"
             fontWeight="bold"
             letterSpacing="2"
+            style={{ textShadow: "0 2px 10px rgba(0,0,0,0.85)" }}
           >
             STAGE
           </text>
@@ -158,6 +195,7 @@ export default function BlockCategoryDiagram({
             fill="#ffffff"
             fontSize="14"
             letterSpacing="4"
+            style={{ textShadow: "0 2px 8px rgba(0,0,0,0.85)" }}
           >
             FRONT
           </text>
@@ -177,7 +215,7 @@ export default function BlockCategoryDiagram({
             fill={blockFill("C2")}
             stroke={activeStroke("C2")}
             strokeWidth={activeWidth("C2")}
-            rx="6"
+            rx="12"
           />
           <text
             x="195"
@@ -229,7 +267,7 @@ export default function BlockCategoryDiagram({
             fill={blockFill("A2")}
             stroke={activeStroke("A2")}
             strokeWidth={activeWidth("A2")}
-            rx="6"
+            rx="12"
           />
           <text
             x="805"
@@ -273,11 +311,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("C3")}
           style={blockStyle("C3")}
         >
-          <polygon
-            points="40,250 170,250 170,680 40,840"
+          <path
+            d={roundedPolygon("40,250 170,250 170,680 40,840", 12)}
             fill={blockFill("C3")}
             stroke={activeStroke("C3")}
             strokeWidth={activeWidth("C3")}
+            strokeLinejoin="round"
           />
           <text
             x="105"
@@ -321,11 +360,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("C1")}
           style={blockStyle("C1")}
         >
-          <polygon
-            points="190,250 350,250 350,420 190,660"
+          <path
+            d={roundedPolygon("190,250 350,250 350,420 190,660", 12)}
             fill={blockFill("C1")}
             stroke={activeStroke("C1")}
             strokeWidth={activeWidth("C1")}
+            strokeLinejoin="round"
           />
           <text
             x="270"
@@ -369,11 +409,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("A1")}
           style={blockStyle("A1")}
         >
-          <polygon
-            points="650,250 810,250 810,660 650,420"
+          <path
+            d={roundedPolygon("650,250 810,250 810,660 650,420", 12)}
             fill={blockFill("A1")}
             stroke={activeStroke("A1")}
             strokeWidth={activeWidth("A1")}
+            strokeLinejoin="round"
           />
           <text
             x="730"
@@ -417,11 +458,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("A3")}
           style={blockStyle("A3")}
         >
-          <polygon
-            points="830,250 960,250 960,840 830,680"
+          <path
+            d={roundedPolygon("830,250 960,250 960,840 830,680", 12)}
             fill={blockFill("A3")}
             stroke={activeStroke("A3")}
             strokeWidth={activeWidth("A3")}
+            strokeLinejoin="round"
           />
           <text
             x="895"
@@ -465,11 +507,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("B1")}
           style={blockStyle("B1")}
         >
-          <polygon
-            points="370,420 630,420 780,660 220,660"
+          <path
+            d={roundedPolygon("370,420 630,420 780,660 220,660", 12)}
             fill={blockFill("B1")}
             stroke={activeStroke("B1")}
             strokeWidth={activeWidth("B1")}
+            strokeLinejoin="round"
           />
           <text
             x="500"
@@ -513,11 +556,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("B2")}
           style={blockStyle("B2")}
         >
-          <polygon
-            points="200,680 480,680 480,860 60,860"
+          <path
+            d={roundedPolygon("200,680 480,680 480,860 60,860", 12)}
             fill={blockFill("B2")}
             stroke={activeStroke("B2")}
             strokeWidth={activeWidth("B2")}
+            strokeLinejoin="round"
           />
           <text
             x="290"
@@ -561,11 +605,12 @@ export default function BlockCategoryDiagram({
           className={blockClass("B3")}
           style={blockStyle("B3")}
         >
-          <polygon
-            points="520,680 800,680 940,860 520,860"
+          <path
+            d={roundedPolygon("520,680 800,680 940,860 520,860", 12)}
             fill={blockFill("B3")}
             stroke={activeStroke("B3")}
             strokeWidth={activeWidth("B3")}
+            strokeLinejoin="round"
           />
           <text
             x="710"
