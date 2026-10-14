@@ -24,6 +24,8 @@ import {
 } from "../../lib/blockCategories";
 import { fetchEvents } from "../../lib/events";
 import { subscribeTicketTypes } from "../../lib/ticketTypes";
+import UserSeatGrid from "./UserSeatGrid";
+import BlockCategoryDiagram from "./BlockCategoryDiagram";
 
 export const bookingTiers = [
   { id: "standing", name: "STANDING", price: 50, gate: "Gate A" },
@@ -280,19 +282,33 @@ export default function BookingForm({
   };
 
   // Navigate to dedicated seat-selection page (diagram → block → seats → proceed)
-  const goToSeatSelection = () => {
+  const goToSeatSelection = useCallback(() => {
     const params = new URLSearchParams();
     if (resolvedEventId) params.set("eventId", resolvedEventId);
     if (resolvedEventName) params.set("event", resolvedEventName);
     if (eventDate) params.set("date", eventDate);
     if (eventTime) params.set("time", eventTime);
+    if (activeBlock) params.set("block", activeBlock);
+    if (selectedSeats && selectedSeats.length > 0) {
+      params.set("seats", selectedSeats.join(","));
+    }
+    if (seatPrice) params.set("seatPrice", String(seatPrice));
     const returnPath =
       typeof window !== "undefined"
         ? window.location.pathname + window.location.search
         : "/book";
     params.set("return", returnPath);
     router.push(`/select-seats?${params.toString()}`);
-  };
+  }, [
+    resolvedEventId,
+    resolvedEventName,
+    eventDate,
+    eventTime,
+    activeBlock,
+    selectedSeats,
+    seatPrice,
+    router,
+  ]);
 
   // Step 4 Confirm & Book Submission
   const handleConfirmAndBook = async () => {
@@ -654,18 +670,20 @@ export default function BookingForm({
             SECTION 1: SEAT SELECTION
         ============================================================== */}
         <div
-          className={`bg-white rounded-3xl border transition-all ${
+          className={`transition-all ${
             activeStep === 1
-              ? "border-indigo-600 shadow-md ring-2 ring-indigo-500/10"
+              ? "bg-transparent border-0 shadow-none ring-0"
               : isStep1Completed
-              ? "border-emerald-200 shadow-xs"
-              : "border-slate-200 opacity-80"
+              ? "bg-white rounded-3xl border border-emerald-200 shadow-xs"
+              : "bg-white rounded-3xl border border-slate-200 opacity-80"
           }`}
         >
           {/* Header */}
           <div
             onClick={() => setActiveStep(1)}
-            className="p-4 flex items-center justify-between cursor-pointer border-b border-slate-100"
+            className={`flex items-center justify-between cursor-pointer ${
+              activeStep === 1 ? "p-2 sm:p-3 border-0" : "p-4 border-b border-slate-100"
+            }`}
           >
             <div className="flex items-center gap-3">
               <span
@@ -707,64 +725,76 @@ export default function BookingForm({
 
           {/* Section Body */}
           {activeStep === 1 && (
-            <div className="p-4 space-y-4">
-              {/* Already selected → summary + change seats */}
-              {quantity > 0 ? (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3">
+            <div className="p-0 sm:p-1 space-y-4">
+              {/* Interactive Stage & Block Category Diagram */}
+              <div className="rounded-2xl overflow-hidden shadow-xs">
+                <BlockCategoryDiagram
+                  seatsByBlock={seatsByBlock}
+                  activeBlock={activeBlock}
+                  onSelectBlock={handleSelectBlock}
+                  seatPrice={seatPrice}
+                  compact={true}
+                  title="Stage & Block Map"
+                />
+              </div>
+
+              {/* Real Database Seat Row Grid (No Background) */}
+              {activeBlock && (
+                <div className="w-full">
+                  <UserSeatGrid
+                    showId={resolvedEventId}
+                    eventId={resolvedEventId}
+                    activeBlock={activeBlock}
+                    selected={selectedSeats}
+                    onToggleSeat={toggleSeat}
+                    seatsByBlock={seatsByBlock}
+                    loading={loadingSeats}
+                    seatPrice={seatPrice}
+                  />
+                </div>
+              )}
+
+              {/* Selected Seats Summary & Proceed to Step 2 */}
+              {quantity > 0 && (
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-black text-slate-900">
-                        Block {getBlockName(activeBlock) || activeBlock}
+                      <p className="text-xs font-black text-emerald-950 font-brand">
+                        Block {getBlockName(activeBlock) || activeBlock} &bull; {quantity} Seat{quantity > 1 ? "s" : ""} Selected
                       </p>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        {quantity} seat{quantity > 1 ? "s" : ""} selected
+                      <p className="text-[10px] text-emerald-700 font-bold">
+                        ₹{seatPrice} / seat &bull; Ticket Subtotal: ₹{ticketSubtotal}
                       </p>
                     </div>
-                    <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-black px-2.5 py-1 rounded-lg">
-                      ₹{seatPrice} / seat
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep(2)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <span>Continue</span>
+                      <i className="fa-solid fa-arrow-right text-[10px]" />
+                    </button>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
                     {selectedSeats.map((s) => (
                       <span
                         key={s}
-                        className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black px-2 py-0.5 rounded-lg"
+                        className="bg-white text-emerald-900 border border-emerald-300 text-xs font-black px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1.5"
                       >
-                        {s}
+                        <span>{s}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleSeat(s)}
+                          className="text-emerald-500 hover:text-rose-600 font-bold text-xs ml-0.5 cursor-pointer"
+                          title="Deselect seat"
+                        >
+                          &times;
+                        </button>
                       </span>
                     ))}
                   </div>
-
-                  <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2">
-                    <span className="text-[11px] text-slate-600 font-semibold">
-                      Ticket Subtotal
-                    </span>
-                    <span className="text-sm font-black text-slate-900">
-                      ₹{ticketSubtotal}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={goToSeatSelection}
-                    className="w-full bg-white border border-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl hover:bg-slate-50 flex items-center justify-center gap-2"
-                  >
-                    <i className="fa-solid fa-chair" />
-                    Change Seats
-                  </button>
                 </div>
-              ) : (
-                /* No seats yet → only Select Seat CTA */
-                <button
-                  type="button"
-                  onClick={goToSeatSelection}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-extrabold text-sm py-4 rounded-2xl shadow-lg shadow-indigo-200 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-                >
-                  <i className="fa-solid fa-chair" />
-                  <span>Select Seat</span>
-                  <i className="fa-solid fa-arrow-right text-xs" />
-                </button>
               )}
             </div>
           )}

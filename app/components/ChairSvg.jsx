@@ -60,7 +60,7 @@ export default function ChairSvg({
 
   return (
     <svg
-      viewBox="0 0 100 120"
+      viewBox="7 10 86 103"
       className={`${sizeClass} transition-all duration-200 select-none ${
         disabled
           ? "cursor-not-allowed opacity-50"
@@ -127,7 +127,7 @@ export default function ChairSvg({
           x="50"
           y="37"
           textAnchor="middle"
-          fontSize="20"
+          fontSize="22"
           fontWeight="900"
           fill={textColor}
           style={{ fontFamily: "'Poppins', 'Segoe UI', sans-serif" }}
