@@ -23,7 +23,7 @@ import {
   isBlockOnline,
 } from "../../lib/blockCategories";
 import { fetchEvents } from "../../lib/events";
-import { subscribeTicketTypes } from "../../lib/ticketTypes";
+import { subscribeTicketTypes, getPriceForRow } from "../../lib/ticketTypes";
 import UserSeatGrid from "./UserSeatGrid";
 import BlockCategoryDiagram from "./BlockCategoryDiagram";
 
@@ -84,6 +84,16 @@ export default function BookingForm({
 
   // 1. Subscribe to Live Block Categories
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
+
+  // 1.b Subscribe to Live Ticket Types
+  const [ticketTypes, setTicketTypes] = useState([]);
+  useEffect(() => {
+    if (!resolvedEventId) return;
+    const unsub = subscribeTicketTypes(setTicketTypes, resolvedEventId);
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
+  }, [resolvedEventId]);
 
   const isOnline = (id) => isBlockOnline(blockCats, id);
   const getBlockName = (id) => blockDisplayName(blockCats, id);
@@ -197,21 +207,112 @@ export default function BookingForm({
     return all.filter(isOnline);
   }, [seatsByBlock, blockCats]);
 
-  // Determine Seat Price
+  // Detailed seat and pricing breakdown for currently selected seats
+  const selectedSeatDetails = useMemo(() => {
+    const list = seatsByBlock[activeBlock] || [];
+    return selectedSeats.map((key) => {
+      const fs = list.find(
+        (s) =>
+          s.id === key ||
+          s.seatLabel === key ||
+          `${s.rowId}-${s.seatNumber}` === key ||
+          `${s.rowId}${s.seatNumber}` === key
+      );
+
+      const rowId = String(
+        fs?.rowId ||
+          fs?.row ||
+          (key.includes("-") ? key.split("-")[1] : key.replace(/\d+$/, "")) ||
+          "A"
+      ).trim().toUpperCase();
+
+      const seatNumber =
+        fs?.seatNumber ||
+        (key.includes("-") ? key.split("-")[2] : key.match(/\d+$/)?.[0]) ||
+        "";
+      const seatLabel =
+        fs?.seatLabel || (rowId && seatNumber ? `${rowId}${seatNumber}` : key);
+
+      // Determine price: Supabase seat price -> row ticket type -> getPriceForRow fallback
+      let price = 0;
+      if (fs && fs.price != null && Number(fs.price) > 0 && Number(fs.price) !== 50) {
+        price = Number(fs.price);
+      } else {
+        price = getPriceForRow(rowId, ticketTypes);
+      }
+
+      // Determine tier name
+      let tierName = "";
+      if (Array.isArray(ticketTypes) && ticketTypes.length > 0) {
+        const matched = ticketTypes.find(
+          (tt) =>
+            Array.isArray(tt.rows) &&
+            tt.rows.map((r) => String(r).toUpperCase()).includes(rowId)
+        );
+        if (matched?.name) tierName = matched.name;
+      }
+      if (!tierName) {
+        if (["A", "B", "C", "D", "E"].includes(rowId) || price === 200) tierName = "Star";
+        else if (["F", "G", "H", "I", "J", "K"].includes(rowId) || price === 150) tierName = "VIP";
+        else if (["L", "M", "N", "O", "P", "Q", "R"].includes(rowId) || price === 120) tierName = "Special";
+        else if (price === 100) tierName = "3rd Class";
+        else tierName = "Seated";
+      }
+
+      return {
+        key,
+        rowId,
+        seatNumber,
+        seatLabel,
+        price,
+        tierName,
+      };
+    });
+  }, [selectedSeats, seatsByBlock, activeBlock, ticketTypes]);
+
+  // Total quantity and ticket subtotal
+  const quantity = selectedSeats.length;
+
+  const ticketSubtotal = useMemo(() => {
+    if (selectedSeatDetails.length > 0) {
+      return selectedSeatDetails.reduce((sum, s) => sum + s.price, 0);
+    }
+    return 0;
+  }, [selectedSeatDetails]);
+
+  // Unit seat price
   const seatPrice = useMemo(() => {
-    if (initialSeatPrice && Number(initialSeatPrice) > 0) {
+    if (selectedSeatDetails.length > 0) {
+      const prices = [...new Set(selectedSeatDetails.map((s) => s.price))];
+      if (prices.length === 1) return prices[0];
+      return Math.round(ticketSubtotal / selectedSeatDetails.length);
+    }
+    if (initialSeatPrice && Number(initialSeatPrice) > 50) {
       return Number(initialSeatPrice);
     }
     const list = seatsByBlock[activeBlock] || [];
-    const found = list.find((s) => s.price != null && Number(s.price) > 0);
+    const found = list.find((s) => s.price != null && Number(s.price) > 50);
     if (found) return Number(found.price);
-    return 100;
-  }, [initialSeatPrice, seatsByBlock, activeBlock]);
+    return getPriceForRow("A", ticketTypes);
+  }, [selectedSeatDetails, ticketSubtotal, initialSeatPrice, seatsByBlock, activeBlock, ticketTypes]);
 
-  // Calculation rules:
-  // Ticket Subtotal = Quantity × Price Per Ticket
-  const quantity = selectedSeats.length;
-  const ticketSubtotal = seatPrice * quantity;
+  const displaySeatPrice = useMemo(() => {
+    if (selectedSeatDetails.length > 0) {
+      const prices = [...new Set(selectedSeatDetails.map((s) => s.price))].sort((a, b) => a - b);
+      if (prices.length === 1) return `₹${prices[0]}`;
+      return `₹${prices[0]} - ₹${prices[prices.length - 1]}`;
+    }
+    return `₹${seatPrice}`;
+  }, [selectedSeatDetails, seatPrice]);
+
+  const selectedTierName = useMemo(() => {
+    if (selectedSeatDetails.length > 0) {
+      const tiers = [...new Set(selectedSeatDetails.map((s) => s.tierName))];
+      return tiers.join(" & ");
+    }
+    return "";
+  }, [selectedSeatDetails]);
+
   const pricing = useMemo(
     () => calculateCustomerCharges(ticketSubtotal),
     [ticketSubtotal]
@@ -347,8 +448,8 @@ export default function BookingForm({
         customerPhone: profile?.mobile || "",
         paymentMethod: paymentMethod.toUpperCase(),
         tier: {
-          id: "seated",
-          name: `SEATED (${blockLabel})`,
+          id: (selectedTierName || "seated").toLowerCase(),
+          name: `${selectedTierName || "SEATED"} (${blockLabel})`,
           price: seatPrice,
           gate: `Block ${blockLabel}`,
         },
@@ -757,42 +858,49 @@ export default function BookingForm({
               {/* Selected Seats Summary & Proceed to Step 2 */}
               {quantity > 0 && (
                 <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-black text-emerald-950 font-brand">
                         Block {getBlockName(activeBlock) || activeBlock} &bull; {quantity} Seat{quantity > 1 ? "s" : ""} Selected
                       </p>
-                      <p className="text-[10px] text-emerald-700 font-bold">
-                        ₹{seatPrice} / seat &bull; Ticket Subtotal: ₹{ticketSubtotal}
+                      <p className="text-xs text-emerald-900 font-extrabold mt-0.5">
+                        Total Amount: <span className="text-sm font-black text-emerald-950">₹{ticketSubtotal.toFixed(2)}</span>
+                        <span className="text-[10px] text-emerald-700 font-medium ml-1.5">
+                          ({quantity} &times; {displaySeatPrice})
+                        </span>
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setActiveStep(2)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all shrink-0"
                     >
-                      <span>Continue</span>
+                      <span>Continue &bull; ₹{ticketSubtotal}</span>
                       <i className="fa-solid fa-arrow-right text-[10px]" />
                     </button>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {selectedSeats.map((s) => (
-                      <span
-                        key={s}
-                        className="bg-white text-emerald-900 border border-emerald-300 text-xs font-black px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1.5"
-                      >
-                        <span>{s}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleSeat(s)}
-                          className="text-emerald-500 hover:text-rose-600 font-bold text-xs ml-0.5 cursor-pointer"
-                          title="Deselect seat"
+                    {selectedSeats.map((s) => {
+                      const detail = selectedSeatDetails.find((d) => d.key === s);
+                      const label = detail?.seatLabel || s;
+                      return (
+                        <span
+                          key={s}
+                          className="bg-white text-emerald-900 border border-emerald-300 text-xs font-black px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1.5"
                         >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
+                          <span>{label}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleSeat(s)}
+                            className="text-emerald-500 hover:text-rose-600 font-bold text-xs ml-0.5 cursor-pointer"
+                            title="Deselect seat"
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -878,7 +986,7 @@ export default function BookingForm({
                       Category
                     </span>
                     <h3 className="text-sm font-black text-slate-900 font-brand mt-1">
-                      SEATED (Block {getBlockName(activeBlock) || activeBlock})
+                      {selectedTierName || "SEATED"} (Block {getBlockName(activeBlock) || activeBlock})
                     </h3>
                   </div>
                   <div className="text-right">
@@ -886,7 +994,7 @@ export default function BookingForm({
                       Price Per Ticket
                     </p>
                     <p className="text-base font-black text-slate-900 font-brand">
-                      ₹{seatPrice}
+                      {displaySeatPrice}
                     </p>
                   </div>
                 </div>
@@ -1035,7 +1143,7 @@ export default function BookingForm({
                 {/* Itemized Calculation */}
                 <div className="flex items-center justify-between text-slate-600">
                   <span>
-                    Ticket Subtotal ({quantity} &times; ₹{seatPrice})
+                    Ticket Subtotal ({quantity} &times; {displaySeatPrice})
                   </span>
                   <span className="font-bold text-slate-900">
                     ₹{pricing.ticketAmount.toFixed(2)}
@@ -1263,41 +1371,72 @@ export default function BookingForm({
 
       {/* Floating Bottom Action Strip (Always visible when activeStep < 4 and seats are selected) */}
       {isStep1Completed && !bookingConfirmed && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] z-20">
-          <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                Total Payable ({quantity} Seat{quantity > 1 ? "s" : ""})
-              </span>
-              <span className="text-base font-black text-emerald-600 font-brand">
-                ₹{totalAmountPayable.toFixed(2)}
-              </span>
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-2.5 sm:py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.09)] z-30">
+          <div className="max-w-2xl mx-auto space-y-2">
+            {/* Top: Selected Seat Tabs (Suitable, scrollable) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-nowrap whitespace-nowrap py-0.5">
+              {selectedSeats.map((s) => {
+                const detail = selectedSeatDetails.find((d) => d.key === s);
+                const label = detail?.seatLabel || s;
+                return (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-300 font-extrabold text-[11px] px-2.5 py-0.5 rounded-lg shrink-0 shadow-2xs"
+                  >
+                    <span>{label}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSeat(s);
+                      }}
+                      className="text-amber-600 hover:text-rose-600 font-bold text-xs cursor-pointer select-none leading-none"
+                      title="Deselect seat"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                );
+              })}
             </div>
 
-            <button
-              onClick={() => {
-                if (activeStep < 4) {
-                  setActiveStep((s) => s + 1);
-                } else {
-                  handleConfirmAndBook();
-                }
-              }}
-              disabled={isSubmitting}
-              className="bg-indigo-900 hover:bg-indigo-950 text-white font-black text-xs py-3 px-5 rounded-2xl shadow-md flex items-center gap-2 active:scale-95 transition-transform cursor-pointer"
-            >
-              <span>
-                {activeStep === 1
-                  ? "Continue to Details"
-                  : activeStep === 2
-                  ? "Continue to Payment"
-                  : activeStep === 3
-                  ? "Continue to Confirm"
-                  : isSubmitting
-                  ? "Confirming..."
-                  : `Confirm & Book • ₹${totalAmountPayable.toFixed(2)}`}
-              </span>
-              <i className="fa-solid fa-chevron-right text-[9px]" />
-            </button>
+            {/* Below: Left side Total Amount & Right side Continue tab with amount */}
+            <div className="flex items-center justify-between gap-4 pt-1.5 border-t border-slate-100">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">
+                  {activeStep < 3
+                    ? `Total Amount (${quantity} Seat${quantity > 1 ? "s" : ""})`
+                    : `Total Payable (${quantity} Seat${quantity > 1 ? "s" : ""})`}
+                </span>
+                <span className="text-base sm:text-lg font-black text-emerald-600 font-brand leading-tight block">
+                  {activeStep < 3
+                    ? `₹${ticketSubtotal.toFixed(2)}`
+                    : `₹${totalAmountPayable.toFixed(2)}`}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeStep < 4) {
+                    setActiveStep((s) => s + 1);
+                  } else {
+                    handleConfirmAndBook();
+                  }
+                }}
+                disabled={isSubmitting}
+                className="bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs sm:text-sm py-2.5 px-4 sm:px-6 rounded-2xl shadow-md flex items-center gap-2 active:scale-95 transition-all cursor-pointer shrink-0"
+              >
+                <span>
+                  {activeStep < 3
+                    ? `Continue • ₹${ticketSubtotal}`
+                    : isSubmitting
+                    ? "Confirming..."
+                    : `Confirm & Book • ₹${totalAmountPayable.toFixed(2)}`}
+                </span>
+                <i className="fa-solid fa-arrow-right text-[10px]" />
+              </button>
+            </div>
           </div>
         </div>
       )}

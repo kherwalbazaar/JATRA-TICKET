@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import ChairSvg from "./ChairSvg";
 import { subscribeSeats, getHoldSessionId, isHoldFresh } from "../../lib/seats";
+import { getPriceForRow, subscribeTicketTypes } from "../../lib/ticketTypes";
 
 /**
  * UserSeatGrid: Reactive real-time seat availability map for customer booking.
@@ -24,12 +25,14 @@ export default function UserSeatGrid({
   onSeatsUpdate,
   onError,
   seatPrice,
+  pricePerSeat: propPricePerSeat,
 }) {
   const targetId = showId || eventId || "";
   const [internalSeats, setInternalSeats] = useState({});
   const [internalLoading, setInternalLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState("grid"); // "grid" (default) | "row"
+  const [ticketTypes, setTicketTypes] = useState([]);
 
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
@@ -50,6 +53,11 @@ export default function UserSeatGrid({
     String(seat?.status || "").toLowerCase() === "reserved" &&
     seat.reservedBy !== sessionId &&
     isHoldFresh(seat);
+
+  const isSeatAvailable = (seat) =>
+    !seat?.status ||
+    seat.status === "available" ||
+    (seat.status === "reserved" && !isHoldFresh(seat));
 
   // Controlled mode: if externalSeatsByBlock is provided, parent manages seat state
   const isControlled = externalSeatsByBlock !== undefined;
@@ -97,6 +105,17 @@ export default function UserSeatGrid({
       unsubscribe();
     };
   }, [targetId, isControlled]);
+
+  // Subscribe to real-time ticket types from Supabase / admin
+  useEffect(() => {
+    if (!targetId) return;
+    const unsub = subscribeTicketTypes((tts) => {
+      setTicketTypes(tts || []);
+    }, targetId);
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
+  }, [targetId]);
 
   // Concurrency collision check: deselect any seat that became booked / locked / reserved
   useEffect(() => {
@@ -146,20 +165,114 @@ export default function UserSeatGrid({
   const blockStats = useMemo(() => {
     if (!activeBlock) return { total: 0, available: 0, booked: 0, locked: 0, reserved: 0 };
     const list = seatsByBlock[activeBlock] || [];
-    const available = list.filter((s) => s.status === "available" || !s.status).length;
-    const booked = list.filter((s) => s.status === "booked").length;
+    const available = list.filter((s) => isSeatAvailable(s)).length;
+    const booked = list.filter((s) => s.status === "booked" || s.status === "sold").length;
     const locked = list.filter((s) => s.status === "locked").length;
-    const reserved = list.filter((s) => s.status === "reserved").length;
+    const reserved = list.filter((s) => s.status === "reserved" && isHoldFresh(s)).length;
     return { total: list.length, available, booked, locked, reserved };
   }, [seatsByBlock, activeBlock]);
 
   const pricePerSeat = useMemo(() => {
-    if (seatPrice && Number(seatPrice) > 0) return Number(seatPrice);
+    const raw = seatPrice ?? propPricePerSeat;
+    if (raw && Number(raw) > 0) return Number(raw);
     if (!activeBlock) return null;
     const list = seatsByBlock[activeBlock] || [];
     const found = list.find((s) => s.price != null && Number(s.price) > 0);
     return found ? Number(found.price) : null;
-  }, [seatPrice, seatsByBlock, activeBlock]);
+  }, [seatPrice, propPricePerSeat, seatsByBlock, activeBlock]);
+
+  const getRowPrice = (row) => {
+    // 1. Check if admin configured a ticket type for this row in Supabase
+    if (Array.isArray(ticketTypes) && ticketTypes.length > 0) {
+      const cleanRow = String(row?.id || "").trim().toUpperCase();
+      const matched = ticketTypes.find(
+        (tt) => Array.isArray(tt.rows) && tt.rows.map((r) => String(r).toUpperCase()).includes(cleanRow)
+      );
+      if (matched && Number(matched.price) > 0) {
+        return Number(matched.price);
+      }
+    }
+
+    // 2. Check if seats in this row have explicit positive prices from Supabase seats table
+    const seatPrices = [
+      ...new Set(
+        (row?.seats || [])
+          .map((s) => Number(s.price))
+          .filter((p) => !isNaN(p) && p > 0)
+      ),
+    ].sort((a, b) => a - b);
+
+    if (seatPrices.length > 0) {
+      return seatPrices[0];
+    }
+
+    // 3. Fallback to standard row tier pricing from ticketTypes.js
+    const standardPrice = getPriceForRow(row?.id, ticketTypes);
+    if (standardPrice && Number(standardPrice) > 0) {
+      return Number(standardPrice);
+    }
+
+    // 4. Fallback to general pricePerSeat prop
+    if (pricePerSeat && Number(pricePerSeat) > 0) {
+      return Number(pricePerSeat);
+    }
+
+    return 100;
+  };
+
+  const getTierName = (price, rowId) => {
+    if (Array.isArray(ticketTypes) && ticketTypes.length > 0) {
+      const cleanRow = String(rowId || "").trim().toUpperCase();
+      const matched = ticketTypes.find(
+        (tt) => Array.isArray(tt.rows) && tt.rows.map((r) => String(r).toUpperCase()).includes(cleanRow)
+      );
+      if (matched?.name) return matched.name;
+      const matchedByPrice = ticketTypes.find((tt) => Number(tt.price) === Number(price));
+      if (matchedByPrice?.name) return matchedByPrice.name;
+    }
+    const cleanRow = String(rowId || "").trim().toUpperCase();
+    if (["A", "B", "C", "D", "E"].includes(cleanRow) || price === 200) return "Star";
+    if (["F", "G", "H", "I", "J", "K"].includes(cleanRow) || price === 150) return "VIP";
+    if (["L", "M", "N", "O", "P", "Q", "R"].includes(cleanRow) || price === 120) return "Special";
+    if (price === 100) return "3rd Class";
+    return "";
+  };
+
+  const priceGroups = useMemo(() => {
+    if (!rows || !rows.length) return [];
+
+    const groupMap = new Map();
+
+    rows.forEach((row) => {
+      const price = getRowPrice(row);
+      const tierName = getTierName(price, row.id);
+      const groupKey = `${price}`;
+
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, {
+          price,
+          tierName,
+          rows: [],
+          totalSeats: 0,
+          availableSeats: 0,
+          bookedSeats: 0,
+        });
+      }
+
+      const g = groupMap.get(groupKey);
+      g.rows.push(row);
+      const rowTotal = row.seats.length;
+      const rowBooked = row.seats.filter((s) => s.status === "booked" || s.status === "sold").length;
+      const rowAvailable = row.seats.filter((s) => isSeatAvailable(s)).length;
+      g.totalSeats += rowTotal;
+      g.bookedSeats += rowBooked;
+      g.availableSeats += rowAvailable;
+    });
+
+    // Sort groups descending by price (e.g. ₹200 first, then ₹150)
+    return Array.from(groupMap.values()).sort((a, b) => b.price - a.price);
+  }, [rows, ticketTypes, pricePerSeat]);
+
 
   const handleSeatClick = (seat) => {
     if (disabled) return;
@@ -232,11 +345,6 @@ export default function UserSeatGrid({
               <span className="flex-1 min-w-0 bg-slate-100 text-slate-700 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
                 Seat {viewMode === "grid" ? "Grid" : "List"} View
               </span>
-              {pricePerSeat != null && (
-                <span className="flex-1 min-w-0 text-indigo-700 bg-indigo-50 border border-indigo-200 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
-                  ₹{pricePerSeat} / seat
-                </span>
-              )}
               <span className="flex-1 min-w-0 text-emerald-700 bg-emerald-50 border border-emerald-200 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
                 {blockStats.booked}/{blockStats.total}
               </span>
@@ -263,142 +371,194 @@ export default function UserSeatGrid({
             </div>
 
 
-            {/* View Mode: Grid (as per screen width) vs Row View */}
+            {/* View Mode: Grid (Grouped by Price Category) vs Row View */}
             {viewMode === "grid" ? (
-              <div className="space-y-3 py-1">
-                {rows.map((row) => (
-                  <div key={row.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
-                        Row-{row.id}
+              <div className="space-y-4 py-1">
+                {priceGroups.map((group) => (
+                  <div
+                    key={group.price}
+                    className="border border-slate-200 rounded-2xl p-2.5 sm:p-3.5 space-y-3 bg-white/80 shadow-2xs"
+                  >
+                    {/* Price Category Top Header: Full width filled across screen */}
+                    <div className="w-full flex items-center gap-1 sm:gap-1.5 pb-2.5 border-b border-slate-100 flex-nowrap whitespace-nowrap overflow-x-auto scrollbar-none">
+                      {group.tierName ? (
+                        <span className="flex-1 min-w-0 bg-slate-900 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-1 rounded-lg uppercase tracking-wider text-center flex items-center justify-center truncate shrink-0 shadow-2xs">
+                          {group.tierName}
+                        </span>
+                      ) : null}
+                      <span className="flex-1 min-w-0 text-indigo-700 bg-indigo-50 border border-indigo-200 font-black text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
+                        ₹{group.price} / seat
                       </span>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-slate-400">
-                        {row.seats.filter((s) => s.status === "booked" || s.status === "sold").length}/{row.seats.length}
+                      <span className="flex-1 min-w-0 text-emerald-700 bg-emerald-50 border border-emerald-200 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
+                        {group.availableSeats} Available
+                      </span>
+                      <span className="flex-1 min-w-0 text-slate-700 bg-slate-100 border border-slate-200 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
+                        Total {group.totalSeats} Seats
                       </span>
                     </div>
 
-                    {/* Responsive Grid: close to each other, fills width, wraps naturally */}
-                    <div
-                      className="grid gap-[2px] sm:gap-1 w-full py-0.5 justify-items-center"
-                      style={{
-                        gridTemplateColumns: "repeat(auto-fill, minmax(22px, 1fr))",
-                      }}
-                    >
-                      {row.seats.map((seat) => {
-                        const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
-                        const isBooked = seat.status === "booked";
-                        const isLocked = seat.status === "locked";
-                        const isReservedBlocked = reservedByOther(seat);
-                        const isSelected = selected.includes(key);
-                        const seatLabel = seat.seatLabel || `${seat.rowId || seat.row}${seat.seatNumber}`;
+                    {/* All seat rows inside this category: left side shows row number like A, B, C */}
+                    <div className="space-y-2.5 pt-0.5">
+                      {group.rows.map((row) => (
+                        <div key={row.id} className="flex items-start sm:items-center gap-2 sm:gap-2.5 w-full">
+                          {/* Row number like A, B, C on left side */}
+                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-800 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-2xs select-none mt-0.5 sm:mt-0">
+                            {row.id}
+                          </span>
 
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            disabled={disabled || isBooked || isLocked || isReservedBlocked}
-                            onClick={() => handleSeatClick(seat)}
-                            title={`${seatLabel} • ₹${seat.price || pricePerSeat || 50} • ${
-                              isBooked
-                                ? "Booked"
-                                : isSelected
-                                ? "Selected"
-                                : isLocked || isReservedBlocked
-                                ? "Held"
-                                : "Available"
-                            }`}
-                            className={`w-full flex items-center justify-center p-0 transition-all select-none bg-transparent border-0 shadow-none ${
-                              isBooked
-                                ? "opacity-45 cursor-not-allowed"
-                                : isLocked || isReservedBlocked
-                                ? "opacity-70 cursor-not-allowed"
-                                : isSelected
-                                ? "scale-115 drop-shadow-md cursor-pointer"
-                                : "hover:scale-110 active:scale-95 cursor-pointer"
-                            }`}
+                          {/* Responsive seat grid */}
+                          <div
+                            className="grid gap-[2px] sm:gap-1 flex-1 py-0.5 justify-items-center"
+                            style={{
+                              gridTemplateColumns: "repeat(auto-fill, minmax(20px, 1fr))",
+                            }}
                           >
-                            <ChairSvg
-                              isBooked={isBooked}
-                              isLocked={isLocked}
-                              isReserved={isReservedBlocked}
-                              isSelected={isSelected}
-                              label={seat.seatNumber}
-                              sizeClass="w-[20px] h-[24px] sm:w-[22px] sm:h-[26px]"
-                              disabled={disabled}
-                            />
-                          </button>
-                        );
-                      })}
+                            {row.seats.map((seat) => {
+                              const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
+                              const isBooked = seat.status === "booked";
+                              const isLocked = seat.status === "locked";
+                              const isReservedBlocked = reservedByOther(seat);
+                              const isSelected = selected.includes(key);
+                              const seatLabel = seat.seatLabel || `${seat.rowId || seat.row}${seat.seatNumber}`;
+
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  disabled={disabled || isBooked || isLocked || isReservedBlocked}
+                                  onClick={() => handleSeatClick(seat)}
+                                  title={`${seatLabel} • ₹${seat.price || group.price} • ${
+                                    isBooked
+                                      ? "Booked"
+                                      : isSelected
+                                      ? "Selected"
+                                      : isLocked || isReservedBlocked
+                                      ? "Held"
+                                      : "Available"
+                                  }`}
+                                  className={`w-full flex items-center justify-center p-0 transition-all select-none bg-transparent border-0 shadow-none ${
+                                    isBooked
+                                      ? "opacity-45 cursor-not-allowed"
+                                      : isLocked || isReservedBlocked
+                                      ? "opacity-70 cursor-not-allowed"
+                                      : isSelected
+                                      ? "scale-115 drop-shadow-md cursor-pointer"
+                                      : "hover:scale-110 active:scale-95 cursor-pointer"
+                                  }`}
+                                >
+                                  <ChairSvg
+                                    isBooked={isBooked}
+                                    isLocked={isLocked}
+                                    isReserved={isReservedBlocked}
+                                    isSelected={isSelected}
+                                    label={seat.seatNumber}
+                                    sizeClass="w-[20px] h-[24px] sm:w-[22px] sm:h-[26px]"
+                                    disabled={disabled}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              /* Row View: Horizontal Row Layout */
-              <div className="space-y-2.5 overflow-x-auto pb-4 pt-2 select-none scrollbar-thin">
-                {rows.map((row) => (
+              /* Row View: Horizontal Row Layout Grouped by Price Category */
+              <div className="space-y-4 pb-4 pt-1 select-none">
+                {priceGroups.map((group) => (
                   <div
-                    key={row.id}
-                    className="flex items-center gap-1.5 min-w-max mx-auto justify-center px-2 py-1 rounded-xl hover:bg-slate-50/80 transition-colors"
+                    key={group.price}
+                    className="border border-slate-200 rounded-2xl p-2.5 sm:p-3.5 space-y-3 bg-white/80 shadow-2xs overflow-x-auto scrollbar-thin"
                   >
-                    {/* Left Row Badge */}
-                    <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-slate-700">
-                      {row.id}
-                    </span>
-
-                    {/* Horizontal Seats in Row: close to each other with slight gap */}
-                    <div className="flex items-center gap-[2px] sm:gap-1">
-                      {row.seats.map((seat) => {
-                        const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
-                        const isBooked = seat.status === "booked";
-                        const isLocked = seat.status === "locked";
-                        const isReservedBlocked = reservedByOther(seat);
-                        const isSelected = selected.includes(key);
-                        const seatLabel = seat.seatLabel || `${seat.rowId || seat.row}${seat.seatNumber}`;
-
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            disabled={disabled || isBooked || isLocked || isReservedBlocked}
-                            onClick={() => handleSeatClick(seat)}
-                            title={`${seatLabel} • ₹${seat.price || pricePerSeat || 100} • ${
-                              isBooked
-                                ? "Booked"
-                                : isSelected
-                                ? "Selected"
-                                : isLocked || isReservedBlocked
-                                ? "Held"
-                                : "Available"
-                            }`}
-                            className={`flex items-center justify-center p-0 transition-all shrink-0 select-none bg-transparent border-0 shadow-none ${
-                              isBooked
-                                ? "opacity-45 cursor-not-allowed"
-                                : isLocked || isReservedBlocked
-                                ? "opacity-70 cursor-not-allowed"
-                                : isSelected
-                                ? "scale-115 drop-shadow-md cursor-pointer"
-                                : "hover:scale-110 active:scale-95 cursor-pointer"
-                            }`}
-                          >
-                            <ChairSvg
-                              isBooked={isBooked}
-                              isLocked={isLocked}
-                              isReserved={isReservedBlocked}
-                              isSelected={isSelected}
-                              label={seat.seatNumber}
-                              sizeClass="w-[20px] h-[24px] sm:w-[22px] sm:h-[26px]"
-                              disabled={disabled}
-                            />
-                          </button>
-                        );
-                      })}
+                    {/* Price Category Top Header: Full width filled across screen */}
+                    <div className="w-full flex items-center gap-1 sm:gap-1.5 pb-2.5 border-b border-slate-100 flex-nowrap whitespace-nowrap overflow-x-auto scrollbar-none">
+                      {group.tierName ? (
+                        <span className="flex-1 min-w-0 bg-slate-900 text-white text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-1 rounded-lg uppercase tracking-wider text-center flex items-center justify-center truncate shrink-0 shadow-2xs">
+                          {group.tierName}
+                        </span>
+                      ) : null}
+                      <span className="flex-1 min-w-0 text-indigo-700 bg-indigo-50 border border-indigo-200 font-black text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
+                        ₹{group.price} / seat
+                      </span>
+                      <span className="flex-1 min-w-0 text-emerald-700 bg-emerald-50 border border-emerald-200 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
+                        {group.availableSeats} Available
+                      </span>
+                      <span className="flex-1 min-w-0 text-slate-700 bg-slate-100 border border-slate-200 font-bold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-1 rounded-lg text-center flex items-center justify-center truncate shrink-0">
+                        Total {group.totalSeats} Seats
+                      </span>
                     </div>
 
-                    {/* Right Row Badge */}
-                    <span className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs border border-slate-700">
-                      {row.id}
-                    </span>
+                    {/* Horizontal Rows */}
+                    <div className="space-y-2 pt-0.5 min-w-max">
+                      {group.rows.map((row) => (
+                        <div
+                          key={row.id}
+                          className="flex items-center gap-1.5 min-w-max mx-auto justify-center px-1 py-0.5 rounded-xl hover:bg-slate-50/80 transition-colors"
+                        >
+                          {/* Left Row Badge */}
+                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-slate-700">
+                            {row.id}
+                          </span>
+
+                          {/* Horizontal Seats in Row */}
+                          <div className="flex items-center gap-[2px] sm:gap-1">
+                            {row.seats.map((seat) => {
+                              const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
+                              const isBooked = seat.status === "booked";
+                              const isLocked = seat.status === "locked";
+                              const isReservedBlocked = reservedByOther(seat);
+                              const isSelected = selected.includes(key);
+                              const seatLabel = seat.seatLabel || `${seat.rowId || seat.row}${seat.seatNumber}`;
+
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  disabled={disabled || isBooked || isLocked || isReservedBlocked}
+                                  onClick={() => handleSeatClick(seat)}
+                                  title={`${seatLabel} • ₹${seat.price || group.price} • ${
+                                    isBooked
+                                      ? "Booked"
+                                      : isSelected
+                                      ? "Selected"
+                                      : isLocked || isReservedBlocked
+                                      ? "Held"
+                                      : "Available"
+                                  }`}
+                                  className={`flex items-center justify-center p-0 transition-all shrink-0 select-none bg-transparent border-0 shadow-none ${
+                                    isBooked
+                                      ? "opacity-45 cursor-not-allowed"
+                                      : isLocked || isReservedBlocked
+                                      ? "opacity-70 cursor-not-allowed"
+                                      : isSelected
+                                      ? "scale-115 drop-shadow-md cursor-pointer"
+                                      : "hover:scale-110 active:scale-95 cursor-pointer"
+                                  }`}
+                                >
+                                  <ChairSvg
+                                    isBooked={isBooked}
+                                    isLocked={isLocked}
+                                    isReserved={isReservedBlocked}
+                                    isSelected={isSelected}
+                                    label={seat.seatNumber}
+                                    sizeClass="w-[20px] h-[24px] sm:w-[22px] sm:h-[26px]"
+                                    disabled={disabled}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Right Row Badge */}
+                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-slate-700">
+                            {row.id}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
 

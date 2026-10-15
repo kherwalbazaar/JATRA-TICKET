@@ -14,6 +14,7 @@ import {
 } from "../../lib/bookings";
 import { subscribeEvents } from "../../lib/events";
 import { ticketQrUrl } from "../../lib/ticket-qr";
+import { getSavedCustomerProfile, getActiveCustomerProfile } from "../../lib/supabase";
 
 const cardGradients = [
   "bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500",
@@ -27,12 +28,19 @@ const cardGradients = [
 function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = new Set(), ticketEntries = [], eventsMap = {}) {
   const ticketsByBookingId = new Map();
   storedTickets.forEach((t) => {
-    const bId = String(t.bookingId || t.baseTicketNumber || "").toUpperCase();
+    const bId = String(t.bookingId || t.booking_id || t.baseTicketNumber || "").toUpperCase();
+    const docId = String(t.bookingDocId || t.booking_doc_id || "").toUpperCase();
     if (bId) {
       if (!ticketsByBookingId.has(bId)) {
         ticketsByBookingId.set(bId, []);
       }
       ticketsByBookingId.get(bId).push(t);
+    }
+    if (docId && docId !== bId) {
+      if (!ticketsByBookingId.has(docId)) {
+        ticketsByBookingId.set(docId, []);
+      }
+      ticketsByBookingId.get(docId).push(t);
     }
   });
 
@@ -50,8 +58,9 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
       eventName: effectiveEventName,
     };
 
-    const bIdUpper = String(b.bookingId || "").toUpperCase();
-    let ticketsForBooking = ticketsByBookingId.get(bIdUpper) || [];
+    const bIdUpper = String(b.bookingId || b.ticketNumber || "").toUpperCase();
+    const bDocUpper = String(b.id || b.key || "").toUpperCase();
+    let ticketsForBooking = ticketsByBookingId.get(bIdUpper) || ticketsByBookingId.get(bDocUpper) || [];
 
     // If no records in tickets collection (legacy booking), synthesize them:
     if (ticketsForBooking.length === 0) {
@@ -106,7 +115,7 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
         const derived = getTicketStatus(t, usedCodesSet, b);
         return {
           ...t,
-          ticketNumber: t.ticketId,
+          ticketNumber: t.ticketId || t.ticketNumber || t.id,
           seatIndex: t.ticketIndex || idx + 1,
           seatCount: ticketsForBooking.length,
           derivedStatus: derived,
@@ -217,9 +226,32 @@ export default function TicketsPage() {
     return set;
   }, [ticketEntries]);
 
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    const saved = getSavedCustomerProfile();
+    if (saved) setProfile(saved);
+    getActiveCustomerProfile()
+      .then((p) => {
+        if (p) setProfile(p);
+      })
+      .catch(() => {});
+  }, []);
+
+  const userMobile = profile?.mobile ? String(profile.mobile).replace(/\D/g, "").slice(-10) : "";
+
+  const userBookings = useMemo(() => {
+    if (!userMobile) return bookings;
+    const matched = bookings.filter((b) => {
+      const bPhone = String(b.customerPhone || b.customer_phone || "").replace(/\D/g, "").slice(-10);
+      return bPhone && bPhone === userMobile;
+    });
+    return matched.length > 0 ? matched : bookings;
+  }, [bookings, userMobile]);
+
   const bookingGroups = useMemo(() => {
-    return buildBookingTicketGroups(bookings, storedTickets, usedCodesSet, ticketEntries, eventsMap);
-  }, [bookings, storedTickets, usedCodesSet, ticketEntries, eventsMap]);
+    return buildBookingTicketGroups(userBookings, storedTickets, usedCodesSet, ticketEntries, eventsMap);
+  }, [userBookings, storedTickets, usedCodesSet, ticketEntries, eventsMap]);
 
   const allTickets = useMemo(() => {
     return bookingGroups.flatMap((g) => g.tickets);
@@ -536,7 +568,7 @@ export default function TicketsPage() {
                                             : "bg-white/25 px-1 rounded text-white"
                                         }
                                       >
-                                        Seat {ticket.seat}
+                                        Seat {String(ticket.seat).replace(/^[A-Za-z0-9]+-([A-Za-z]+)-?(\d+)$/, "$1$2")}
                                       </span>
                                     </>
                                   ) : null}
@@ -719,7 +751,7 @@ function TicketStatusList({ list, tab }) {
                           : "bg-slate-200/70 text-slate-800 px-1 rounded"
                       }
                     >
-                      Seat {ticket.seat}
+                      Seat {String(ticket.seat).replace(/^[A-Za-z0-9]+-([A-Za-z]+)-?(\d+)$/, "$1$2")}
                     </span>
                   </>
                 ) : null}{" "}

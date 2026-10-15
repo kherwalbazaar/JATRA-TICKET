@@ -16,6 +16,7 @@ import {
   isBlockOnline,
   blockDisplayName,
 } from "../../lib/blockCategories";
+import { getPriceForRow } from "../../lib/ticketTypes";
 
 function SelectSeatsContent() {
   const router = useRouter();
@@ -41,11 +42,39 @@ function SelectSeatsContent() {
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
   const blockLabel = (id) => blockDisplayName(blockCats, id);
 
+  const getSeatRealPrice = useCallback(
+    (key) => {
+      const list = seatsByBlock[activeBlock] || [];
+      const fs = list.find(
+        (s) =>
+          s.id === key ||
+          s.seatLabel === key ||
+          `${s.rowId}-${s.seatNumber}` === key ||
+          `${s.rowId}${s.seatNumber}` === key
+      );
+      if (fs?.price != null && Number(fs.price) > 50) return Number(fs.price);
+      const rowId =
+        fs?.rowId ||
+        String(key).split("-")[1] ||
+        String(key).replace(/\d+$/, "");
+      return getPriceForRow(rowId);
+    },
+    [activeBlock, seatsByBlock]
+  );
+
+  const selectedTotal = useMemo(() => {
+    if (!selected.length) return 0;
+    return selected.reduce((sum, k) => sum + getSeatRealPrice(k), 0);
+  }, [selected, getSeatRealPrice]);
+
   const seatPrice = useMemo(() => {
+    if (selected.length > 0) {
+      return Math.round(selectedTotal / selected.length);
+    }
     const list = seatsByBlock[activeBlock] || [];
-    const found = list.find((s) => s.price != null && Number(s.price) > 0);
-    return found ? Number(found.price) : 0;
-  }, [seatsByBlock, activeBlock]);
+    const found = list.find((s) => s.price != null && Number(s.price) > 50);
+    return found ? Number(found.price) : getPriceForRow("A");
+  }, [selected, selectedTotal, seatsByBlock, activeBlock]);
 
   useEffect(() => {
     if (!eventId) {
@@ -119,7 +148,7 @@ function SelectSeatsContent() {
     }, 80);
   };
 
-  const totalAmount = seatPrice * selected.length;
+  const totalAmount = selectedTotal;
 
   const handleProceed = () => {
     if (!activeBlock || selected.length === 0) return;
@@ -233,12 +262,22 @@ function SelectSeatsContent() {
 
             {/* Total row */}
             <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-              <div className="text-[11px] text-slate-600 font-semibold">
-                {selected.length} seat{selected.length > 1 ? "s" : ""}
-                {seatPrice > 0 ? ` × ₹${seatPrice}` : ""}
+              <div>
+                <div className="text-[11px] text-slate-700 font-bold">
+                  {selected.length} seat{selected.length > 1 ? "s" : ""}
+                  {seatPrice > 0 ? ` × ₹${seatPrice}` : ""}
+                </div>
+                <div className="text-[9px] text-slate-400 font-medium">
+                  Extra charges shown in Payment Breakdown
+                </div>
               </div>
-              <div className="text-sm font-black text-slate-900">
-                Total ₹{totalAmount}
+              <div className="text-right">
+                <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Total Amount
+                </span>
+                <span className="text-base font-black text-slate-900 font-brand">
+                  ₹{totalAmount}
+                </span>
               </div>
             </div>
 

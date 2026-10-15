@@ -14,12 +14,24 @@ import {
 import { fetchEvents } from "../../../lib/events";
 import { ticketQrUrl } from "../../../lib/ticket-qr";
 
+function formatSeatNumber(seatStr) {
+  if (!seatStr) return "";
+  const s = String(seatStr).trim();
+  const m = s.match(/(?:[A-Za-z0-9]+-)?([A-Za-z]+)-?(\d+)$/);
+  if (m) {
+    return `${m[1].toUpperCase()}${m[2]}`;
+  }
+  return s;
+}
+
 export default function TicketDetailPage({ params }) {
   const { id } = use(params);
   const router = useRouter();
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [screenshotAlert, setScreenshotAlert] = useState(false);
+  const [isScreenProtected, setIsScreenProtected] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +53,10 @@ export default function TicketDetailPage({ params }) {
         list.forEach((e) => {
           if (e.key) map[e.key] = e;
           if (e.id) map[e.id] = e;
+          if (e.eventId) map[e.eventId] = e;
+          if (e.eventTitle) map[e.eventTitle.toLowerCase().trim()] = e;
+          if (e.name) map[e.name.toLowerCase().trim()] = e;
+          if (e.title) map[e.title.toLowerCase().trim()] = e;
         });
         eventsMap = map;
         updateTicketState();
@@ -56,10 +72,22 @@ export default function TicketDetailPage({ params }) {
         return;
       }
 
-      const evt = eventsMap[data.eventId] || null;
+      const evtKey = (data.eventId || "").trim();
+      const evtNameKey = (data.eventName || "").toLowerCase().trim();
+      const evt =
+        eventsMap[evtKey] ||
+        (evtNameKey ? eventsMap[evtNameKey] : null) ||
+        (Object.values(eventsMap)[0] || null);
+
       const effectiveDate = evt?.date || data.date;
       const effectiveTime = evt?.time || data.time;
       const effectiveEventName = evt?.eventTitle || evt?.name || evt?.title || data.eventName;
+      const effectivePartyName =
+        evt?.partyName ||
+        data.partyName ||
+        data.party_name ||
+        evt?.organizer ||
+        "";
 
       let seat = data.seat || null;
       let seatIndex = data.seatIndex || null;
@@ -92,6 +120,7 @@ export default function TicketDetailPage({ params }) {
         date: effectiveDate,
         time: effectiveTime,
         eventName: effectiveEventName,
+        partyName: effectivePartyName,
         seat,
         seatIndex,
         seatCount,
@@ -162,6 +191,125 @@ export default function TicketDetailPage({ params }) {
     };
   }, [id]);
 
+  useEffect(() => {
+    // 1. Android Capacitor Native FLAG_SECURE
+    try {
+      if (typeof window !== "undefined" && window.AndroidSecurity?.setScreenshotAllowed) {
+        window.AndroidSecurity.setScreenshotAllowed(false);
+      }
+    } catch {}
+
+    let alertTimer = null;
+    const triggerScreenshotAlert = () => {
+      setScreenshotAlert(true);
+      if (alertTimer) clearTimeout(alertTimer);
+      alertTimer = setTimeout(() => {
+        setScreenshotAlert(false);
+      }, 3500);
+    };
+
+    // 2. Prevent right-click / context menu
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      triggerScreenshotAlert();
+    };
+
+    // 3. Prevent dragging images / elements
+    const handleDragStart = (e) => {
+      e.preventDefault();
+    };
+
+    // 4. Intercept PrintScreen and screenshot key combinations
+    const handleKeyDown = (e) => {
+      if (e.key === "PrintScreen" || e.keyCode === 44) {
+        e.preventDefault();
+        setIsScreenProtected(true);
+        triggerScreenshotAlert();
+        try {
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText("Screenshots are restricted on this ticket for security reasons.");
+          }
+        } catch {}
+        setTimeout(() => setIsScreenProtected(false), 2000);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        setIsScreenProtected(true);
+        triggerScreenshotAlert();
+        setTimeout(() => setIsScreenProtected(false), 2000);
+        return;
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === "PrintScreen" || e.keyCode === 44) {
+        try {
+          if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText("");
+          }
+        } catch {}
+        setIsScreenProtected(true);
+        triggerScreenshotAlert();
+        setTimeout(() => setIsScreenProtected(false), 2000);
+      }
+    };
+
+    // 5. Blur/Protect ticket when window loses focus (app switching, snipping tool, screen recorders)
+    const handleBlur = () => {
+      setIsScreenProtected(true);
+    };
+
+    const handleFocus = () => {
+      setIsScreenProtected(false);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsScreenProtected(true);
+      } else {
+        setIsScreenProtected(false);
+      }
+    };
+
+    window.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("dragstart", handleDragStart);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      try {
+        if (typeof window !== "undefined" && window.AndroidSecurity?.setScreenshotAllowed) {
+          window.AndroidSecurity.setScreenshotAllowed(true);
+        }
+      } catch {}
+      if (alertTimer) clearTimeout(alertTimer);
+      window.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("dragstart", handleDragStart);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const copy = async (text) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -194,14 +342,61 @@ export default function TicketDetailPage({ params }) {
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
-      <div className="w-full bg-[#f8faff] min-h-screen relative pb-10 shadow-2xl flex flex-col overflow-hidden">
+      <style>{`
+        @media print {
+          body, html, main, #__next {
+            display: none !important;
+            visibility: hidden !important;
+          }
+        }
+        .ticket-secure-screen {
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+        }
+      `}</style>
+
+      {/* Screen Protection Shield Overlay (App switching / screen capture) */}
+      {isScreenProtected && (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center select-none text-white">
+          <div className="w-16 h-16 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mb-4">
+            <i className="fa-solid fa-camera-slash text-2xl text-rose-400" />
+          </div>
+          <h3 className="text-lg font-black tracking-wide font-brand uppercase text-rose-400">
+            Screenshot Restricted
+          </h3>
+          <p className="text-xs text-slate-300 mt-2 max-w-xs font-medium leading-relaxed">
+            Screenshots and screen recording are disabled on this ticket for security and anti-fraud verification.
+          </p>
+          <p className="text-[11px] text-slate-500 mt-3 font-semibold">
+            Return to app to view your live ticket pass
+          </p>
+        </div>
+      )}
+
+      {/* Floating Warning Toast when screenshot/print is attempted */}
+      {screenshotAlert && (
+        <div className="fixed top-4 left-4 right-4 z-50 mx-auto max-w-sm bg-rose-600 text-white px-4 py-3 rounded-2xl shadow-2xl border border-rose-400 flex items-center gap-3">
+          <i className="fa-solid fa-ban text-lg text-white flex-shrink-0" />
+          <div className="text-xs font-bold leading-tight">
+            <span className="block font-black uppercase text-[10px] tracking-wider text-rose-200">
+              Security Policy
+            </span>
+            Screenshots are not allowed on this ticket pass.
+          </div>
+        </div>
+      )}
+
+      <div className="w-full bg-[#f8faff] min-h-screen relative pb-10 shadow-2xl flex flex-col overflow-hidden select-none ticket-secure-screen">
         <Header
           showBack
           showShare
           title="Ticket Details"
           onShare={() =>
             copy(
-              `${ticket.eventName || ticket.ticketTypeName} | ${ticket.serial || ticket.ticketNumber} | ${ticket.assignedGate}${ticket.seat ? ` | Seat ${ticket.seat}` : ""} | ${ticket.date}`,
+              `${ticket.eventName || ticket.ticketTypeName} | ${ticket.serial || ticket.ticketNumber} | ${ticket.assignedGate}${ticket.seat ? ` | Seat ${formatSeatNumber(ticket.seat)}` : ""} | ${ticket.date}`,
             )
           }
         />
@@ -229,74 +424,22 @@ export default function TicketDetailPage({ params }) {
         )}
 
         <main className="p-4 space-y-4">
-          <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-xs">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80"
-              alt="Banner"
-              className="w-16 h-16 rounded-xl object-cover ring-1 ring-slate-100 flex-shrink-0"
-            />
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-black text-slate-900 font-brand truncate uppercase tracking-tight">
-                {ticket.eventName || "Event Booking"}
-              </h3>
-              <div className="mt-1 space-y-0.5 text-[11px] font-semibold text-slate-600">
-                <div className="flex items-center gap-1.5 truncate">
-                  <i className="fa-regular fa-calendar text-rose-500 text-[11px]" />
-                  <span>{ticket.date}</span>
-                </div>
-                <div className="flex items-center gap-1.5 truncate">
-                  <i className="fa-regular fa-clock text-indigo-600 text-[11px]" />
-                  <span>{ticket.time}</span>
-                </div>
-                <div className="flex items-center gap-1.5 truncate">
-                  <i className="fa-solid fa-location-dot text-rose-500 text-[11px]" />
-                  <span className="truncate">{ticket.assignedGate}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 text-xs font-extrabold text-slate-700 shadow-2xs">
-              <span className="text-slate-400 font-black uppercase tracking-wider text-[9px]">BOOKING ID</span>
-              <span className="font-mono font-black text-slate-900">{ticket.bookingId || ticket.baseTicketNumber}</span>
-            </div>
-            <div className="flex items-center justify-between bg-indigo-50/60 px-3.5 py-2.5 rounded-xl border border-indigo-200 text-xs font-extrabold text-indigo-950 shadow-2xs">
-              <span className="text-indigo-600 font-black uppercase tracking-wider text-[9px]">TICKET ID</span>
-              <button
-                onClick={() => copy(ticket.ticketId || ticket.ticketNumber)}
-                className="flex items-center gap-1 text-indigo-900 hover:text-indigo-600 font-mono font-black"
-                title="Copy Ticket ID"
-              >
-                <span>{copied ? "Copied" : (ticket.ticketId || ticket.ticketNumber)}</span>
-                <i className={`${copied ? "fa-solid fa-check text-emerald-600" : "fa-regular fa-copy"} text-[10px]`} />
-              </button>
-            </div>
-          </div>
-
           <div className="relative bg-white rounded-3xl p-5 border-2 border-indigo-100 shadow-md text-center overflow-hidden">
             <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8faff] rounded-full border border-slate-200" />
             <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8faff] rounded-full border border-slate-200" />
 
             <div className="mb-3">
-              <span className="inline-block bg-indigo-50 text-indigo-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
-                {ticket.ticketTypeName} • Gate Pass
-              </span>
-              <h3 className="text-xl font-black text-slate-900 font-brand mt-2 uppercase tracking-tight">
-                {ticket.eventName || "EVENT TICKET"}
+              <h2 className="text-2xl sm:text-3xl font-black tracking-widest uppercase font-brand block bg-gradient-to-r from-amber-500 via-rose-600 to-indigo-600 bg-clip-text text-transparent">
+                GATE PASS
+              </h2>
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 font-brand mt-1 uppercase tracking-tight">
+                {ticket.partyName || ticket.eventName || "EVENT TICKET"}
               </h3>
-              <p className="text-xs font-semibold text-slate-500">
+              <p className="text-xs font-semibold text-slate-500 mt-1">
                 Entry via {ticket.assignedGate}
                 {ticket.seat ? (
                   <>
-                    {" "}• <span className="font-black text-indigo-700">Seat {ticket.seat}</span>
-                    {ticket.seatCount ? (
-                      <span className="text-slate-400">
-                        {" "}
-                        ({ticket.seatIndex}/{ticket.seatCount})
-                      </span>
-                    ) : null}
+                    {" "}• <span className="font-black text-indigo-700">Seat {formatSeatNumber(ticket.seat)}</span>
                   </>
                 ) : null}
               </p>
@@ -307,7 +450,9 @@ export default function TicketDetailPage({ params }) {
               <img
                 src={ticketQrUrl(ticket, 300)}
                 alt="Large QR Ticket"
-                className={`w-60 h-60 object-contain rounded-lg ${
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`w-60 h-60 object-contain rounded-lg pointer-events-none select-none ${
                   status === "used"
                     ? "grayscale opacity-50"
                     : status === "expired"
@@ -374,6 +519,26 @@ export default function TicketDetailPage({ params }) {
             </div>
           </div>
 
+          {/* Centered Booking ID & Ticket ID */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col items-center justify-center text-center bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+              <span className="text-slate-400 font-black uppercase tracking-wider text-[9px] block">
+                BOOKING ID
+              </span>
+              <span className="font-mono font-black text-slate-900 text-xs sm:text-sm tracking-tight truncate mt-0.5">
+                {ticket.bookingId || ticket.baseTicketNumber}
+              </span>
+            </div>
+            <div className="flex flex-col items-center justify-center text-center bg-indigo-50/60 px-3.5 py-2.5 rounded-xl border border-indigo-200 shadow-2xs">
+              <span className="text-indigo-600 font-black uppercase tracking-wider text-[9px] block">
+                TICKET ID
+              </span>
+              <span className="font-mono font-black text-indigo-950 text-xs sm:text-sm tracking-tight truncate mt-0.5">
+                {ticket.ticketId || ticket.ticketNumber}
+              </span>
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2.5">
             <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs mb-1">
               <i className="fa-solid fa-id-card" />
@@ -400,13 +565,7 @@ export default function TicketDetailPage({ params }) {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Seat</span>
                   <span className="font-extrabold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md">
-                    {ticket.seat}
-                    {ticket.seatCount ? (
-                      <span className="text-slate-400 font-bold">
-                        {" "}
-                        ({ticket.seatIndex}/{ticket.seatCount})
-                      </span>
-                    ) : null}
+                    {formatSeatNumber(ticket.seat)}
                   </span>
                 </div>
               ) : null}
@@ -422,87 +581,22 @@ export default function TicketDetailPage({ params }) {
                 <span className="text-slate-500 font-medium">Time</span>
                 <span className="font-extrabold text-slate-900">{ticket.time}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Seats</span>
-                <span className="font-extrabold text-slate-900 text-right max-w-[60%]">
-                  {Array.isArray(ticket.seats) && ticket.seats.length
-                    ? ticket.seats.join(", ")
-                    : ticket.seats || "N/A"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Quantity</span>
-                <span className="font-extrabold text-slate-900">{ticket.quantity}</span>
-              </div>
-              {ticket.convenienceFee !== undefined || ticket.ticketAmount !== undefined ? (
-                <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Ticket Amount</span>
-                    <span className="font-bold text-slate-900">
-                      ₹{Number(ticket.ticketAmount ?? ticket.baseAmount ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Convenience Fee (2.7%)</span>
-                    <span className="font-semibold text-slate-800">
-                      ₹{Number(ticket.convenienceFee || 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">GST on Fee (18%)</span>
-                    <span className="font-semibold text-slate-800">
-                      ₹{Number(ticket.gstOnConvenienceFee || 0).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Platform Charge</span>
-                    <span className="font-semibold text-slate-800">
-                      ₹{Number(ticket.platformCharge || 0).toFixed(2)}
-                    </span>
-                  </div>
-                </>
-              ) : null}
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Total Paid</span>
-                <span className="font-extrabold text-emerald-600">₹{ticket.amount}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Payment</span>
-                <span className="font-extrabold text-slate-900">{ticket.paymentMethod}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Status</span>
-                <span
-                  className={`font-black text-[11px] px-2 py-0.5 rounded-md border uppercase ${
-                    status === "used"
-                      ? "text-red-600 bg-red-50 border-red-200"
-                      : status === "expired"
-                        ? "text-amber-600 bg-amber-50 border-amber-200"
-                        : status === "cancelled"
-                          ? "text-rose-600 bg-rose-50 border-rose-200"
-                          : "text-emerald-600 bg-emerald-50 border-emerald-200"
-                  }`}
-                >
-                  {status === "used"
-                    ? "USED"
-                    : status === "expired"
-                      ? "EXPIRED"
-                      : status === "cancelled"
-                        ? "CANCELLED"
-                        : "CONFIRMED"}
-                </span>
-              </div>
             </div>
           </div>
 
           <div className="bg-rose-50 border border-rose-200/80 rounded-2xl p-3 flex items-start gap-2.5">
             <i className="fa-solid fa-shield-halved text-rose-500 text-base mt-0.5" />
             <div className="text-xs">
-              <p className="font-black text-rose-950">Important Note</p>
+              <p className="font-black text-rose-950 flex items-center gap-1.5">
+                <span>Security Notice</span>
+                <span className="bg-rose-200 text-rose-800 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">
+                  No Screenshots
+                </span>
+              </p>
               <p className="text-rose-800 font-medium text-[11px] mt-0.5 leading-snug">
-                Please keep this ticket safe.
+                Screenshots are not allowed on this ticket pass.
                 <br />
-                Do not share the screenshot publicly.
+                Please present this live ticket directly at the entry gate.
               </p>
             </div>
           </div>

@@ -15,6 +15,7 @@ import {
   blockChannelText,
 } from "../../lib/blockCategories";
 import { getSavedCustomerProfile } from "../../lib/supabase";
+import { getPriceForRow } from "../../lib/ticketTypes";
 
 const EVENT_ID_KEY = "jatra:eventId";
 const HOLD_KEY = "jatra:seatHold";
@@ -108,8 +109,29 @@ function SeatSelectionContent() {
 
   const findFsSeat = (blockId, key) => findSeatInBlock(blockId, key);
 
+  const getSeatRealPrice = useCallback(
+    (key) => {
+      const fs = findSeatInBlock(activeBlock, key);
+      if (fs?.price != null && Number(fs.price) > 50) return Number(fs.price);
+      const rowId =
+        fs?.rowId ||
+        String(key).split("-")[1] ||
+        String(key).replace(/\d+$/, "");
+      return getPriceForRow(rowId);
+    },
+    [activeBlock, seatsByBlock]
+  );
+
+  const selectedTotal = (selected || []).reduce(
+    (sum, k) => sum + getSeatRealPrice(k),
+    0
+  );
+
   const seatPrice =
-    (seatsByBlock[activeBlock] || []).find((s) => s.price != null)?.price || 100;
+    selected.length > 0
+      ? Math.round(selectedTotal / selected.length)
+      : (seatsByBlock[activeBlock] || []).find((s) => s.price != null && Number(s.price) > 50)?.price ||
+        getPriceForRow("A");
 
   const getSelectedRowLetters = () => {
     if (!selected.length) return "";
@@ -362,7 +384,12 @@ function SeatSelectionContent() {
 
   const getBlockStats = (blockId) => {
     const fsSeats = seatsByBlock[blockId] || [];
-    const available = fsSeats.filter((s) => s.status === "available").length;
+    const available = fsSeats.filter(
+      (s) =>
+        !s.status ||
+        s.status === "available" ||
+        (s.status === "reserved" && !isHoldFresh(s))
+    ).length;
     return { total: fsSeats.length, available };
   };
 
@@ -832,8 +859,9 @@ function SeatSelectionContent() {
               </div>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-[8px] uppercase font-bold text-slate-400 tracking-wider">Total</p>
-              <p className="text-base font-black text-emerald-600 leading-tight">₹{selected.length * seatPrice}</p>
+              <p className="text-[8px] uppercase font-bold text-slate-400 tracking-wider">Total Amount</p>
+              <p className="text-base font-black text-emerald-600 leading-tight">₹{selectedTotal}</p>
+              <p className="text-[8px] text-slate-400 font-medium">Extra charges shown on next step</p>
             </div>
           </div>
 
@@ -864,7 +892,7 @@ function SeatSelectionContent() {
             className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <i className="fa-solid fa-ticket -rotate-12 text-base" />
-            <span>Continue with {selected.length > 0 ? `${selected.length} seat${selected.length > 1 ? "s" : ""}` : "seat selection"}</span>
+            <span>Continue with {selected.length > 0 ? `${selected.length} seat${selected.length > 1 ? "s" : ""} • ₹${selectedTotal}` : "seat selection"}</span>
             <i className="fa-solid fa-chevron-right text-xs ml-1" />
           </button>
         </div>
