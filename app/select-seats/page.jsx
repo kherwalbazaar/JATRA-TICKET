@@ -216,7 +216,7 @@ function SelectSeatsContent() {
 
           {/* Seat Rows — only real seats from database */}
           {activeBlock && (
-            <div ref={seatGridRef} className="space-y-3">
+            <div ref={seatGridRef} className="space-y-3 -mx-1.5 sm:mx-0">
               <UserSeatGrid
                 showId={eventId}
                 eventId={eventId}

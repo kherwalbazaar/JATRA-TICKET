@@ -317,7 +317,7 @@ export default function UserSeatGrid({
       )}
 
       {/* Seating Area Card (No Background) */}
-      <div className="w-full min-h-[120px] flex flex-col justify-center bg-transparent border-0 shadow-none p-1 sm:p-2">
+      <div className="w-full min-h-[120px] flex flex-col justify-center bg-transparent border-0 shadow-none p-0 sm:px-0.5">
         {loading ? (
           <div className="text-center py-8 space-y-2.5">
             <div className="inline-block w-7 h-7 border-3 border-sky-500 border-t-transparent rounded-full animate-spin" />
@@ -377,7 +377,7 @@ export default function UserSeatGrid({
                 {priceGroups.map((group) => (
                   <div
                     key={group.price}
-                    className="border border-slate-200 rounded-2xl p-2.5 sm:p-3.5 space-y-3 bg-white/80 shadow-2xs"
+                    className="border border-slate-200 rounded-lg p-1.5 sm:p-2.5 space-y-2.5 bg-white/90 shadow-2xs"
                   >
                     {/* Price Category Top Header: Full width filled across screen */}
                     <div className="w-full flex items-center gap-1 sm:gap-1.5 pb-2.5 border-b border-slate-100 flex-nowrap whitespace-nowrap overflow-x-auto scrollbar-none">
@@ -471,7 +471,7 @@ export default function UserSeatGrid({
                 {priceGroups.map((group) => (
                   <div
                     key={group.price}
-                    className="border border-slate-200 rounded-2xl p-2.5 sm:p-3.5 space-y-3 bg-white/80 shadow-2xs overflow-x-auto scrollbar-thin"
+                    className="border border-slate-200 rounded-lg p-1.5 sm:p-2.5 space-y-2.5 bg-white/90 shadow-2xs overflow-x-auto scrollbar-thin"
                   >
                     {/* Price Category Top Header: Full width filled across screen */}
                     <div className="w-full flex items-center gap-1 sm:gap-1.5 pb-2.5 border-b border-slate-100 flex-nowrap whitespace-nowrap overflow-x-auto scrollbar-none">
@@ -496,7 +496,7 @@ export default function UserSeatGrid({
                       {group.rows.map((row) => (
                         <div
                           key={row.id}
-                          className="flex items-center gap-1.5 min-w-max mx-auto justify-center px-1 py-0.5 rounded-xl hover:bg-slate-50/80 transition-colors"
+                          className="flex items-center gap-1 min-w-max mx-auto justify-center px-0.5 py-0.5 rounded-md hover:bg-slate-50/80 transition-colors"
                         >
                           {/* Left Row Badge */}
                           <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-slate-700">

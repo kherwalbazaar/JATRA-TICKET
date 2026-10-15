@@ -24,6 +24,36 @@ function formatSeatNumber(seatStr) {
   return s;
 }
 
+function formatEntryTime(rawTime, rawTimestamp) {
+  if (rawTime && typeof rawTime === "string") {
+    const t = rawTime.trim();
+    const match = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?$/i);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = match[2];
+      const meridiem = match[3];
+      if (meridiem) {
+        return `${h}:${m} ${meridiem.toUpperCase()}`;
+      }
+      const suffix = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${m} ${suffix}`;
+    }
+    if (t.length > 0 && !/invalid/i.test(t)) return t;
+  }
+  if (rawTimestamp) {
+    const d = new Date(rawTimestamp);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    }
+  }
+  return null;
+}
+
 export default function TicketDetailPage({ params }) {
   const { id } = use(params);
   const router = useRouter();
@@ -39,6 +69,7 @@ export default function TicketDetailPage({ params }) {
     let unsubEntries = () => {};
     let latestBookingData = null;
     let currentEntriesSet = new Set();
+    let currentEntriesMap = new Map();
 
     // id can be a booking number (NJ26-00001) or a per-seat ticket
     // number (NJ26-00001-2) — resolve base booking number.
@@ -115,6 +146,37 @@ export default function TicketDetailPage({ params }) {
         seatCount = seats.length;
       }
 
+      const matchedEntry =
+        currentEntriesMap.get(String(id).toUpperCase()) ||
+        currentEntriesMap.get(String(data.ticketId || "").toUpperCase()) ||
+        currentEntriesMap.get(String(data.ticketNumber || "").toUpperCase()) ||
+        currentEntriesMap.get(String(data.bookingId || "").toUpperCase()) ||
+        null;
+
+      const effectiveScannedAt =
+        matchedEntry?.scanned_at ||
+        matchedEntry?.scannedAt ||
+        data.scanned_at ||
+        data.scannedAt ||
+        data.used_at ||
+        data.usedAt ||
+        null;
+
+      const effectiveScanTime =
+        matchedEntry?.scan_time ||
+        matchedEntry?.scanTime ||
+        data.scan_time ||
+        data.scanTime ||
+        data.entryTime ||
+        "";
+
+      const effectiveScannedBy =
+        matchedEntry?.scanned_by ||
+        matchedEntry?.scannedBy ||
+        data.scanned_by ||
+        data.scannedBy ||
+        "";
+
       const itemTicket = {
         ...data,
         date: effectiveDate,
@@ -129,6 +191,14 @@ export default function TicketDetailPage({ params }) {
         ticketNumber: data.ticketId || String(id),
         bookingId: data.bookingId || data.ticketNumber || baseNumber,
         baseTicketNumber: data.bookingId || data.ticketNumber || baseNumber,
+        scannedAt: effectiveScannedAt,
+        scanned_at: effectiveScannedAt,
+        scanTime: effectiveScanTime,
+        scan_time: effectiveScanTime,
+        scannedBy: effectiveScannedBy,
+        scanned_by: effectiveScannedBy,
+        usedAt: effectiveScannedAt,
+        entryTime: effectiveScanTime,
       };
 
       const parentBooking = {
@@ -136,6 +206,9 @@ export default function TicketDetailPage({ params }) {
         date: effectiveDate,
         time: effectiveTime,
         eventName: effectiveEventName,
+        partyName: effectivePartyName,
+        scannedAt: effectiveScannedAt,
+        usedAt: effectiveScannedAt,
       };
 
       setTicket({
@@ -168,16 +241,21 @@ export default function TicketDetailPage({ params }) {
     try {
       unsubEntries = subscribeTicketEntries((entries) => {
         const set = new Set();
+        const map = new Map();
         entries.forEach((entry) => {
           const status = String(entry.status || entry.entryStatus || "").toLowerCase();
           const result = String(entry.scanResult || "").toUpperCase();
           if (status === "entered" || result === "SUCCESS" || !status) {
-            if (entry.ticketNumber) set.add(String(entry.ticketNumber).toUpperCase());
-            if (entry.ticketId) set.add(String(entry.ticketId).toUpperCase());
-            if (entry.bookingId) set.add(String(entry.bookingId).toUpperCase());
+            const tNum = String(entry.ticketNumber || entry.ticket_number || "").toUpperCase();
+            const tId = String(entry.ticketId || entry.ticket_id || entry.id || "").toUpperCase();
+            const bId = String(entry.bookingId || entry.booking_id || "").toUpperCase();
+            if (tNum) { set.add(tNum); map.set(tNum, entry); }
+            if (tId) { set.add(tId); map.set(tId, entry); }
+            if (bId) { set.add(bId); map.set(bId, entry); }
           }
         });
         currentEntriesSet = set;
+        currentEntriesMap = map;
         updateTicketState();
       });
     } catch (err) {
@@ -578,8 +656,21 @@ export default function TicketDetailPage({ params }) {
                 <span className="font-extrabold text-slate-900">{ticket.date}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">Time</span>
-                <span className="font-extrabold text-slate-900">{ticket.time}</span>
+                <span className="text-slate-500 font-medium">
+                  {status === "used" ? "Entry Time" : "Time"}
+                </span>
+                <span
+                  className={`font-extrabold ${
+                    status === "used" ? "text-emerald-700" : "text-slate-900"
+                  }`}
+                >
+                  {status === "used"
+                    ? formatEntryTime(
+                        ticket.scanTime || ticket.entryTime,
+                        ticket.scannedAt || ticket.usedAt
+                      ) || ticket.time
+                    : ticket.time}
+                </span>
               </div>
             </div>
           </div>

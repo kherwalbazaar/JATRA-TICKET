@@ -816,7 +816,7 @@ function SeatSelectionContent() {
           </div>
 
           {/* UserSeatGrid: Reactive real-time seat availability map */}
-          <div ref={seatGridRef} id="seat-grid-container" className="scroll-mt-6 pt-1">
+          <div ref={seatGridRef} id="seat-grid-container" className="scroll-mt-6 pt-1 -mx-2 sm:mx-0">
             <UserSeatGrid
               showId={eventId}
               eventId={eventId}
