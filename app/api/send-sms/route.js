@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { getFast2SmsApiKey } from "@/lib/server/otp";
 
 export async function POST(request) {
   try {
     const body = await request.json();
     const { message, numbers, route = "q", variables_values, flash = 0 } = body;
 
-    const apiKey = process.env.FAST2SMS_API_KEY;
+    const apiKey = getFast2SmsApiKey();
     if (!apiKey) {
       return NextResponse.json(
         {
