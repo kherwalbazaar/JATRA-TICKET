@@ -124,14 +124,14 @@ const helpTopics = [
     title: "Login or Profile Help",
     icon: "fa-user-check",
     color: "text-purple-600 bg-purple-50 border-purple-200",
-    desc: "OTP sign-in, profile update & keeping your account secure",
+    desc: "1-Click Google sign-in, profile update & keeping your account secure",
     steps: [
-      "Enter your 10-digit mobile number on the login or checkout screen.",
-      "You will receive a 6-digit OTP code via SMS — enter it to authenticate instantly.",
-      "Go to 'Profile' from the bottom navigation bar to save your Full Name and City.",
+      "Click 'Continue with Google' to sign in securely with your Google Account.",
+      "Your verified name, email address, and profile photo are connected instantly.",
+      "Add your 10-digit mobile number to receive ticket confirmations and entry QR passes.",
       "Having an updated profile ensures faster 1-tap bookings without re-entering details."
     ],
-    tip: "Make sure you use the same mobile number every time so all your booked tickets stay unified in one account.",
+    tip: "Sign in with the same Google account so all your booked tickets and event history stay unified in one place.",
     action: {
       label: "Go to Profile",
       href: "/profile",

@@ -6,13 +6,15 @@ import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import {
-  requestCustomerOtp,
-  verifyCustomerOtp,
-  resetCustomerOtpLimit,
+  signInWithGoogle,
+  signInWithEmail,
+  signUpWithEmail,
+  resetPassword,
   getCustomerProfile,
   saveCustomerProfile,
   updateCustomerProfile,
   logoutCustomer,
+  getSavedCustomerProfile,
   sbFetchBookingsByPhone,
   supabase,
 } from "../../lib/supabase";
@@ -32,9 +34,7 @@ function ProfileContent() {
   const redirectUrl = searchParams.get("redirect") || "";
 
   // Authentication & Profile States
-  const [step, setStep] = useState("ENTER_MOBILE"); // ENTER_MOBILE | VERIFY_OTP | COMPLETE_PROFILE | VIEW_PROFILE
-  const [mobile, setMobile] = useState("");
-  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState("SIGN_IN"); // SIGN_IN | COMPLETE_PROFILE | VIEW_PROFILE
   const [authUserId, setAuthUserId] = useState(null);
   const [profile, setProfile] = useState(null);
 
@@ -42,7 +42,15 @@ function ProfileContent() {
   const [fullNameInput, setFullNameInput] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [photoInput, setPhotoInput] = useState("");
+  const [mobileInput, setMobileInput] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+
+  // Manual Email & Password Login States
+  const [authMode, setAuthMode] = useState("signin"); // "signin" | "signup" | "forgot"
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualPassword, setManualPassword] = useState("");
+  const [manualFullName, setManualFullName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // Status & stats
   const [loading, setLoading] = useState(false);
@@ -58,96 +66,6 @@ function ProfileContent() {
     totalSpent: 0,
     eventCount: 0,
   });
-
-  // Real OTP timer & daily SMS quota states (5-minute expiry & 30s resend cooldown)
-  const [timerSeconds, setTimerSeconds] = useState(300);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const [remainingToday, setRemainingToday] = useState(null);
-
-  // 5-minute countdown timer effect
-  useEffect(() => {
-    let interval = null;
-    if (step === "VERIFY_OTP" && timerSeconds > 0) {
-      interval = setInterval(() => {
-        setTimerSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [step, timerSeconds]);
-
-  // Resend cooldown timer effect
-  useEffect(() => {
-    let interval = null;
-    if (step === "VERIFY_OTP" && resendCooldown > 0) {
-      interval = setInterval(() => {
-        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [step, resendCooldown]);
-
-  const formatTimer = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  };
-
-  // Load existing session on mount
-  useEffect(() => {
-    async function initSession() {
-      try {
-        setInitialLoading(true);
-
-        // Check active Supabase Auth user
-        const { data: authData } = await supabase.auth.getUser();
-        let user = authData?.user;
-
-        // Fallback to local storage
-        let savedMobile = "";
-        let savedId = "";
-        if (typeof window !== "undefined") {
-          savedMobile = window.localStorage.getItem("jatra:customer_mobile") || "";
-          savedId = window.localStorage.getItem("jatra:customer_auth_id") || "";
-        }
-
-        const effectiveId = user?.id || savedId;
-        const effectiveMobile = user?.user_metadata?.mobile || savedMobile;
-
-        if (effectiveId) {
-          setAuthUserId(effectiveId);
-          if (effectiveMobile) setMobile(effectiveMobile);
-
-          const existingProfile = await getCustomerProfile(effectiveId);
-          if (existingProfile) {
-            setProfile(existingProfile);
-            setFullNameInput(existingProfile.full_name || "");
-            setEmailInput(existingProfile.email || "");
-            setPhotoInput(existingProfile.profile_photo || "");
-            setStep("VIEW_PROFILE");
-            loadCustomerStats(existingProfile.mobile || effectiveMobile);
-
-            // If arrived from "Book Ticket Now", auto-redirect immediately
-            if (redirectUrl && (existingProfile.full_name || "").trim()) {
-              router.replace(redirectUrl);
-              return;
-            }
-          } else if (effectiveMobile) {
-            setStep("COMPLETE_PROFILE");
-          }
-        }
-      } catch (err) {
-        console.warn("Session check notice:", err);
-      } finally {
-        setInitialLoading(false);
-      }
-    }
-
-    initSession();
-  }, [redirectUrl, router]);
 
   const loadCustomerStats = async (phone) => {
     if (!phone) return;
@@ -186,139 +104,206 @@ function ProfileContent() {
     }
   };
 
-  // Step 1: Request Real OTP via Fast2SMS
-  const handleRequestOtp = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    setErrorMsg("");
-    setSuccessMsg("");
-    const clean = mobile.replace(/\D/g, "").slice(-10);
-    if (clean.length !== 10) {
-      setErrorMsg("Please enter a valid 10-digit mobile number.");
-      return;
-    }
+  // Helper to process an authenticated user
+  const handleAuthenticatedUser = async (user) => {
+    if (!user) return;
+    const userId = user.id;
+    setAuthUserId(userId);
 
-    setLoading(true);
-    try {
-      const res = await requestCustomerOtp(clean);
-      setMobile(clean);
-      setTimerSeconds(res.expiresIn || 300);
-      setResendCooldown(30);
-      if (typeof res.remainingToday === "number") {
-        setRemainingToday(res.remainingToday);
+    const googleName =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.user_metadata?.displayName ||
+      "";
+    const googleEmail = user.email || user.user_metadata?.email || "";
+    const googlePhoto =
+      user.user_metadata?.avatar_url ||
+      user.user_metadata?.picture ||
+      "";
+
+    // Try fetching existing customer profile
+    let existingProfile = await getCustomerProfile(userId);
+
+    if (existingProfile) {
+      setProfile(existingProfile);
+      setFullNameInput(existingProfile.full_name || googleName);
+      setEmailInput(existingProfile.email || googleEmail);
+      setPhotoInput(existingProfile.profile_photo || googlePhoto);
+      setMobileInput(existingProfile.mobile || "");
+      setStep("VIEW_PROFILE");
+      if (existingProfile.mobile) {
+        loadCustomerStats(existingProfile.mobile);
       }
-      if (res.devOtp) {
-        setOtp(res.devOtp);
+
+      // If user came from a booking flow with complete profile, redirect back immediately
+      if (redirectUrl && (existingProfile.full_name || "").trim() && existingProfile.mobile) {
+        router.replace(redirectUrl);
+        return;
       }
-      setSuccessMsg(res.message || "OTP sent successfully to your mobile.");
-      setStep("VERIFY_OTP");
-    } catch (err) {
-      setErrorMsg(err.message || "Failed to send OTP.");
-    } finally {
-      setLoading(false);
+    } else {
+      // First-time Google user: prepopulate name, email, avatar and ask for mobile
+      setFullNameInput(googleName);
+      setEmailInput(googleEmail);
+      setPhotoInput(googlePhoto);
+      setStep("COMPLETE_PROFILE");
     }
   };
 
-  // Resend OTP with strict 3-SMS daily limit check and cooldown
-  const handleResendOtp = async () => {
-    if (resendCooldown > 0 || loading) return;
-    if (remainingToday !== null && remainingToday <= 0) {
-      setErrorMsg("You have reached your daily OTP limit of 3 SMS messages. Please try again tomorrow.");
-      return;
-    }
+  // Check active session & listen for Google OAuth redirects
+  useEffect(() => {
+    let authListener = null;
 
-    setErrorMsg("");
-    setSuccessMsg("");
-    setLoading(true);
+    async function initSession() {
+      try {
+        setInitialLoading(true);
 
-    try {
-      const res = await requestCustomerOtp(mobile);
-      setTimerSeconds(res.expiresIn || 300);
-      setResendCooldown(30);
-      if (res.devOtp) {
-        setOtp(res.devOtp);
-      } else {
-        setOtp("");
+        // 1. Check active Supabase Auth user
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+
+        if (user) {
+          await handleAuthenticatedUser(user);
+        } else {
+          // 2. Check cached profile fallback
+          const cached = getSavedCustomerProfile();
+          if (cached && cached.id) {
+            setProfile(cached);
+            setFullNameInput(cached.full_name || "");
+            setEmailInput(cached.email || "");
+            setPhotoInput(cached.profile_photo || "");
+            setMobileInput(cached.mobile || "");
+            setStep("VIEW_PROFILE");
+            if (cached.mobile) {
+              loadCustomerStats(cached.mobile);
+            }
+          } else {
+            setStep("SIGN_IN");
+          }
+        }
+      } catch (err) {
+        console.warn("Session check notice:", err);
+        setStep("SIGN_IN");
+      } finally {
+        setInitialLoading(false);
       }
-      if (typeof res.remainingToday === "number") {
-        setRemainingToday(res.remainingToday);
+    }
+
+    initSession();
+
+    // 2. Listen to Supabase OAuth events
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && (event === "SIGNED_IN" || event === "USER_UPDATED" || event === "INITIAL_SESSION")) {
+        await handleAuthenticatedUser(session.user);
+      } else if (event === "SIGNED_OUT") {
+        setProfile(null);
+        setStep("SIGN_IN");
       }
-      setSuccessMsg(res.message || "A new 6-digit OTP code has been sent.");
-    } catch (err) {
-      setErrorMsg(err.message || "Failed to resend OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
+    authListener = sub?.subscription;
 
-  // Developer tool to reset daily quota during testing
-  const handleResetDailyLimit = async () => {
-    try {
-      setLoading(true);
-      setErrorMsg("");
-      const clean = mobile.replace(/\D/g, "").slice(-10);
-      const res = await resetCustomerOtpLimit(clean);
-      setRemainingToday(res.remaining ?? 3);
-      setSuccessMsg(res.message || "Daily quota reset.");
-    } catch (e) {
-      setErrorMsg(e.message || "Failed to reset quota.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      if (authListener) authListener.unsubscribe();
+    };
+  }, [redirectUrl, router]);
 
-
-  // Step 2: Verify Fake OTP (123456)
-  const handleVerifyOtp = async (e) => {
+  // Manual Email & Password authentication handler
+  const handleManualAuth = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
-    if (!otp.trim()) {
-      setErrorMsg("Please enter the verification code.");
+    const cleanEmail = manualEmail.trim();
+    if (!cleanEmail) {
+      setErrorMsg("Please enter your email or Gmail address.");
+      return;
+    }
+
+    if (authMode === "forgot") {
+      setLoading(true);
+      try {
+        await resetPassword(cleanEmail);
+        setSuccessMsg("Password reset email sent! Please check your inbox.");
+        setAuthMode("signin");
+      } catch (err) {
+        setErrorMsg(err.message || "Failed to send reset link.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!manualPassword || manualPassword.length < 6) {
+      setErrorMsg("Password must be at least 6 characters.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await verifyCustomerOtp(mobile, otp.trim());
-      if (!res.success) throw new Error(res.message || "Verification failed.");
-
-      setAuthUserId(res.user.id);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("jatra:customer_mobile", mobile);
-        window.localStorage.setItem("jatra:customer_auth_id", res.user.id);
-      }
-
-      if (res.profile) {
-        setProfile(res.profile);
-        setFullNameInput(res.profile.full_name || "");
-        setEmailInput(res.profile.email || "");
-        setPhotoInput(res.profile.profile_photo || "");
-        setSuccessMsg("Welcome back! Your profile was loaded successfully.");
-        setStep("VIEW_PROFILE");
-        loadCustomerStats(mobile);
-
-        if (redirectUrl && (res.profile.full_name || "").trim()) {
-          router.replace(redirectUrl);
+      if (authMode === "signup") {
+        if (!manualFullName.trim()) {
+          setErrorMsg("Please enter your full name.");
+          setLoading(false);
           return;
         }
+
+        const data = await signUpWithEmail(cleanEmail, manualPassword, manualFullName);
+        if (data?.session?.user) {
+          await handleAuthenticatedUser(data.session.user);
+        } else if (data?.user && !data?.session) {
+          setSuccessMsg("Account created! Please check your email to confirm your account, then sign in.");
+          setAuthMode("signin");
+        } else if (data?.user) {
+          await handleAuthenticatedUser(data.user);
+        }
       } else {
-        setSuccessMsg("Mobile verified! Please enter your name to complete your profile.");
-        setStep("COMPLETE_PROFILE");
+        // Sign In
+        const data = await signInWithEmail(cleanEmail, manualPassword);
+        if (data?.user) {
+          await handleAuthenticatedUser(data.user);
+        }
       }
     } catch (err) {
-      setErrorMsg(err.message || "Invalid OTP code.");
+      let msg = err.message || "Authentication failed.";
+      if (msg.includes("Invalid login credentials")) {
+        msg = "Incorrect email or password. Please try again.";
+      } else if (msg.includes("User already registered")) {
+        msg = "An account with this email already exists. Switched to Sign In.";
+        setAuthMode("signin");
+      }
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 3: Complete or Create Profile
+  // Google Sign In trigger
+  const handleGoogleSignIn = async () => {
+    setErrorMsg("");
+    setSuccessMsg("");
+    setLoading(true);
+
+    try {
+      const target = redirectUrl
+        ? `/profile?redirect=${encodeURIComponent(redirectUrl)}`
+        : "/profile";
+      await signInWithGoogle(target);
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to initialize Google Sign In.");
+      setLoading(false);
+    }
+  };
+
+  // Complete Profile (adding mobile number for ticket notifications)
   const handleCompleteProfile = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
+
+    const cleanMobile = mobileInput.replace(/\D/g, "").slice(-10);
+    if (cleanMobile.length !== 10) {
+      setErrorMsg("Please enter a valid 10-digit mobile number for ticket confirmations.");
+      return;
+    }
 
     if (!fullNameInput.trim()) {
       setErrorMsg("Please enter your full name.");
@@ -329,26 +314,30 @@ function ProfileContent() {
     try {
       const saved = await saveCustomerProfile({
         id: authUserId,
-        mobile,
+        mobile: cleanMobile,
         full_name: fullNameInput.trim(),
         email: emailInput.trim() || null,
         profile_photo: photoInput.trim() || null,
       });
 
       setProfile(saved);
+      setMobileInput(cleanMobile);
       if (typeof window !== "undefined") {
         window.localStorage.setItem("jatra:customer_profile", JSON.stringify(saved));
+        window.localStorage.setItem("jatra:customer_mobile", cleanMobile);
+        window.localStorage.setItem("jatra:customer_auth_id", authUserId);
       }
-      setSuccessMsg("Profile created successfully!");
+
+      setSuccessMsg("Welcome to Jatra Bazaar! Your profile is ready.");
       setStep("VIEW_PROFILE");
-      loadCustomerStats(mobile);
+      loadCustomerStats(cleanMobile);
 
       if (redirectUrl) {
         router.replace(redirectUrl);
         return;
       }
     } catch (err) {
-      setErrorMsg(err.message || "Failed to create profile.");
+      setErrorMsg(err.message || "Failed to save profile.");
     } finally {
       setLoading(false);
     }
@@ -371,11 +360,15 @@ function ProfileContent() {
         full_name: fullNameInput.trim(),
         email: emailInput.trim() || null,
         profile_photo: photoInput.trim() || null,
+        mobile: mobileInput.trim() || null,
       });
 
       setProfile(updated);
       setIsEditing(false);
       setSuccessMsg("Profile updated successfully!");
+      if (mobileInput) {
+        loadCustomerStats(mobileInput);
+      }
     } catch (err) {
       setErrorMsg(err.message || "Failed to update profile.");
     } finally {
@@ -383,30 +376,38 @@ function ProfileContent() {
     }
   };
 
+  // Logout
   const handleLogout = async () => {
-    await logoutCustomer();
-    setProfile(null);
-    setAuthUserId(null);
-    setMobile("");
-    setOtp("");
-    setFullNameInput("");
-    setEmailInput("");
-    setPhotoInput("");
-    setStep("ENTER_MOBILE");
+    try {
+      setLoading(true);
+      await logoutCustomer();
+      setProfile(null);
+      setAuthUserId(null);
+      setFullNameInput("");
+      setEmailInput("");
+      setPhotoInput("");
+      setMobileInput("");
+      setStep("SIGN_IN");
+      setSuccessMsg("Signed out successfully.");
+    } catch (e) {
+      setErrorMsg("Failed to sign out.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
-      <div className="bg-[#f8faff] min-h-screen relative pb-24 shadow-2xl flex flex-col overflow-hidden">
-        {/* Top App Header */}
-        <Header />
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans select-none pb-20">
+      {/* Top Header */}
+      <Header />
 
-        <div className="flex-1 p-4 space-y-4">
-          {/* Page Title — hidden on the centered login card for a clean full-screen feel */}
-          {step !== "ENTER_MOBILE" && (
+      <div className="flex-1 max-w-md w-full mx-auto p-4 sm:p-5 flex flex-col justify-between">
+        <div className="space-y-4">
+          {/* Page Title */}
+          {step === "VIEW_PROFILE" && (
             <div>
               <h2 className="text-2xl font-black text-slate-900 font-brand">My Profile</h2>
-              <p className="text-xs text-slate-500 font-medium">Manage your account & preferences</p>
+              <p className="text-xs text-slate-500 font-medium">Manage your account & booked tickets</p>
             </div>
           )}
 
@@ -416,303 +417,381 @@ function ProfileContent() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-rose-500 text-white flex items-center justify-center text-sm shadow-xs flex-shrink-0">
                 <i className="fa-solid fa-ticket -rotate-12" />
               </div>
-              <p className="text-xs font-black text-slate-900">Step 1 of Booking: Create Profile</p>
+              <div>
+                <p className="text-xs font-black text-slate-900">Step 1 of Booking: Sign In</p>
+                <p className="text-[10px] text-slate-500 font-medium">Sign in to complete your ticket reservation</p>
+              </div>
             </div>
           )}
 
           {/* Feedback messages */}
           {errorMsg && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl p-3 flex flex-col gap-2 animate-in fade-in text-left">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-circle-exclamation text-rose-500 shrink-0" />
-                <span className="flex-1 leading-snug">{errorMsg}</span>
-              </div>
-              {errorMsg.toLowerCase().includes("daily limit") && (
-                <div className="pt-2 border-t border-rose-200/80 flex items-center justify-between">
-                  <span className="text-[10px] text-rose-600/80 font-normal">Testing Mode:</span>
-                  <button
-                    type="button"
-                    onClick={handleResetDailyLimit}
-                    disabled={loading}
-                    className="text-[11px] bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold px-3 py-1 rounded-lg transition-all shadow-xs"
-                  >
-                    {loading ? "Resetting..." : "Reset Daily Limit"}
-                  </button>
-                </div>
-              )}
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl p-3 flex items-center gap-2 animate-in fade-in text-left">
+              <i className="fa-solid fa-circle-exclamation text-rose-500 shrink-0" />
+              <span className="flex-1 leading-snug">{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl p-3 flex items-center gap-2 animate-in fade-in">
-              <i className="fa-solid fa-circle-check text-emerald-600" />
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl p-3 flex items-center gap-2 animate-in fade-in text-left">
+              <i className="fa-solid fa-circle-check text-emerald-600 shrink-0" />
               <span>{successMsg}</span>
             </div>
           )}
 
           {/* Initial Loading Skeleton */}
           {initialLoading && (
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-xs flex flex-col items-center justify-center space-y-3">
-              <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs font-bold text-slate-500">Checking profile session...</p>
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-md flex flex-col items-center justify-center space-y-3 my-12">
+              <div className="w-9 h-9 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs font-bold text-slate-500">Checking account session...</p>
             </div>
           )}
 
-          {/* FLOW STEP 1: ENTER MOBILE */}
-          {!initialLoading && step === "ENTER_MOBILE" && (
-            <div className="flex items-center justify-center min-h-[60vh]">
-              <div className="w-full max-w-sm bg-white rounded-3xl p-7 border border-slate-100 shadow-xl space-y-6 text-center">
-                <div className="space-y-2">
-                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-200">
-                    <i className="fa-solid fa-mobile-screen-button" />
+          {/* ============================================================== */}
+          {/* FLOW STEP 1: REDESIGNED GOOGLE SIGN-IN UI                     */}
+          {/* ============================================================== */}
+          {!initialLoading && step === "SIGN_IN" && (
+            <div className="flex items-center justify-center py-4 sm:py-8">
+              <div className="w-full max-w-sm bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xl shadow-slate-200/50 space-y-5 text-center">
+                {/* Brand Logo Icon */}
+                <div className="space-y-2.5">
+                  <div className="w-20 h-20 rounded-3xl bg-white p-2 mx-auto shadow-xl shadow-slate-200/70 ring-8 ring-indigo-50/80 border border-slate-100 flex items-center justify-center transition-transform hover:scale-105">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/icon.png"
+                      alt="Jatra Bazaar Logo"
+                      className="w-full h-full object-contain rounded-2xl"
+                    />
                   </div>
-                  <h3 className="text-xl font-black text-slate-900 font-brand pt-1">Login or Create Profile</h3>
-                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Enter your 10-digit mobile number
-                    <br />
-                    to verify with OTP
-                  </p>
-                </div>
-
-                <form onSubmit={handleRequestOtp} className="space-y-4">
-                  <div className="relative">
-                    <div className="flex items-center bg-slate-50 border-2 border-slate-200 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 rounded-xl transition-all overflow-hidden max-w-[280px] mx-auto">
-                      <span className="pl-3 pr-1.5 text-sm font-black text-slate-500 select-none">+91</span>
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        value={mobile}
-                        onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-                        placeholder="98765 43210"
-                        className="flex-1 bg-transparent py-2.5 pr-3 text-base font-black text-slate-900 tracking-wider placeholder:text-slate-300 placeholder:font-bold focus:outline-none text-center"
-                        autoFocus
-                      />
-                      {mobile.length === 10 && (
-                        <span className="pr-3 text-emerald-500 text-sm">
-                          <i className="fa-solid fa-circle-check" />
-                        </span>
-                      )}
-                    </div>
-                    {mobile.length > 0 && mobile.length < 10 && (
-                      <p className="text-[10px] font-bold text-amber-600 mt-1.5 text-center">
-                        {10 - mobile.length} more digit{10 - mobile.length > 1 ? "s" : ""} remaining
-                      </p>
-                    )}
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 font-brand tracking-tight">
+                      Welcome to Jatra Bazaar
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium leading-relaxed max-w-xs mx-auto">
+                      Sign in to reserve tickets, view bookings & digital entry passes.
+                    </p>
                   </div>
-
-                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[11px] text-slate-600 flex items-start gap-2.5 text-left">
-                    <i className="fa-solid fa-shield-halved text-emerald-600 mt-0.5 text-xs" />
-                    <span>A 6-digit verification code will be sent to your mobile via SMS. Valid for 5 minutes (max 3 OTPs per day).</span>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading || mobile.length < 10}
-                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40 text-white font-extrabold text-sm py-4 rounded-2xl shadow-lg shadow-indigo-200 active:scale-[0.97] transition-all flex items-center justify-center gap-2"
-                  >
-                    {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-arrow-right" />}
-                    <span>{loading ? "Sending OTP..." : "Get OTP Verification Code"}</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* FLOW STEP 2: VERIFY REAL OTP */}
-          {!initialLoading && step === "VERIFY_OTP" && (
-            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-md space-y-4">
-              <div className="text-center space-y-1">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-xl mx-auto mb-2">
-                  <i className="fa-solid fa-key" />
-                </div>
-                <h3 className="text-base font-black text-slate-900 font-brand">Verify Mobile OTP</h3>
-                <p className="text-xs text-slate-500">
-                  SMS sent to <span className="font-extrabold text-slate-800">+91 {mobile}</span>
-                </p>
-              </div>
-
-              {/* Live 5-minute countdown timer */}
-              <div className="flex items-center justify-between bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-2 text-xs">
-                <span className="text-slate-500 font-semibold flex items-center gap-1.5">
-                  <i className="fa-regular fa-clock text-slate-400" />
-                  Code Expires In:
-                </span>
-                <span
-                  className={`font-mono font-black px-2 py-0.5 rounded-md text-xs ${
-                    timerSeconds <= 60
-                      ? "bg-rose-100 text-rose-600 animate-pulse"
-                      : "bg-emerald-100 text-emerald-800"
-                  }`}
-                >
-                  {formatTimer(timerSeconds)}
-                </span>
-              </div>
-
-              {timerSeconds === 0 && (
-                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 flex items-start gap-2 text-left">
-                  <i className="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5 flex-shrink-0" />
-                  <span>
-                    Your OTP code has expired. Please tap <strong>Resend OTP</strong> below to receive a new code.
-                  </span>
-                </div>
-              )}
-
-              <form onSubmit={handleVerifyOtp} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Enter 6-Digit Verification Code
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={otp}
-                    disabled={timerSeconds === 0}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                    placeholder="• • • • • •"
-                    className="w-full text-center tracking-[0.5em] text-xl font-black py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
-                    autoFocus
-                  />
                 </div>
 
-                {/* Resend and daily limit display */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 text-[11px] font-medium">
-                    {remainingToday !== null
-                      ? `${remainingToday} of 3 SMS remaining today`
-                      : "Daily limit: 3 SMS"}
-                  </span>
-
+                {/* Auth Mode Switcher (Sign In vs Create Account) */}
+                <div className="flex bg-slate-100 p-1 rounded-2xl text-xs font-bold">
                   <button
                     type="button"
-                    onClick={handleResendOtp}
-                    disabled={
-                      resendCooldown > 0 ||
-                      loading ||
-                      (remainingToday !== null && remainingToday <= 0)
-                    }
-                    className="font-bold text-xs text-indigo-600 hover:text-indigo-800 disabled:text-slate-400 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+                    onClick={() => {
+                      setAuthMode("signin");
+                      setErrorMsg("");
+                    }}
+                    className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
+                      authMode === "signin"
+                        ? "bg-white text-indigo-700 shadow-xs font-black"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
                   >
-                    <i className={`fa-solid fa-rotate-right ${loading ? "animate-spin" : ""}`} />
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("signup");
+                      setErrorMsg("");
+                    }}
+                    className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
+                      authMode === "signup"
+                        ? "bg-white text-indigo-700 shadow-xs font-black"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Create Account
+                  </button>
+                </div>
+
+                {/* Manual Email & Password Form */}
+                <form onSubmit={handleManualAuth} className="space-y-3.5 text-left">
+                  {/* Full Name (Sign Up only) */}
+                  {authMode === "signup" && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Full Name <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative flex items-center">
+                        <i className="fa-solid fa-user absolute left-3.5 text-slate-400 text-xs" />
+                        <input
+                          type="text"
+                          required
+                          value={manualFullName}
+                          onChange={(e) => setManualFullName(e.target.value)}
+                          placeholder="Enter your full name"
+                          className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100 rounded-xl text-xs font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Email / Gmail Address */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                      Email or Gmail <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <i className="fa-solid fa-envelope absolute left-3.5 text-slate-400 text-xs" />
+                      <input
+                        type="email"
+                        required
+                        value={manualEmail}
+                        onChange={(e) => setManualEmail(e.target.value)}
+                        placeholder="you@gmail.com"
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100 rounded-xl text-xs font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Input */}
+                  {authMode !== "forgot" && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                          Password <span className="text-rose-500">*</span>
+                        </label>
+                        {authMode === "signin" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthMode("forgot");
+                              setErrorMsg("");
+                            }}
+                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                          >
+                            Forgot?
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative flex items-center">
+                        <i className="fa-solid fa-lock absolute left-3.5 text-slate-400 text-xs" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          required
+                          minLength={6}
+                          value={manualPassword}
+                          onChange={(e) => setManualPassword(e.target.value)}
+                          placeholder="•••••••• (min 6 chars)"
+                          className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100 rounded-xl text-xs font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono tracking-wider"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 text-slate-400 hover:text-slate-600 text-xs p-1 cursor-pointer"
+                          tabIndex={-1}
+                          title={showPassword ? "Hide password" : "Show password"}
+                        >
+                          <i className={`fa-solid ${showPassword ? "fa-eye-slash" : "fa-eye"}`} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {authMode === "forgot" && (
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode("signin")}
+                        className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                      >
+                        ← Back to Sign In
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={loading || !manualEmail.trim() || (authMode !== "forgot" && manualPassword.length < 6)}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:scale-[0.98] text-white font-black text-xs py-3 px-4 rounded-xl shadow-md hover:shadow-indigo-200/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {loading ? (
+                      <i className="fa-solid fa-spinner animate-spin text-sm" />
+                    ) : (
+                      <i className={`fa-solid ${authMode === "signup" ? "fa-user-plus" : authMode === "forgot" ? "fa-paper-plane" : "fa-right-to-bracket"}`} />
+                    )}
                     <span>
-                      {resendCooldown > 0
-                        ? `Resend in ${resendCooldown}s`
-                        : remainingToday !== null && remainingToday <= 0
-                        ? "Daily Limit Reached"
-                        : "Resend OTP"}
+                      {loading
+                        ? "Please wait..."
+                        : authMode === "signup"
+                        ? "Create Account & Sign In"
+                        : authMode === "forgot"
+                        ? "Send Password Reset Link"
+                        : "Sign In"}
+                    </span>
+                  </button>
+                </form>
+
+                {/* Divider: OR CONTINUE WITH */}
+                <div className="relative flex items-center justify-center pt-1">
+                  <div className="border-t border-slate-200 w-full" />
+                  <span className="bg-white px-3 text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">
+                    Or Continue With
+                  </span>
+                  <div className="border-t border-slate-200 w-full" />
+                </div>
+
+                {/* Below: Continue with Google Button */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={loading}
+                    className="w-full bg-white hover:bg-slate-50 active:scale-[0.98] text-slate-800 font-extrabold text-xs py-3 px-4 rounded-xl border border-slate-200 hover:border-slate-300 shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2.5 disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
+                  >
+                    {loading ? (
+                      <i className="fa-solid fa-spinner animate-spin text-indigo-600 text-sm" />
+                    ) : (
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                        />
+                      </svg>
+                    )}
+                    <span className="text-slate-800 text-xs font-black tracking-tight">
+                      {loading ? "Connecting to Google..." : "Continue with Google"}
                     </span>
                   </button>
                 </div>
 
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStep("ENTER_MOBILE");
-                      setOtp("");
-                    }}
-                    className="flex-1 bg-slate-100 text-slate-700 font-bold text-xs py-2.5 rounded-xl hover:bg-slate-200 transition-colors"
-                  >
-                    Change Number
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading || otp.length !== 6 || timerSeconds === 0}
-                    className="flex-2 bg-gradient-to-r from-emerald-600 to-teal-600 disabled:opacity-40 text-white font-extrabold text-sm py-2.5 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                  >
-                    {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-check" />}
-                    <span>{loading ? "Verifying..." : "Verify & Continue"}</span>
-                  </button>
+                {/* Benefits List */}
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-3 text-left space-y-2">
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700">
+                    <div className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 text-[10px]">
+                      <i className="fa-solid fa-bolt" />
+                    </div>
+                    <span>Fast 1-Click Access or Email Sign In</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700">
+                    <div className="w-5 h-5 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 text-[10px]">
+                      <i className="fa-solid fa-ticket" />
+                    </div>
+                    <span>Digital tickets & QR passes saved to your account</span>
+                  </div>
                 </div>
-              </form>
+
+                {/* Privacy & Trust footer */}
+                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                  By signing in, you agree to Jatra Bazaar Terms of Service. Your personal information is encrypted & secured.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* FLOW STEP 3: COMPLETE PROFILE */}
+          {/* ============================================================== */}
+          {/* FLOW STEP 2: COMPLETE PROFILE (ADD MOBILE NUMBER)             */}
+          {/* ============================================================== */}
           {!initialLoading && step === "COMPLETE_PROFILE" && (
-            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-md space-y-4">
-              <div className="text-center space-y-1">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl mx-auto mb-2">
-                  <i className="fa-solid fa-user-plus" />
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xl space-y-5 animate-in fade-in">
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-indigo-100 mx-auto bg-slate-100 flex items-center justify-center shadow-md">
+                  {photoInput ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photoInput} alt="Google Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl font-black text-indigo-600">
+                      {(fullNameInput || "U").charAt(0).toUpperCase()}
+                    </span>
+                  )}
                 </div>
-                <h3 className="text-base font-black text-slate-900 font-brand">Complete Your Profile</h3>
-                <p className="text-xs text-slate-500">Welcome to Jatra Bazaar! Set up your customer profile details.</p>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 font-brand">Almost Done!</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Add your phone number for ticket passes & WhatsApp notifications.
+                  </p>
+                </div>
+
+                {/* Google Verified Banner */}
+                {emailInput && (
+                  <div className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[11px] font-extrabold px-3 py-1 rounded-full">
+                    <i className="fa-brands fa-google text-emerald-600 text-xs" />
+                    <span className="truncate max-w-[220px]">{emailInput}</span>
+                    <i className="fa-solid fa-circle-check text-emerald-600 text-xs" />
+                  </div>
+                )}
               </div>
 
-              <form onSubmit={handleCompleteProfile} className="space-y-3">
+              <form onSubmit={handleCompleteProfile} className="space-y-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Full Name <span className="text-rose-500">*</span>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Your Full Name <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={fullNameInput}
                     onChange={(e) => setFullNameInput(e.target.value)}
-                    placeholder="e.g. Ramesh Hansda"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    autoFocus
+                    placeholder="Enter your name"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50/50"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Verified Mobile Number
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Mobile Number for Tickets <span className="text-rose-500">*</span>
                   </label>
-                  <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-extrabold text-slate-700">
-                    <i className="fa-solid fa-circle-check text-emerald-600" />
-                    <span>+91 {mobile}</span>
-                    <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">Verified</span>
+                  <div className="flex items-center bg-slate-50 border-2 border-slate-200 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 rounded-xl transition-all overflow-hidden">
+                    <span className="pl-3 pr-1 text-sm font-black text-slate-500 select-none">+91</span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      required
+                      value={mobileInput}
+                      onChange={(e) => setMobileInput(e.target.value.replace(/\D/g, ""))}
+                      placeholder="98765 43210"
+                      className="flex-1 bg-transparent py-2.5 pr-3 text-sm font-black text-slate-900 tracking-wider placeholder:text-slate-300 placeholder:font-bold focus:outline-none"
+                      autoFocus
+                    />
+                    {mobileInput.length === 10 && (
+                      <span className="pr-3 text-emerald-500 text-sm">
+                        <i className="fa-solid fa-circle-check" />
+                      </span>
+                    )}
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Email Address (Optional)
-                  </label>
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="e.g. name@example.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Profile Photo URL (Optional)
-                  </label>
-                  <input
-                    type="url"
-                    value={photoInput}
-                    onChange={(e) => setPhotoInput(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <p className="text-[10px] text-slate-400 font-medium mt-1">
+                    Used strictly to send booked ticket receipts and gate entry QR codes.
+                  </p>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={loading || !fullNameInput.trim()}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-50 text-white font-extrabold text-sm py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  disabled={loading || mobileInput.length < 10 || !fullNameInput.trim()}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 disabled:opacity-40 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-floppy-disk" />}
-                  <span>{loading ? "Saving Profile..." : "Save & Open Profile"}</span>
+                  {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-arrow-right" />}
+                  <span>{loading ? "Saving Profile..." : "Complete & Start Booking"}</span>
                 </button>
               </form>
             </div>
           )}
 
-          {/* FLOW STEP 4: VIEW / EDIT PROFILE */}
+          {/* ============================================================== */}
+          {/* FLOW STEP 3: VIEW / EDIT PROFILE                              */}
+          {/* ============================================================== */}
           {!initialLoading && step === "VIEW_PROFILE" && profile && (
             <>
               {/* Profile Hero Card */}
-              <div className="bg-gradient-to-br from-[#12193b] via-[#1e2756] to-[#12193b] text-white rounded-2xl p-4 shadow-md relative overflow-hidden">
-                <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
-                <div className="absolute -left-8 -bottom-10 w-32 h-32 rounded-full bg-white/10" />
+              <div className="bg-gradient-to-br from-[#12193b] via-[#1e2756] to-[#12193b] text-white rounded-3xl p-5 shadow-lg relative overflow-hidden">
+                <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-indigo-500/10 blur-xl" />
+                <div className="absolute -left-8 -bottom-10 w-36 h-36 rounded-full bg-purple-500/10 blur-xl" />
 
-                <div className="relative flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-amber-400 flex-shrink-0 bg-slate-700 flex items-center justify-center">
+                <div className="relative flex items-center gap-3.5">
+                  <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-amber-400 flex-shrink-0 bg-slate-700 flex items-center justify-center shadow-md">
                     {profile.profile_photo ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -721,7 +800,7 @@ function ProfileContent() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-xl font-black text-amber-300">
+                      <span className="text-2xl font-black text-amber-300">
                         {(profile.full_name || "U").charAt(0).toUpperCase()}
                       </span>
                     )}
@@ -730,38 +809,45 @@ function ProfileContent() {
                     <h3 className="text-base font-black font-brand truncate">
                       {profile.full_name || "Customer User"}
                     </h3>
-                    <p className="text-[11px] text-slate-300 font-medium">
-                      Member since {new Date(profile.created_at || Date.now()).getFullYear()}
+                    <p className="text-[11px] text-slate-300 font-medium truncate">
+                      {profile.email || "Google Account"}
                     </p>
-                    <span className="inline-flex items-center gap-1 mt-1 bg-amber-400/20 text-amber-300 text-[9px] font-extrabold px-2 py-0.5 rounded-md border border-amber-400/30">
-                      <i className="fa-solid fa-crown text-[8px]" /> Verified Customer
-                    </span>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="inline-flex items-center gap-1 bg-amber-400/20 text-amber-300 text-[9px] font-extrabold px-2 py-0.5 rounded-md border border-amber-400/30">
+                        <i className="fa-solid fa-crown text-[8px]" /> Verified
+                      </span>
+                      {profile.email && (
+                        <span className="inline-flex items-center gap-1 bg-blue-400/20 text-sky-300 text-[9px] font-extrabold px-2 py-0.5 rounded-md border border-blue-400/30">
+                          <i className="fa-brands fa-google text-[8px]" /> Google
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => setIsEditing(!isEditing)}
-                    className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-slate-200 text-sm hover:bg-white/20 transition-colors"
+                    className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-slate-200 text-sm hover:bg-white/20 transition-colors shrink-0"
                     title="Edit Profile"
                   >
                     <i className={`fa-solid ${isEditing ? "fa-xmark" : "fa-pen"}`} />
                   </button>
                 </div>
 
-                {/* Quick Stats — Dynamically computed from customer bookings */}
-                <div className="relative mt-4 grid grid-cols-3 divide-x divide-white/15 bg-white/10 border border-white/15 rounded-xl p-2 text-center">
+                {/* Quick Stats */}
+                <div className="relative mt-4 grid grid-cols-3 divide-x divide-white/15 bg-white/10 border border-white/15 rounded-2xl p-2.5 text-center">
                   <div>
-                    <span className="text-sm font-black text-white leading-tight block">
+                    <span className="text-base font-black text-white leading-tight block">
                       {userStats.ticketCount}
                     </span>
                     <span className="text-[9px] text-slate-300 font-semibold uppercase tracking-wide">Tickets</span>
                   </div>
                   <div>
-                    <span className="text-sm font-black text-amber-400 leading-tight block">
+                    <span className="text-base font-black text-amber-400 leading-tight block">
                       ₹{userStats.totalSpent}
                     </span>
                     <span className="text-[9px] text-slate-300 font-semibold uppercase tracking-wide">Spent</span>
                   </div>
                   <div>
-                    <span className="text-sm font-black text-white leading-tight block">
+                    <span className="text-base font-black text-white leading-tight block">
                       {userStats.eventCount}
                     </span>
                     <span className="text-[9px] text-slate-300 font-semibold uppercase tracking-wide">Events</span>
@@ -784,20 +870,22 @@ function ProfileContent() {
                       />
                     </div>
                     <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mobile Number</label>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        value={mobileInput}
+                        onChange={(e) => setMobileInput(e.target.value.replace(/\D/g, ""))}
+                        placeholder="10-digit mobile"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Address</label>
                       <input
                         type="email"
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Photo URL</label>
-                      <input
-                        type="url"
-                        value={photoInput}
-                        onChange={(e) => setPhotoInput(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
@@ -821,17 +909,21 @@ function ProfileContent() {
                 </div>
               )}
 
-              {/* Contact Details */}
+              {/* Contact Details Card */}
               <div className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs space-y-2">
                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <i className="fa-regular fa-circle-user text-indigo-600" /> Contact Details
+                  <i className="fa-regular fa-circle-user text-indigo-600" /> Account Details
                 </h3>
 
                 {[
                   { icon: "fa-solid fa-user", label: "Full Name", value: profile.full_name || "Not provided" },
-                  { icon: "fa-solid fa-phone", label: "Mobile Number", value: `+91 ${profile.mobile}` },
+                  {
+                    icon: "fa-solid fa-phone",
+                    label: "Mobile Number",
+                    value: profile.mobile ? `+91 ${profile.mobile}` : "Not added yet (Tap Edit above)",
+                  },
                   { icon: "fa-solid fa-envelope", label: "Email Address", value: profile.email || "Not added yet" },
-                  { icon: "fa-solid fa-shield-halved", label: "Role & Access", value: "Verified Customer" },
+                  { icon: "fa-brands fa-google", label: "Sign In Method", value: "Google Authentication" },
                 ].map((row, i) => (
                   <div key={i} className="flex items-center gap-3 bg-slate-50/70 border border-slate-100 rounded-xl px-3 py-2.5">
                     <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-indigo-700 flex items-center justify-center text-sm flex-shrink-0">
@@ -865,7 +957,7 @@ function ProfileContent() {
                     </div>
                     <div>
                       <p className="text-xs font-extrabold text-slate-900">Push Notifications</p>
-                      <p className="text-[9px] text-slate-400 font-medium">Booking alerts & offers</p>
+                      <p className="text-[9px] text-slate-400 font-medium">Booking alerts & ticket updates</p>
                     </div>
                   </div>
                   <button
@@ -903,13 +995,13 @@ function ProfileContent() {
                 </div>
               </div>
 
-              {/* Logout */}
+              {/* Logout Button */}
               <button
                 onClick={handleLogout}
-                className="w-full bg-white border border-rose-200 text-rose-600 font-extrabold text-xs py-3 rounded-2xl shadow-xs flex items-center justify-center gap-2 hover:bg-rose-50 active:scale-[0.98] transition-all"
+                className="w-full bg-white border border-rose-200 text-rose-600 font-extrabold text-xs py-3 rounded-2xl shadow-xs flex items-center justify-center gap-2 hover:bg-rose-50 active:scale-[0.98] transition-all cursor-pointer"
               >
                 <i className="fa-solid fa-right-from-bracket" />
-                Logout (Switch Account)
+                Sign Out from Google Account
               </button>
 
               <p className="text-center text-[10px] text-slate-400 font-medium pb-2">Jatra Bazaar Customer v1.0.0</p>

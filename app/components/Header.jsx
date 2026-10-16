@@ -92,9 +92,13 @@ export default function Header({ showBack, showShare, onShare, title }) {
         {title ? (
           <h2 className="text-base font-black font-brand tracking-wide">{title}</h2>
         ) : (
-          <h1 className="text-lg font-black tracking-wide font-brand flex items-center gap-1.5 uppercase">
-            <span className="text-amber-400 font-black">JATRA</span>
-            <span className="font-black">BAZAAR</span>
+          <h1 className="text-lg font-black tracking-wide font-brand flex items-center gap-2 uppercase">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.png" alt="Jatra Bazaar Logo" className="w-6 h-6 object-contain rounded-md" />
+            <span>
+              <span className="text-amber-400 font-black">JATRA</span>{" "}
+              <span className="font-black">BAZAAR</span>
+            </span>
           </h1>
         )}
       </div>
