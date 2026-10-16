@@ -44,6 +44,7 @@ export default function StageContactFab({ className = "" }) {
   return (
     <div
       ref={containerRef}
+      suppressHydrationWarning
       className={`fixed bottom-24 right-4 sm:right-6 flex flex-col items-center z-[9999] select-none ${className}`}
     >
       {/* Speed Dial Options (Show in top, pure Call and WhatsApp icons without number) */}

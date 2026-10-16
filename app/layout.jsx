@@ -53,6 +53,31 @@ export default function RootLayout({ children }) {
             <meta httpEquiv="Expires" content="0" />
           </>
         )}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    if (regs && regs.length > 0) {
+                      Promise.all(regs.map(function(r) { return r.unregister(); })).then(function() {
+                        if ('caches' in window) {
+                          caches.keys().then(function(keys) {
+                            Promise.all(keys.map(function(k) { return caches.delete(k); })).then(function() {
+                              window.location.reload();
+                            });
+                          });
+                        } else {
+                          window.location.reload();
+                        }
+                      });
+                    }
+                  });
+                }
+              })();
+            `,
+          }}
+        />
         <link rel="manifest" href="/manifest.json" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

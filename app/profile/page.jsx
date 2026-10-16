@@ -8,6 +8,7 @@ import Header from "../components/Header";
 import {
   requestCustomerOtp,
   verifyCustomerOtp,
+  resetCustomerOtpLimit,
   getCustomerProfile,
   saveCustomerProfile,
   updateCustomerProfile,
@@ -57,6 +58,43 @@ function ProfileContent() {
     totalSpent: 0,
     eventCount: 0,
   });
+
+  // Real OTP timer & daily SMS quota states (5-minute expiry & 30s resend cooldown)
+  const [timerSeconds, setTimerSeconds] = useState(300);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [remainingToday, setRemainingToday] = useState(null);
+
+  // 5-minute countdown timer effect
+  useEffect(() => {
+    let interval = null;
+    if (step === "VERIFY_OTP" && timerSeconds > 0) {
+      interval = setInterval(() => {
+        setTimerSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [step, timerSeconds]);
+
+  // Resend cooldown timer effect
+  useEffect(() => {
+    let interval = null;
+    if (step === "VERIFY_OTP" && resendCooldown > 0) {
+      interval = setInterval(() => {
+        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [step, resendCooldown]);
+
+  const formatTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
 
   // Load existing session on mount
   useEffect(() => {
@@ -148,9 +186,9 @@ function ProfileContent() {
     }
   };
 
-  // Step 1: Request OTP
+  // Step 1: Request Real OTP via Fast2SMS
   const handleRequestOtp = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
     const clean = mobile.replace(/\D/g, "").slice(-10);
@@ -163,7 +201,15 @@ function ProfileContent() {
     try {
       const res = await requestCustomerOtp(clean);
       setMobile(clean);
-      setSuccessMsg(res.message || "OTP sent successfully.");
+      setTimerSeconds(res.expiresIn || 300);
+      setResendCooldown(30);
+      if (typeof res.remainingToday === "number") {
+        setRemainingToday(res.remainingToday);
+      }
+      if (res.devOtp) {
+        setOtp(res.devOtp);
+      }
+      setSuccessMsg(res.message || "OTP sent successfully to your mobile.");
       setStep("VERIFY_OTP");
     } catch (err) {
       setErrorMsg(err.message || "Failed to send OTP.");
@@ -171,6 +217,55 @@ function ProfileContent() {
       setLoading(false);
     }
   };
+
+  // Resend OTP with strict 3-SMS daily limit check and cooldown
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || loading) return;
+    if (remainingToday !== null && remainingToday <= 0) {
+      setErrorMsg("You have reached your daily OTP limit of 3 SMS messages. Please try again tomorrow.");
+      return;
+    }
+
+    setErrorMsg("");
+    setSuccessMsg("");
+    setLoading(true);
+
+    try {
+      const res = await requestCustomerOtp(mobile);
+      setTimerSeconds(res.expiresIn || 300);
+      setResendCooldown(30);
+      if (res.devOtp) {
+        setOtp(res.devOtp);
+      } else {
+        setOtp("");
+      }
+      if (typeof res.remainingToday === "number") {
+        setRemainingToday(res.remainingToday);
+      }
+      setSuccessMsg(res.message || "A new 6-digit OTP code has been sent.");
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to resend OTP.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Developer tool to reset daily quota during testing
+  const handleResetDailyLimit = async () => {
+    try {
+      setLoading(true);
+      setErrorMsg("");
+      const clean = mobile.replace(/\D/g, "").slice(-10);
+      const res = await resetCustomerOtpLimit(clean);
+      setRemainingToday(res.remaining ?? 3);
+      setSuccessMsg(res.message || "Daily quota reset.");
+    } catch (e) {
+      setErrorMsg(e.message || "Failed to reset quota.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   // Step 2: Verify Fake OTP (123456)
   const handleVerifyOtp = async (e) => {
@@ -327,9 +422,24 @@ function ProfileContent() {
 
           {/* Feedback messages */}
           {errorMsg && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl p-3 flex items-center gap-2 animate-in fade-in">
-              <i className="fa-solid fa-circle-exclamation text-rose-500" />
-              <span>{errorMsg}</span>
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl p-3 flex flex-col gap-2 animate-in fade-in text-left">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-circle-exclamation text-rose-500 shrink-0" />
+                <span className="flex-1 leading-snug">{errorMsg}</span>
+              </div>
+              {errorMsg.toLowerCase().includes("daily limit") && (
+                <div className="pt-2 border-t border-rose-200/80 flex items-center justify-between">
+                  <span className="text-[10px] text-rose-600/80 font-normal">Testing Mode:</span>
+                  <button
+                    type="button"
+                    onClick={handleResetDailyLimit}
+                    disabled={loading}
+                    className="text-[11px] bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold px-3 py-1 rounded-lg transition-all shadow-xs"
+                  >
+                    {loading ? "Resetting..." : "Reset Daily Limit"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -390,9 +500,9 @@ function ProfileContent() {
                     )}
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-800 flex items-start gap-2 text-left">
-                    <i className="fa-solid fa-shield-halved text-amber-600 mt-0.5" />
-                    <span>Development mode active: Enter any 10-digit number. Fixed testing OTP is <strong>123456</strong>.</span>
+                  <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[11px] text-slate-600 flex items-start gap-2.5 text-left">
+                    <i className="fa-solid fa-shield-halved text-emerald-600 mt-0.5 text-xs" />
+                    <span>A 6-digit verification code will be sent to your mobile via SMS. Valid for 5 minutes (max 3 OTPs per day).</span>
                   </div>
 
                   <button
@@ -408,56 +518,106 @@ function ProfileContent() {
             </div>
           )}
 
-          {/* FLOW STEP 2: VERIFY OTP */}
+          {/* FLOW STEP 2: VERIFY REAL OTP */}
           {!initialLoading && step === "VERIFY_OTP" && (
             <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-md space-y-4">
               <div className="text-center space-y-1">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-xl mx-auto mb-2">
                   <i className="fa-solid fa-key" />
                 </div>
-                <h3 className="text-base font-black text-slate-900 font-brand">Verify OTP Code</h3>
+                <h3 className="text-base font-black text-slate-900 font-brand">Verify Mobile OTP</h3>
                 <p className="text-xs text-slate-500">
-                  Code sent to <span className="font-extrabold text-slate-800">+91 {mobile}</span>
+                  SMS sent to <span className="font-extrabold text-slate-800">+91 {mobile}</span>
                 </p>
               </div>
 
+              {/* Live 5-minute countdown timer */}
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-2 text-xs">
+                <span className="text-slate-500 font-semibold flex items-center gap-1.5">
+                  <i className="fa-regular fa-clock text-slate-400" />
+                  Code Expires In:
+                </span>
+                <span
+                  className={`font-mono font-black px-2 py-0.5 rounded-md text-xs ${
+                    timerSeconds <= 60
+                      ? "bg-rose-100 text-rose-600 animate-pulse"
+                      : "bg-emerald-100 text-emerald-800"
+                  }`}
+                >
+                  {formatTimer(timerSeconds)}
+                </span>
+              </div>
+
+              {timerSeconds === 0 && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 flex items-start gap-2 text-left">
+                  <i className="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5 flex-shrink-0" />
+                  <span>
+                    Your OTP code has expired. Please tap <strong>Resend OTP</strong> below to receive a new code.
+                  </span>
+                </div>
+              )}
+
               <form onSubmit={handleVerifyOtp} className="space-y-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Enter 6-Digit OTP</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                    Enter 6-Digit Verification Code
+                  </label>
                   <input
                     type="text"
                     maxLength={6}
                     value={otp}
+                    disabled={timerSeconds === 0}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                    placeholder="123456"
-                    className="w-full text-center tracking-[0.5em] text-lg font-black py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="• • • • • •"
+                    className="w-full text-center tracking-[0.5em] text-xl font-black py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
                     autoFocus
                   />
                 </div>
 
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-800 flex items-center justify-between">
-                  <span>Development OTP Code:</span>
+                {/* Resend and daily limit display */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500 text-[11px] font-medium">
+                    {remainingToday !== null
+                      ? `${remainingToday} of 3 SMS remaining today`
+                      : "Daily limit: 3 SMS"}
+                  </span>
+
                   <button
                     type="button"
-                    onClick={() => setOtp("123456")}
-                    className="bg-emerald-600 text-white font-extrabold px-2 py-0.5 rounded-md hover:bg-emerald-700"
+                    onClick={handleResendOtp}
+                    disabled={
+                      resendCooldown > 0 ||
+                      loading ||
+                      (remainingToday !== null && remainingToday <= 0)
+                    }
+                    className="font-bold text-xs text-indigo-600 hover:text-indigo-800 disabled:text-slate-400 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
                   >
-                    Auto-fill 123456
+                    <i className={`fa-solid fa-rotate-right ${loading ? "animate-spin" : ""}`} />
+                    <span>
+                      {resendCooldown > 0
+                        ? `Resend in ${resendCooldown}s`
+                        : remainingToday !== null && remainingToday <= 0
+                        ? "Daily Limit Reached"
+                        : "Resend OTP"}
+                    </span>
                   </button>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => setStep("ENTER_MOBILE")}
+                    onClick={() => {
+                      setStep("ENTER_MOBILE");
+                      setOtp("");
+                    }}
                     className="flex-1 bg-slate-100 text-slate-700 font-bold text-xs py-2.5 rounded-xl hover:bg-slate-200 transition-colors"
                   >
                     Change Number
                   </button>
                   <button
                     type="submit"
-                    disabled={loading || otp.length < 4}
-                    className="flex-2 bg-gradient-to-r from-emerald-600 to-teal-600 disabled:opacity-50 text-white font-extrabold text-sm py-2.5 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                    disabled={loading || otp.length !== 6 || timerSeconds === 0}
+                    className="flex-2 bg-gradient-to-r from-emerald-600 to-teal-600 disabled:opacity-40 text-white font-extrabold text-sm py-2.5 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                   >
                     {loading ? <i className="fa-solid fa-spinner animate-spin" /> : <i className="fa-solid fa-check" />}
                     <span>{loading ? "Verifying..." : "Verify & Continue"}</span>
