@@ -9,6 +9,7 @@ import { formatAccuracy } from "../../../lib/location/reverseGeocode";
 export default function LocationCard({ location, onDetect, onSelectManual }) {
   const {
     displayName,
+    locality,
     latitude,
     longitude,
     accuracy,
@@ -41,7 +42,7 @@ export default function LocationCard({ location, onDetect, onSelectManual }) {
             <div className="w-5 h-5 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
             <div>
               <p className="text-sm font-semibold text-white">Detecting your location...</p>
-              <p className="text-[11px] text-slate-400">Getting your GPS position...</p>
+              <p className="text-[11px] text-slate-400">Finding your area automatically...</p>
             </div>
           </div>
         )}
@@ -58,16 +59,12 @@ export default function LocationCard({ location, onDetect, onSelectManual }) {
         {status === "success" && source === "gps" && (
           <div className="space-y-1.5 py-1">
             {/* Location name */}
-            {displayName ? (
-              <p className="text-base font-bold text-white">{displayName}</p>
-            ) : (
-              <p className="text-sm font-medium text-slate-400">Coordinates detected</p>
-            )}
+            <p className="text-base font-bold text-white">{displayName || locality || "Coordinates detected"}</p>
 
             {/* Raw coordinates — ALWAYS show for GPS */}
             {latitude != null && longitude != null && (
               <p className="text-[11px] font-mono text-slate-400">
-                {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                {latitude.toFixed(4)}, {longitude.toFixed(4)}
               </p>
             )}
 
@@ -94,8 +91,24 @@ export default function LocationCard({ location, onDetect, onSelectManual }) {
 
             {/* Source badge */}
             <div className="flex items-center gap-1.5">
-              <i className="fa-solid fa-check text-emerald-400 text-[9px]" />
-              <span className="text-[10px] text-emerald-400 font-medium">Detected from your device</span>
+              <i className="fa-solid fa-crosshairs text-emerald-400 text-[9px]" />
+              <span className="text-[10px] text-emerald-400 font-medium">GPS Auto-Detected</span>
+            </div>
+          </div>
+        )}
+
+        {/* Success with network / IP auto-detected location */}
+        {status === "success" && (source === "network" || source === "ip") && (
+          <div className="space-y-1.5 py-1">
+            <p className="text-base font-bold text-white">{displayName || locality || "Location Detected"}</p>
+            {latitude != null && longitude != null && (
+              <p className="text-[11px] font-mono text-slate-400">
+                {latitude.toFixed(4)}, {longitude.toFixed(4)}
+              </p>
+            )}
+            <div className="flex items-center gap-1.5">
+              <i className="fa-solid fa-satellite-dish text-sky-400 text-[9px]" />
+              <span className="text-[10px] text-sky-400 font-medium">Auto-detected Location</span>
             </div>
           </div>
         )}

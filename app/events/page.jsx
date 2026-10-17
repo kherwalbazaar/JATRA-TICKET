@@ -109,6 +109,7 @@ export default function EventsPage() {
             <div className="grid grid-cols-2 gap-3 pb-4">
               {filteredEvents.map((ev, i) => {
                 const formattedDate = formatDate(ev.month || "OCT", ev.day || "22", ev.year || "2026");
+                const committeeName = ev.organizationName || ev.committeeName || "ADIM LAHAH MANDAWA";
                 return (
                   <div
                     key={ev.key || i}
@@ -123,27 +124,26 @@ export default function EventsPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <BannerImage
                       src={ev.banner || ev.img || "/jarpa.png"}
-                      alt={ev.name}
+                      alt={committeeName}
                       className="w-full h-28 object-contain bg-slate-100"
                     />
                     <div className="p-2.5">
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="bg-rose-600 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded">{formattedDate}</span>
+                      <h4 className="text-xs font-black text-slate-900 font-brand truncate">{committeeName}</h4>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-1">
+                        <i className="fa-solid fa-user-group text-indigo-500 text-[8px] flex-shrink-0" />
+                        <span className="truncate">{ev.partyName || "Party TBD"}</span>
                       </div>
-                      <h4 className="text-xs font-black text-slate-900 font-brand truncate">{ev.name || "Event"}</h4>
-                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-0.5">
-                        <i className="fa-solid fa-user-group text-indigo-500 text-[8px]" />
-                        <span className="truncate">{ev.partyName || ev.organizationName || "TBD"}</span>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-1">
+                        <i className="fa-solid fa-location-dot text-rose-500 text-[8px] flex-shrink-0" />
+                        <span className="truncate">{ev.committeeLocation || ev.location || "TBD"}</span>
                       </div>
-                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-semibold mt-0.5">
-                        <i className="fa-solid fa-location-dot text-rose-500 text-[8px]" />
-                        <span className="truncate">{ev.location || "TBD"}</span>
+                      <div className="flex items-center gap-1.5 text-[10px] mt-1.5">
+                        <i className="fa-regular fa-calendar text-emerald-600 text-[9px] flex-shrink-0" />
+                        <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[9px] border border-emerald-200/80">
+                          {formattedDate}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1 text-[10px] text-indigo-800 font-bold mt-0.5">
-                        <i className="fa-regular fa-clock text-indigo-500 text-[8px]" />
-                        <span>{ev.entryTime || "TBD"}</span>
-                      </div>
-                      <div className="mt-2 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1">
+                      <div className="mt-2.5 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1">
                         <i className="fa-solid fa-ticket -rotate-12 text-[9px]" />
                         View Details
                       </div>

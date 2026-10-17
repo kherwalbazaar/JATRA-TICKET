@@ -410,4 +410,9 @@ body {
   }
 }
 
+/* FontAwesome Pro to Free icon fallbacks */
+.fa-shield-check:before {
+  content: "\f3ed"; /* fa-shield-halved */
+}
+
 

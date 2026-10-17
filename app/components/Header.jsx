@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import { useGeolocation } from "../../hooks/useGeolocation";
 import { LocationCard, LocationSelector } from "./location";
 
@@ -44,21 +45,20 @@ export default function Header({ showBack, showShare, onShare, title }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-update header when GPS detects a location
+  // Auto-update header when location is successfully detected (GPS, Network, or Manual)
   useEffect(() => {
-    if (location.isSuccess && location.isGps && location.displayName) {
+    if (location.isSuccess && location.displayName) {
       setSavedLocation(location.displayName);
       try {
         localStorage.setItem(STORAGE_KEY, location.displayName);
         localStorage.setItem("jatra_detected_time", String(Date.now()));
       } catch {}
-      setDropdownOpen(false);
     }
-  }, [location.isSuccess, location.isGps, location.displayName]);
+  }, [location.isSuccess, location.displayName]);
 
-  // If GPS fails and no saved location, open manual picker
+  // If detection fails completely and no saved location exists, open manual picker
   useEffect(() => {
-    if (location.status && location.status !== "idle" && location.status !== "detecting" && location.status !== "success" && !savedLocation) {
+    if (location.status === "error" && !savedLocation) {
       setDropdownOpen(true);
       setShowManual(true);
     }
@@ -76,34 +76,39 @@ export default function Header({ showBack, showShare, onShare, title }) {
   const displayText = savedLocation || "Select Location";
 
   return (
-    <header className="bg-[#12193b] px-4 pt-3.5 pb-4 text-white flex items-center sticky top-0 z-50 shadow-md relative">
-      {showBack ? (
-        <button
-          onClick={() => window.history.back()}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 text-white text-base active:scale-95 transition-transform"
-        >
-          <i className="fa-solid fa-arrow-left" />
-        </button>
-      ) : (
-        <div className="w-9 h-9" aria-hidden="true" />
-      )}
+    <header className="bg-[#12193b] px-4 pt-3.5 pb-4 text-white flex items-center justify-between sticky top-0 z-50 shadow-md relative gap-3">
+      {/* Left side: Back button or Logo + App Brand Title */}
+      <div className="flex items-center gap-2.5 min-w-0">
+        {showBack && (
+          <button
+            onClick={() => window.history.back()}
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 text-white text-base active:scale-95 transition-transform shrink-0"
+            aria-label="Go back"
+          >
+            <i className="fa-solid fa-arrow-left" />
+          </button>
+        )}
 
-      <div className="flex-1 flex justify-center">
         {title ? (
-          <h2 className="text-base font-black font-brand tracking-wide">{title}</h2>
+          <h2 className="text-base font-black font-brand tracking-wide truncate">{title}</h2>
         ) : (
-          <h1 className="text-lg font-black tracking-wide font-brand flex items-center gap-2 uppercase">
+          <Link href="/" className="flex items-center gap-2.5 active:opacity-90 transition-opacity min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icon.png" alt="Jatra Bazaar Logo" className="w-6 h-6 object-contain rounded-md" />
-            <span>
+            <img
+              src="/icon.png"
+              alt="Jatra Bazaar Logo"
+              className="w-8 h-8 object-contain rounded-xl shrink-0 shadow-xs"
+            />
+            <span className="text-lg font-black tracking-wide font-brand uppercase truncate flex items-center">
               <span className="text-amber-400 font-black">JATRA</span>{" "}
-              <span className="font-black">BAZAAR</span>
+              <span className="font-black text-white ml-1">BAZAAR</span>
             </span>
-          </h1>
+          </Link>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Right side: Share button or Location picker */}
+      <div className="flex items-center gap-2 shrink-0">
         {showShare ? (
           <button
             onClick={onShare}
@@ -125,7 +130,7 @@ export default function Header({ showBack, showShare, onShare, title }) {
               ) : (
                 <i className={`fa-solid fa-location-dot text-xs ${savedLocation ? "text-amber-400" : "text-amber-300 animate-pulse"}`} />
               )}
-              <span className={`text-[10px] font-semibold max-w-[90px] truncate ${
+              <span className={`text-[10px] font-semibold max-w-[110px] sm:max-w-[150px] truncate ${
                 location.isDetecting ? "text-emerald-300" :
                 savedLocation ? "text-slate-200" : "text-amber-300"
               }`}>

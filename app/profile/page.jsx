@@ -50,6 +50,7 @@ function ProfileContent() {
   const [manualEmail, setManualEmail] = useState("");
   const [manualPassword, setManualPassword] = useState("");
   const [manualFullName, setManualFullName] = useState("");
+  const [manualMobile, setManualMobile] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   // Status & stats
@@ -121,30 +122,72 @@ function ProfileContent() {
       user.user_metadata?.picture ||
       "";
 
+    const userMobile =
+      user.user_metadata?.mobile ||
+      user.user_metadata?.phone ||
+      user.phone ||
+      "";
+
     // Try fetching existing customer profile
     let existingProfile = await getCustomerProfile(userId);
 
     if (existingProfile) {
+      if (!existingProfile.mobile && userMobile) {
+        existingProfile.mobile = userMobile;
+        try {
+          await saveCustomerProfile({
+            id: userId,
+            mobile: userMobile,
+            full_name: existingProfile.full_name || googleName,
+            email: existingProfile.email || googleEmail,
+            profile_photo: existingProfile.profile_photo || googlePhoto,
+          });
+        } catch (e) {}
+      }
+
       setProfile(existingProfile);
       setFullNameInput(existingProfile.full_name || googleName);
       setEmailInput(existingProfile.email || googleEmail);
       setPhotoInput(existingProfile.profile_photo || googlePhoto);
-      setMobileInput(existingProfile.mobile || "");
+      setMobileInput(existingProfile.mobile || userMobile || "");
       setStep("VIEW_PROFILE");
-      if (existingProfile.mobile) {
-        loadCustomerStats(existingProfile.mobile);
+      if (existingProfile.mobile || userMobile) {
+        loadCustomerStats(existingProfile.mobile || userMobile);
       }
 
       // If user came from a booking flow with complete profile, redirect back immediately
-      if (redirectUrl && (existingProfile.full_name || "").trim() && existingProfile.mobile) {
+      if (redirectUrl && (existingProfile.full_name || "").trim() && (existingProfile.mobile || userMobile)) {
         router.replace(redirectUrl);
         return;
       }
     } else {
-      // First-time Google user: prepopulate name, email, avatar and ask for mobile
+      // First-time user: prepopulate name, email, avatar, mobile from metadata
       setFullNameInput(googleName);
       setEmailInput(googleEmail);
       setPhotoInput(googlePhoto);
+      setMobileInput(userMobile || "");
+
+      // If both name and mobile are already present (e.g. from sign up), auto-complete profile
+      if (googleName.trim() && userMobile.replace(/\D/g, "").slice(-10).length === 10) {
+        try {
+          const saved = await saveCustomerProfile({
+            id: userId,
+            mobile: userMobile.replace(/\D/g, "").slice(-10),
+            full_name: googleName.trim(),
+            email: googleEmail || null,
+            profile_photo: googlePhoto || null,
+          });
+          setProfile(saved);
+          setStep("VIEW_PROFILE");
+          loadCustomerStats(userMobile);
+          if (redirectUrl) {
+            router.replace(redirectUrl);
+            return;
+          }
+          return;
+        } catch (e) {}
+      }
+
       setStep("COMPLETE_PROFILE");
     }
   };
@@ -246,7 +289,14 @@ function ProfileContent() {
           return;
         }
 
-        const data = await signUpWithEmail(cleanEmail, manualPassword, manualFullName);
+        const cleanMobile = manualMobile.replace(/\D/g, "").slice(-10);
+        if (cleanMobile.length !== 10) {
+          setErrorMsg("Please enter a valid 10-digit mobile number.");
+          setLoading(false);
+          return;
+        }
+
+        const data = await signUpWithEmail(cleanEmail, manualPassword, manualFullName, cleanMobile);
         if (data?.session?.user) {
           await handleAuthenticatedUser(data.session.user);
         } else if (data?.user && !data?.session) {
@@ -527,6 +577,29 @@ function ProfileContent() {
                     </div>
                   )}
 
+                  {/* Mobile Number (Sign Up only) */}
+                  {authMode === "signup" && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                        Mobile Number <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 text-xs font-bold text-slate-500 select-none">
+                          +91
+                        </span>
+                        <input
+                          type="tel"
+                          required
+                          maxLength={10}
+                          value={manualMobile}
+                          onChange={(e) => setManualMobile(e.target.value.replace(/\D/g, ""))}
+                          placeholder="10-digit mobile number"
+                          className="w-full pl-12 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100 rounded-xl text-xs font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono tracking-wider"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Email / Gmail Address */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
@@ -604,7 +677,12 @@ function ProfileContent() {
                   {/* Submit Button */}
                   <button
                     type="submit"
-                    disabled={loading || !manualEmail.trim() || (authMode !== "forgot" && manualPassword.length < 6)}
+                    disabled={
+                      loading ||
+                      !manualEmail.trim() ||
+                      (authMode === "signup" && (manualMobile.length !== 10 || !manualFullName.trim())) ||
+                      (authMode !== "forgot" && manualPassword.length < 6)
+                    }
                     className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:scale-[0.98] text-white font-black text-xs py-3 px-4 rounded-xl shadow-md hover:shadow-indigo-200/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {loading ? (

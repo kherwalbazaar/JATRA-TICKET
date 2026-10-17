@@ -76,12 +76,13 @@ export default function TodaysShowPage() {
 
             return {
               key: ev.key || ev.id,
-              name: ev.name || ev.eventTitle || "Jatra Show",
-              partyName: ev.partyName || ev.organizationName || "Adim Opera Group",
+              name: ev.organizationName || ev.committeeName || ev.name || ev.eventTitle || "Jatra Show",
+              partyName: ev.partyName || "Adim Opera Group",
+              organizationName: ev.organizationName || ev.committeeName || "",
               month: ev.month || "OCT",
               day: ev.day || "22",
               year: ev.year || "2026",
-              location: ev.location || "Mayurbhanj, Odisha",
+              location: ev.committeeLocation || ev.location || "Mayurbhanj, Odisha",
               banner: ev.banner || "/jarpa.png",
               time: ev.time || ev.startTime || "10:00 PM",
               type: evType,
@@ -155,16 +156,15 @@ export default function TodaysShowPage() {
                     <i className="fa-solid fa-users text-indigo-500 text-[7px]" />
                     <span className="truncate">{show.partyName}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-[9px] text-red-500 font-bold mt-0.5">
-                    <i className="fa-regular fa-calendar text-[7px]" />
-                    <span>{show.day} {show.month}</span>
-                    <span className="text-slate-300">|</span>
-                    <i className="fa-regular fa-clock text-[7px]" />
-                    <span>{show.time}</span>
-                  </div>
                   <div className="flex items-center gap-1 text-[9px] text-slate-600 font-semibold mt-0.5">
                     <i className="fa-solid fa-location-dot text-rose-500 text-[7px]" />
                     <span className="truncate">{show.location}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[9px] mt-1">
+                    <i className="fa-regular fa-calendar text-emerald-600 text-[7px]" />
+                    <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[8px] border border-emerald-200/80">
+                      {show.day} {show.month} {show.year}
+                    </span>
                   </div>
                 </div>
               </Link>

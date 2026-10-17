@@ -205,6 +205,7 @@ export default function EventDetail({ id }) {
   const address = firstValue(contact.address, event?.fullAddress, event?.address, event?.addressLine);
   const committeeAddress = firstValue(
     event?.committeeLocation,
+    event?.committee_location,
     event?.committee?.location,
     event?.committeeAddress,
     event?.committeeAddr,

@@ -1,17 +1,186 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BookTicketsModal from "./components/BookTicketsModal";
 import BottomNav from "./components/BottomNav";
 import Header from "./components/Header";
 import BannerImage from "./components/BannerImage";
-import { saveBooking } from "../lib/bookings";
+import { saveBooking, subscribeBookings } from "../lib/bookings";
 import { subscribeEvents } from "../lib/events";
 import { subscribeBanners } from "../lib/banners";
 import { subscribeTicketTypes } from "../lib/ticketTypes";
+import { subscribeParties, DEFAULT_PARTIES } from "../lib/parties";
 import { getSavedCustomerProfile } from "../lib/supabase";
+
+const DEFAULT_TIERS = [
+  { id: "star", name: "STAR", price: 200, rows: ["A", "B", "C", "D", "E"], badgeText: "Exclusive" },
+  { id: "vip", name: "VIP", price: 150, rows: ["F", "G", "H", "I", "J", "K"], badgeText: "Popular" },
+  { id: "special", name: "SPECIAL", price: 100, rows: ["L", "M", "N", "O", "P", "Q", "R"] },
+  { id: "3rd-class", name: "3RD CLASS", price: 80, rows: ["S", "T", "U", "V", "W", "X", "Y", "Z"] },
+  { id: "standing", name: "STANDING", price: 50, blocks: ["Standing"] },
+];
+
+function getTierTheme(tierName = "", index = 0) {
+  const n = String(tierName || "").trim().toUpperCase();
+  if (n.includes("STAR")) {
+    return {
+      headerBg: "bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424]",
+      titleColor: "text-amber-400",
+      circleBg: "bg-gradient-to-b from-[#d4a017] to-[#8a6500]",
+      barBg: "bg-gradient-to-r from-[#b8860b] to-[#e6b800]",
+      buttonBg: "bg-gradient-to-r from-[#d4a017] to-[#b8860b]",
+      badge: "Exclusive",
+      badgeColor: "bg-amber-500",
+    };
+  }
+  if (n.includes("VIP")) {
+    return {
+      headerBg: "bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#8033ff] to-[#3a1eb8]",
+      barBg: "bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]",
+      buttonBg: "bg-gradient-to-r from-[#702bf9] to-[#5b24e6]",
+      badge: "Popular",
+      badgeColor: "bg-red-500",
+    };
+  }
+  if (n.includes("SPECIAL")) {
+    return {
+      headerBg: "bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#00c978] to-[#0077ff]",
+      barBg: "bg-gradient-to-r from-[#00c978] to-[#0077ff]",
+      buttonBg: "bg-gradient-to-r from-[#00c978] to-[#009fd9]",
+      badge: null,
+      badgeColor: "bg-emerald-500",
+    };
+  }
+  if (n.includes("3RD") || n.includes("THIRD") || n.includes("CHAIR")) {
+    return {
+      headerBg: "bg-gradient-to-r from-[#2563eb] via-[#1d4ed8] to-[#1e40af]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#3b82f6] to-[#1d4ed8]",
+      barBg: "bg-gradient-to-r from-[#2563eb] to-[#1e40af]",
+      buttonBg: "bg-gradient-to-r from-[#3b82f6] to-[#2563eb]",
+      badge: null,
+      badgeColor: "bg-blue-500",
+    };
+  }
+  if (n.includes("STAND")) {
+    return {
+      headerBg: "bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#ff8c00] to-[#ff4900]",
+      barBg: "bg-gradient-to-r from-[#ff5500] to-[#ffaa00]",
+      buttonBg: "bg-gradient-to-r from-[#ff5500] to-[#ff8c00]",
+      badge: null,
+      badgeColor: "bg-orange-500",
+    };
+  }
+  const fallbacks = [
+    {
+      headerBg: "bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424]",
+      titleColor: "text-amber-400",
+      circleBg: "bg-gradient-to-b from-[#d4a017] to-[#8a6500]",
+      barBg: "bg-gradient-to-r from-[#b8860b] to-[#e6b800]",
+      buttonBg: "bg-gradient-to-r from-[#d4a017] to-[#b8860b]",
+      badge: null,
+      badgeColor: "bg-amber-500",
+    },
+    {
+      headerBg: "bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#8033ff] to-[#3a1eb8]",
+      barBg: "bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]",
+      buttonBg: "bg-gradient-to-r from-[#702bf9] to-[#5b24e6]",
+      badge: null,
+      badgeColor: "bg-red-500",
+    },
+    {
+      headerBg: "bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#00c978] to-[#0077ff]",
+      barBg: "bg-gradient-to-r from-[#00c978] to-[#0077ff]",
+      buttonBg: "bg-gradient-to-r from-[#00c978] to-[#009fd9]",
+      badge: null,
+      badgeColor: "bg-emerald-500",
+    },
+    {
+      headerBg: "bg-gradient-to-r from-[#2563eb] via-[#1d4ed8] to-[#1e40af]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#3b82f6] to-[#1d4ed8]",
+      barBg: "bg-gradient-to-r from-[#2563eb] to-[#1e40af]",
+      buttonBg: "bg-gradient-to-r from-[#3b82f6] to-[#2563eb]",
+      badge: null,
+      badgeColor: "bg-blue-500",
+    },
+    {
+      headerBg: "bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00]",
+      titleColor: "text-white",
+      circleBg: "bg-gradient-to-b from-[#ff8c00] to-[#ff4900]",
+      barBg: "bg-gradient-to-r from-[#ff5500] to-[#ffaa00]",
+      buttonBg: "bg-gradient-to-r from-[#ff5500] to-[#ff8c00]",
+      badge: null,
+      badgeColor: "bg-orange-500",
+    },
+  ];
+  return fallbacks[index % fallbacks.length];
+}
+
+function getTierPerks(tier) {
+  if (Array.isArray(tier.perks) && tier.perks.length > 0) {
+    return tier.perks.map((p) => (typeof p === "string" ? { text: p, included: true } : p));
+  }
+  const n = String(tier.name || "").trim().toUpperCase();
+  if (n.includes("STAR")) {
+    return [
+      { text: "Exclusive Entry", included: true },
+      { text: "Special Sitting", included: true },
+      { text: "Priority Entry", included: true },
+      { text: "Best View Zone", included: true },
+    ];
+  }
+  if (n.includes("VIP")) {
+    return [
+      { text: "Priority Entry", included: true },
+      { text: "Best View Zone", included: true },
+      { text: "Reserved Seating", included: true },
+      { text: "Exclusive Lounge", included: false },
+    ];
+  }
+  if (n.includes("SPECIAL")) {
+    return [
+      { text: "Fast Entry", included: true },
+      { text: "Better View", included: true },
+      { text: "Covered Seating", included: true },
+      { text: "Priority Entry", included: false },
+    ];
+  }
+  if (n.includes("3RD") || n.includes("THIRD") || n.includes("CHAIR")) {
+    return [
+      { text: "Standard Entry", included: true },
+      { text: "Chair Seating", included: true },
+      { text: "Clear Stage View", included: true },
+      { text: "Fast Track Entry", included: false },
+    ];
+  }
+  if (n.includes("STAND")) {
+    return [
+      { text: "Normal Entry", included: true },
+      { text: "Free Seating", included: true },
+      { text: "Fast Track Entry", included: false },
+      { text: "Best View Zone", included: false },
+    ];
+  }
+  return [
+    { text: "Normal Entry", included: true },
+    { text: "Standard Seating", included: true },
+    { text: "Stage View", included: true },
+    { text: "Fast Track Entry", included: false },
+  ];
+}
 
 export default function Home() {
   const router = useRouter();
@@ -47,10 +216,39 @@ export default function Home() {
     }
   };
 
+  const displayTiers = useMemo(() => {
+    const rawList = Array.isArray(ticketTypes) && ticketTypes.length > 0 ? ticketTypes : DEFAULT_TIERS;
+    // Show highest amount ticket first as requested
+    return [...rawList].sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0));
+  }, [ticketTypes]);
+
   useEffect(() => {
     try {
+      const eventId = featuredEvent?.key || featuredEvent?.id || "";
       const unsub = subscribeTicketTypes((list) => {
-        if (Array.isArray(list)) setTicketTypes(list);
+        if (Array.isArray(list) && list.length > 0) setTicketTypes(list);
+      }, eventId);
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
+  }, [featuredEvent?.key, featuredEvent?.id]);
+
+  const priceFor = (tierName, fallback) => {
+    const match = displayTiers.find(
+      (t) => String(t.name || "").trim().toUpperCase() === String(tierName || "").trim().toUpperCase(),
+    );
+    const price = Number(match?.price);
+    return price > 0 ? price : fallback;
+  };
+
+  const [bookingsList, setBookingsList] = useState([]);
+  const [parties, setParties] = useState(DEFAULT_PARTIES);
+
+  useEffect(() => {
+    try {
+      const unsub = subscribeBookings((list) => {
+        if (Array.isArray(list)) setBookingsList(list);
       });
       return () => unsub();
     } catch {
@@ -58,13 +256,147 @@ export default function Home() {
     }
   }, []);
 
-  const priceFor = (tierName, fallback) => {
-    const match = ticketTypes.find(
-      (t) => String(t.name || "").trim().toUpperCase() === tierName,
+  useEffect(() => {
+    try {
+      const unsub = subscribeParties((list) => {
+        if (Array.isArray(list) && list.length > 0) setParties(list);
+      });
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
+  }, []);
+
+  const activeEventId = featuredEvent?.key || featuredEvent?.id || "";
+
+  const eventBookings = useMemo(() => {
+    if (!activeEventId) return bookingsList;
+    const matching = bookingsList.filter(
+      (b) => String(b.eventId || b.showId || "") === String(activeEventId)
     );
-    const price = Number(match?.price);
-    return price > 0 ? price : fallback;
-  };
+    return matching.length > 0 ? matching : bookingsList;
+  }, [bookingsList, activeEventId]);
+
+  const realTicketsSold = useMemo(() => {
+    const fromBookings = eventBookings.reduce(
+      (sum, b) => sum + (Number(b.quantity || b.seatCount) || 1),
+      0
+    );
+    const adminSold = Number(featuredEvent?.ticketsSold) || 0;
+    return Math.max(fromBookings, adminSold);
+  }, [eventBookings, featuredEvent?.ticketsSold]);
+
+  const totalCapacity = useMemo(() => {
+    const adminCap = Number(featuredEvent?.totalCapacity) || 0;
+    if (adminCap > 0) return adminCap;
+    const quotaCap = (ticketTypes || []).reduce(
+      (sum, t) => sum + (Number(t.totalQuota) || 0),
+      0
+    );
+    return quotaCap > 0 ? quotaCap : 2250;
+  }, [featuredEvent?.totalCapacity, ticketTypes]);
+
+  const remainingTickets = useMemo(() => {
+    return Math.max(0, totalCapacity - realTicketsSold);
+  }, [totalCapacity, realTicketsSold]);
+
+  const happyVisitors = useMemo(() => {
+    const adminVisitors = Number(featuredEvent?.happyVisitors || featuredEvent?.visitors) || 0;
+    if (adminVisitors > 0) return adminVisitors;
+
+    const checkedIn = eventBookings.reduce(
+      (sum, b) => sum + (Number(b.enteredCount) || 0),
+      0
+    );
+    if (checkedIn > 0) return checkedIn;
+
+    const uniqueCustomers = new Set(
+      eventBookings.map((b) => b.customerPhone || b.customerName).filter(Boolean)
+    );
+    return uniqueCustomers.size > 0 ? uniqueCustomers.size : realTicketsSold;
+  }, [eventBookings, featuredEvent, realTicketsSold]);
+
+  const recentAvatars = useMemo(() => {
+    const list = [];
+    const colors = [
+      "bg-gradient-to-tr from-rose-500 to-pink-500",
+      "bg-gradient-to-tr from-indigo-500 to-purple-500",
+      "bg-gradient-to-tr from-amber-500 to-orange-500",
+      "bg-gradient-to-tr from-emerald-500 to-teal-500",
+      "bg-gradient-to-tr from-sky-500 to-blue-500",
+    ];
+    eventBookings.forEach((b, i) => {
+      const name = String(b.customerName || "").trim();
+      if (!name) return;
+      const initials = name
+        .split(/\s+/)
+        .map((p) => p[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "J";
+      if (!list.some((a) => a.name === name)) {
+        list.push({
+          name,
+          initials,
+          color: colors[i % colors.length],
+        });
+      }
+    });
+    if (list.length === 0) {
+      list.push(
+        { name: "Balakram Tudu", initials: "BT", color: colors[0] },
+        { name: "Lucky Babu", initials: "LB", color: colors[1] },
+        { name: "Guest User", initials: "GU", color: colors[2] },
+      );
+    }
+    return list.slice(0, 3);
+  }, [eventBookings]);
+
+  const socialProofText = useMemo(() => {
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+    const past24Hours = now - 24 * 60 * 60 * 1000;
+
+    const countLastHour = eventBookings
+      .filter((b) => {
+        const t = new Date(b.createdAt || b.date || 0).getTime();
+        return !isNaN(t) && t >= oneHourAgo;
+      })
+      .reduce((sum, b) => sum + (Number(b.quantity || b.seatCount) || 1), 0);
+
+    if (countLastHour > 0) {
+      return {
+        highlight: `${countLastHour}+ people booked`,
+        suffix: "in last 1 hour",
+      };
+    }
+
+    const countLast24 = eventBookings
+      .filter((b) => {
+        const t = new Date(b.createdAt || b.date || 0).getTime();
+        return !isNaN(t) && t >= past24Hours;
+      })
+      .reduce((sum, b) => sum + (Number(b.quantity || b.seatCount) || 1), 0);
+
+    if (countLast24 > 0) {
+      return {
+        highlight: `${countLast24}+ people booked`,
+        suffix: "recently",
+      };
+    }
+
+    if (realTicketsSold > 0) {
+      return {
+        highlight: `${realTicketsSold}+ tickets booked`,
+        suffix: "so far",
+      };
+    }
+
+    return {
+      highlight: "Live booking",
+      suffix: "open right now",
+    };
+  }, [eventBookings, realTicketsSold]);
 
   useEffect(() => {
     try {
@@ -198,199 +530,68 @@ export default function Home() {
                 <span className="text-base">🎟️</span>
                 <h3 className="text-base font-black text-slate-900 font-brand tracking-tight">Book Your Ticket</h3>
               </div>
-              <a href="#" className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
-                View Seat & Gate Info <i className="fa-solid fa-arrow-right text-[10px]" />
-              </a>
             </div>
 
             <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 pt-1">
-              {/* STANDING - Orange */}
-              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#ff5500] via-[#ff7700] to-[#ffaa00] h-16 pt-3 text-center overflow-hidden">
-                  <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-sm font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">STANDING</h4>
+              {displayTiers.map((tier, idx) => {
+                const theme = getTierTheme(tier.name, idx);
+                const perks = getTierPerks(tier);
+                const badge = tier.badgeText || theme.badge;
+                const badgeColor = theme.badgeColor || "bg-red-500";
+                const tierId = String(tier.name || tier.id || "").toLowerCase().replace(/\s+/g, "-");
 
-                </div>
+                return (
+                  <div
+                    key={tier.id || tier.key || idx}
+                    className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative"
+                  >
+                    {badge && (
+                      <div className={`absolute top-2 -right-6 ${badgeColor} text-white text-[7px] font-extrabold uppercase py-0.5 px-5 rotate-45 shadow-sm z-30`}>
+                        {badge}
+                      </div>
+                    )}
 
-                <div className="relative -mt-5 flex justify-center z-20">
-                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#ff8c00] to-[#ff4900] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("STANDING", 50)}</span>
+                    <div className={`relative ${theme.headerBg} h-16 pt-3 text-center overflow-hidden`}>
+                      <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none" />
+                      <h4 className={`relative z-10 text-sm font-black ${theme.titleColor} tracking-wider font-brand uppercase drop-shadow-sm`}>
+                        {tier.name}
+                      </h4>
+                    </div>
+
+                    <div className="relative -mt-5 flex justify-center z-20">
+                      <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
+                        <div className={`w-full h-full rounded-full ${theme.circleBg} shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white`}>
+                          <span className="text-lg font-black font-brand tracking-tight drop-shadow">
+                            {tier.price}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-2 pt-2 pb-1 flex-1">
+                      <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
+                        {perks.map((p, pIdx) => (
+                          <li key={pIdx} className="flex items-start gap-2">
+                            <i className={`fa-solid ${p.included ? "fa-check text-emerald-500" : "fa-xmark text-slate-400"} text-[9px] mt-0.5`} />
+                            <span className={p.included ? "text-slate-600 font-semibold" : "text-slate-400"}>{p.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className={`h-1 w-full ${theme.barBg}`} />
+
+                    <div className="bg-[#242426] p-1.5 flex items-center justify-center">
+                      <button
+                        onClick={(e) => handleBookTicketNow(e, tierId)}
+                        className={`w-20 py-1 px-2 rounded-full ${theme.buttonBg} text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0`}
+                      >
+                        <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
+                      </button>
                     </div>
                   </div>
-                </div>
-
-                <div className="px-2 pt-2 pb-1 flex-1">
-                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Normal Entry</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Free Seating</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
-                      <span>Fast Track Entry</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
-                      <span>Best View Zone</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="h-1 w-full bg-gradient-to-r from-[#ff5500] to-[#ffaa00]" />
-
-                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={(e) => handleBookTicketNow(e, "standing")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#ff5500] to-[#ff8c00] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
-                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
-                  </button>
-                </div>
-              </div>
-
-              {/* SPECIAL - Green/Cyan/Blue */}
-              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#00c978] via-[#00a6c9] to-[#0077ff] h-16 pt-3 text-center overflow-hidden">
-                  <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-sm font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">SPECIAL</h4>
-
-                </div>
-
-                <div className="relative -mt-5 flex justify-center z-20">
-                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#00c978] to-[#0077ff] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("SPECIAL", 100)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-2 pt-2 pb-1 flex-1">
-                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Fast Entry</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Better View</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Covered Seating</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
-                      <span>Priority Entry</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="h-1 w-full bg-gradient-to-r from-[#00c978] to-[#0077ff]" />
-
-                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={(e) => handleBookTicketNow(e, "special")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#00c978] to-[#009fd9] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
-                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
-                  </button>
-                </div>
-              </div>
-
-              {/* VIP - Violet/Purple (Popular) */}
-              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1 relative">
-                <div className="absolute top-2 -right-6 bg-red-500 text-white text-[7px] font-extrabold uppercase py-0.5 px-5 rotate-45 shadow-sm z-30">
-                  Popular
-                </div>
-
-                <div className="relative bg-gradient-to-r from-[#702bf9] via-[#5b24e6] to-[#3a1eb8] h-16 pt-3 text-center overflow-hidden">
-                  <div className="absolute inset-0 pattern-dots opacity-80 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-sm font-black text-white tracking-wider font-brand uppercase drop-shadow-sm">VIP</h4>
-
-                </div>
-
-                <div className="relative -mt-5 flex justify-center z-20">
-                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8033ff] to-[#3a1eb8] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("VIP", 200)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-2 pt-2 pb-1 flex-1">
-                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Priority Entry</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Best View Zone</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Reserved Seating</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-xmark text-slate-400 text-[9px] mt-0.5" />
-                      <span>Exclusive Lounge</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="h-1 w-full bg-gradient-to-r from-[#702bf9] to-[#3a1eb8]" />
-
-                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={(e) => handleBookTicketNow(e, "vip")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#702bf9] to-[#5b24e6] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
-                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
-                  </button>
-                </div>
-              </div>
-
-              {/* STAR - Dark/Gold */}
-              <div className="min-w-[130px] flex-1 bg-white rounded-[16px] shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-1">
-                <div className="relative bg-gradient-to-r from-[#161a29] via-[#1f2437] to-[#0f1424] h-16 pt-3 text-center overflow-hidden">
-                  <div className="absolute inset-0 pattern-dots opacity-60 pointer-events-none"></div>
-                  <h4 className="relative z-10 text-sm font-black text-amber-400 tracking-wider font-brand uppercase drop-shadow-sm">STAR</h4>
-
-                </div>
-
-                <div className="relative -mt-5 flex justify-center z-20">
-                  <div className="relative z-10 w-12 h-12 rounded-full p-1 bg-white shadow-lg flex items-center justify-center">
-                    <div className="w-full h-full rounded-full bg-gradient-to-b from-[#d4a017] to-[#8a6500] shadow-[inset_0_3px_6px_rgba(0,0,0,0.35)] flex items-center justify-center text-white">
-                      <span className="text-lg font-black font-brand tracking-tight drop-shadow">{priceFor("STAR", 500)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-2 pt-2 pb-1 flex-1">
-                  <ul className="space-y-1 text-[8px] leading-tight text-slate-500 font-medium">
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Exclusive Entry</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Special Sitting</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Priority Entry</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <i className="fa-solid fa-check text-emerald-500 text-[9px] mt-0.5" />
-                      <span>Best View Zone</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="h-1 w-full bg-gradient-to-r from-[#b8860b] to-[#e6b800]" />
-
-                <div className="bg-[#242426] p-1.5 flex items-center justify-center">
-                  <button onClick={(e) => handleBookTicketNow(e, "star")} className="w-20 py-1 px-2 rounded-full bg-gradient-to-r from-[#d4a017] to-[#b8860b] text-white font-extrabold text-[9px] uppercase tracking-wider font-brand shadow-md active:scale-95 transition-transform hover:brightness-110 whitespace-nowrap cursor-pointer border-0">
-                    <i className="fa-solid fa-bolt text-[7px] mr-0.5" /> Book Now
-                  </button>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
 
@@ -404,7 +605,7 @@ export default function Home() {
                 <h3 className="text-sm font-black text-slate-900 font-brand">Why Book Online?</h3>
               </div>
               <a href="#" className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                <i className="fa-regular fa-circle-play text-[10px]" /> How it Works? <i className="fa-solid fa-angle-right text-[9px]" />
+                <i className="fa-solid fa-circle-play text-[10px]" /> How it Works? <i className="fa-solid fa-angle-right text-[9px]" />
               </a>
             </div>
 
@@ -418,21 +619,21 @@ export default function Home() {
 
               <div className="flex flex-col items-center">
                 <div className="w-11 h-11 rounded-2xl bg-purple-100/70 text-purple-600 flex items-center justify-center text-lg mb-1.5 border border-purple-200/50">
-                  <i className="fa-solid fa-mobile-screen-button" />
+                  <i className="fa-solid fa-clock" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700 leading-tight">Book<br />Anytime</span>
               </div>
 
               <div className="flex flex-col items-center">
                 <div className="w-11 h-11 rounded-2xl bg-indigo-100/70 text-indigo-600 flex items-center justify-center text-lg mb-1.5 border border-indigo-200/50">
-                  <i className="fa-solid fa-person-walking-arrow-right" />
+                  <i className="fa-solid fa-person-running" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700 leading-tight">Skip the<br />Queue</span>
               </div>
 
               <div className="flex flex-col items-center">
                 <div className="w-11 h-11 rounded-2xl bg-emerald-100/70 text-emerald-600 flex items-center justify-center text-lg mb-1.5 border border-emerald-200/50">
-                  <i className="fa-solid fa-shield-check" />
+                  <i className="fa-solid fa-shield-halved" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700 leading-tight">Secure &<br />Verified</span>
               </div>
@@ -454,7 +655,9 @@ export default function Home() {
               <div className="text-amber-400 text-xl"><i className="fa-solid fa-ticket-simple" /></div>
               <div>
                 <p className="text-[10px] text-slate-400 font-semibold leading-tight">Tickets Sold</p>
-                <p className="text-base font-black tracking-tight text-white leading-tight">3,250</p>
+                <p className="text-base font-black tracking-tight text-white leading-tight">
+                  {realTicketsSold.toLocaleString()}
+                </p>
               </div>
             </div>
 
@@ -464,7 +667,9 @@ export default function Home() {
               <div className="text-sky-400 text-xl"><i className="fa-solid fa-users" /></div>
               <div>
                 <p className="text-[10px] text-slate-400 font-semibold leading-tight">Happy Visitors</p>
-                <p className="text-base font-black tracking-tight text-white leading-tight">1,980</p>
+                <p className="text-base font-black tracking-tight text-white leading-tight">
+                  {happyVisitors.toLocaleString()}
+                </p>
               </div>
             </div>
 
@@ -474,7 +679,9 @@ export default function Home() {
               <div className="text-rose-500 text-xl">🔥</div>
               <div>
                 <p className="text-[10px] text-slate-400 font-semibold leading-tight">Limited Tickets</p>
-                <p className="text-sm font-black tracking-tight text-amber-400 leading-tight">Hurry Up!</p>
+                <p className="text-sm font-black tracking-tight text-amber-400 leading-tight">
+                  {remainingTickets > 0 ? `${remainingTickets.toLocaleString()} Left` : "Hurry Up!"}
+                </p>
               </div>
             </div>
           </div>
@@ -485,15 +692,18 @@ export default function Home() {
           <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl px-3 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex -space-x-2 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="inline-block h-6 w-6 rounded-full ring-2 ring-white" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" alt="Avatar" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="inline-block h-6 w-6 rounded-full ring-2 ring-white" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80" alt="Avatar" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="inline-block h-6 w-6 rounded-full ring-2 ring-white" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80" alt="Avatar" />
+                {recentAvatars.map((av, idx) => (
+                  <div
+                    key={idx}
+                    title={av.name}
+                    className={`inline-flex items-center justify-center h-6 w-6 rounded-full ring-2 ring-white text-[9px] font-black text-white shadow-xs ${av.color}`}
+                  >
+                    {av.initials}
+                  </div>
+                ))}
               </div>
               <span className="text-[11px] font-semibold text-slate-800">
-                <strong className="font-black text-slate-900">50+ people booked</strong> in last 1 hour
+                <strong className="font-black text-slate-900">{socialProofText.highlight}</strong> {socialProofText.suffix}
               </span>
             </div>
 
@@ -503,6 +713,63 @@ export default function Home() {
             >
               🔥 Book Now Before It's Full! <i className="fa-solid fa-angle-right text-[10px]" />
             </button>
+          </div>
+
+          {/* ==============================================
+            8.5. OPERA PARTIES (HORIZONTAL CARD SCROLL)
+          ============================================== */}
+          <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">🎭</span>
+                <h3 className="text-sm font-black text-slate-900 font-brand">Opera Parties</h3>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 font-black px-1.5 py-0.5 rounded-full border border-indigo-100">
+                  {parties.length}
+                </span>
+              </div>
+              <Link
+                href="/parties"
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 active:scale-95 transition-transform"
+              >
+                View All <i className="fa-solid fa-arrow-right text-[9px]" />
+              </Link>
+            </div>
+
+            <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+              {parties.map((party) => (
+                <Link
+                  key={party.id || party.name}
+                  href="/parties"
+                  className="flex-shrink-0 w-28 flex flex-col items-center bg-slate-50/80 hover:bg-indigo-50/50 border border-slate-100 hover:border-indigo-200/80 rounded-xl p-2 transition-all text-center group active:scale-95"
+                >
+                  <div className="w-full aspect-[5/3] rounded-lg overflow-hidden bg-white shadow-xs border border-slate-200/80 flex items-center justify-center mb-1.5 relative group-hover:scale-105 transition-transform">
+                    {party.logo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={party.logo}
+                        alt=""
+                        aria-hidden="true"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const fallback = e.currentTarget.nextElementSibling;
+                          if (fallback) fallback.style.display = "flex";
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      aria-hidden="true"
+                      className={`w-full h-full ${party.logo ? "hidden" : "flex"} items-center justify-center bg-gradient-to-tr ${party.color || "from-indigo-600 to-purple-600"} text-white font-black text-xs uppercase select-none`}
+                    >
+                      {party.name.slice(0, 2)}
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-800 leading-tight line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                    {party.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
 
           {/* ==============================================
@@ -646,30 +913,24 @@ function TodaysShow() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={show.banner}
-              alt={show.name}
+              alt={show.organizationName || show.name}
               className="w-full h-32 object-cover"
             />
             <div className="p-2.5">
-              <h4 className="text-xs font-black text-slate-900 font-brand truncate">{show.name}</h4>
+              <h4 className="text-xs font-black text-slate-900 font-brand truncate">{show.organizationName || show.name}</h4>
               <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
-                <i className="fa-solid fa-user-group text-indigo-500 text-[9px]" />
-                <span className="truncate">{show.partyName || show.organizationName || "TBD"}</span>
+                <i className="fa-solid fa-user-group text-indigo-500 text-[9px] flex-shrink-0" />
+                <span className="truncate">{show.partyName || "Party TBD"}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
-                <i className="fa-regular fa-calendar text-rose-500 text-[9px]" />
-                <span>{show.month} {show.day}, {show.year}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
-                <i className="fa-solid fa-building text-rose-500 text-[9px]" />
-                <span className="truncate">{show.organizationName || show.partyName || "TBD"}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-0.5">
-                <i className="fa-solid fa-location-dot text-rose-500 text-[9px]" />
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
+                <i className="fa-solid fa-location-dot text-rose-500 text-[9px] flex-shrink-0" />
                 <span className="truncate">{show.location}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-indigo-800 font-bold mt-0.5">
-                <i className="fa-regular fa-clock text-indigo-500 text-[9px]" />
-                <span>{show.time}</span>
+              <div className="flex items-center gap-1.5 text-[10px] mt-1.5">
+                <i className="fa-regular fa-calendar text-emerald-600 text-[9px] flex-shrink-0" />
+                <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-200/80">
+                  {show.month} {show.day}, {show.year}
+                </span>
               </div>
             </div>
           </div>
@@ -843,7 +1104,8 @@ function EventCarousel() {
             const storyTitle = ev.title && ev.title !== eventTitle ? ev.title : "";
             const partyName = ev.partyName || ev.organizer || "";
             const organizationName = ev.organizationName || ev.committeeName || "";
-            const location = ev.location || ev.venue || ev.address || "Mayurbhanj, Odisha";
+            const committeeLocation = ev.committeeLocation || ev.committee_location || "";
+            const location = committeeLocation || ev.location || ev.venue || ev.address || "Mayurbhanj, Odisha";
             const entryTime = ev.entryTime || ev.entry_time || "9:00 PM";
             const startTime = ev.startTime || ev.start_time || ev.time || "11:00 PM";
 
@@ -858,6 +1120,7 @@ function EventCarousel() {
               emoji: ev.emoji || "🔥",
               partyName,
               organizationName,
+              committeeLocation,
               month: ev.month || "OCT",
               day: ev.day || ev.dayOfMonth || "22",
               year: ev.year || "2026",
@@ -932,7 +1195,7 @@ function EventCarousel() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between mb-1">
                       <h3 className="text-base font-black text-slate-900 truncate font-brand flex items-center gap-1">
-                        {ev.name} <span>{ev.emoji}</span>
+                        {ev.organizationName || ev.name || ev.partyName || "Jatra Show"} <span>{ev.emoji}</span>
                       </h3>
                       <div className="w-6" />
                     </div>
@@ -949,26 +1212,9 @@ function EventCarousel() {
                       <span className="truncate">{ev.partyName || "Party TBD"}</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
-                      <i className="fa-solid fa-building text-rose-500 text-xs flex-shrink-0" />
-                      <span className="truncate">{ev.organizationName || "Committee TBD"}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold mb-1">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold">
                       <i className="fa-solid fa-location-dot text-rose-500 text-xs flex-shrink-0" />
                       <span className="truncate">{ev.location}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 mt-1">
-                      <div className="flex items-center gap-1.5 text-[11px] text-indigo-900 font-bold truncate">
-                        <i className="fa-regular fa-clock text-indigo-600 text-xs flex-shrink-0" />
-                        <span>
-                          Entry {ev.entryTime} <span className="text-slate-300 font-normal mx-0.5">|</span> Jatra Start {ev.startTime}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-indigo-600 flex items-center gap-0.5 whitespace-nowrap bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 flex-shrink-0">
-                        Details <i className="fa-solid fa-arrow-right text-[8px]" />
-                      </span>
                     </div>
                   </div>
                 </div>
