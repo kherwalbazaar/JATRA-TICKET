@@ -402,7 +402,7 @@ export default function UserSeatGrid({
                       {group.rows.map((row) => (
                         <div key={row.id} className="flex items-start sm:items-center gap-2 sm:gap-2.5 w-full">
                           {/* Row number like A, B, C on left side */}
-                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-800 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-2xs select-none mt-0.5 sm:mt-0">
+                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-pink-500 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-2xs select-none mt-0.5 sm:mt-0 border border-pink-600">
                             {row.id}
                           </span>
 
@@ -499,7 +499,7 @@ export default function UserSeatGrid({
                           className="flex items-center gap-1 min-w-max mx-auto justify-center px-0.5 py-0.5 rounded-md hover:bg-slate-50/80 transition-colors"
                         >
                           {/* Left Row Badge */}
-                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-slate-700">
+                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-pink-500 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-pink-600">
                             {row.id}
                           </span>
 
@@ -553,7 +553,7 @@ export default function UserSeatGrid({
                           </div>
 
                           {/* Right Row Badge */}
-                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-slate-900 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-slate-700">
+                          <span className="w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-md bg-pink-500 text-white flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0 shadow-xs border border-pink-600">
                             {row.id}
                           </span>
                         </div>
