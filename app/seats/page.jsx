@@ -72,13 +72,26 @@ function SeatSelectionContent() {
   const [loading, setLoading] = useState(true);
   const [eventReady, setEventReady] = useState(!!eventIdParam);
   const [blockCats, setBlockCats] = useState([]);
+  const [counterNotice, setCounterNotice] = useState("");
   const seatGridRef = useRef(null);
 
-  // Live block-category config from Firestore (admin/counter/online rules + names)
+  // Live block-category config from Supabase (source of truth)
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
   const blockLabel = (id) => blockDisplayName(blockCats, id);
+
+  // If currently active block is switched to counter-only via Supabase Realtime, deselect it
+  useEffect(() => {
+    if (activeBlock && blockCats.length > 0 && !isOnlineBlock(activeBlock)) {
+      selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
+      setSelected([]);
+      setActiveBlock(null);
+      setShowSeatPanel(false);
+      setCounterNotice("This block is available for counter booking only. Please select another block.");
+      setTimeout(() => setCounterNotice(""), 5000);
+    }
+  }, [activeBlock, blockCats, eventId]);
   // Diagram sub-label: "Counter" (amber) when counter selling, "Online" (sky) otherwise.
   const subLabel = (id) => blockChannelText(blockCats, id);
   const channelColor = (id) => (isOnlineBlock(blockCats, id) ? "#dcfce7" : "#fffbeb");
@@ -247,6 +260,11 @@ function SeatSelectionContent() {
   };
 
   const toggleSeat = useCallback((key) => {
+    if (!activeBlock || !isOnlineBlock(activeBlock)) {
+      setCounterNotice("This block is available for counter booking only. Please select another block.");
+      setTimeout(() => setCounterNotice(""), 4500);
+      return;
+    }
     const fs = findFsSeat(activeBlock, key);
     const st = String(fs?.status || "").toLowerCase();
     const sid = getHoldSessionId();
@@ -265,9 +283,14 @@ function SeatSelectionContent() {
     } else {
       holdSeat(eventId, activeBlock, key);
     }
-  }, [activeBlock, selected, eventId, seatsByBlock]);
+  }, [activeBlock, selected, eventId, seatsByBlock, blockCats]);
 
   const handleBlockSelect = (blockId) => {
+    if (!isOnlineBlock(blockId)) {
+      setCounterNotice(`This block is available for counter booking only. Please select another block.`);
+      setTimeout(() => setCounterNotice(""), 4500);
+      return;
+    }
     if (activeBlock !== blockId) {
       selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
       setSelected([]);
@@ -896,6 +919,22 @@ function SeatSelectionContent() {
             <i className="fa-solid fa-chevron-right text-xs ml-1" />
           </button>
         </div>
+        )}
+
+        {/* Counter Notice Toast */}
+        {counterNotice && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-amber-500 text-slate-950 font-black text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-amber-400 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <i className="fa-solid fa-store text-base text-amber-950 flex-shrink-0" />
+              <span className="truncate">{counterNotice}</span>
+            </div>
+            <button
+              onClick={() => setCounterNotice("")}
+              className="w-5 h-5 rounded-full bg-amber-600/30 hover:bg-amber-600/50 flex items-center justify-center text-slate-950 flex-shrink-0"
+            >
+              <i className="fa-solid fa-xmark text-[11px]" />
+            </button>
+          </div>
         )}
       </div>
     </div>

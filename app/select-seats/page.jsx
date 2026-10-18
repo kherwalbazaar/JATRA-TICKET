@@ -34,6 +34,7 @@ function SelectSeatsContent() {
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
   const [blockCats, setBlockCats] = useState([]);
+  const [counterNotice, setCounterNotice] = useState("");
 
   const seatGridRef = useRef(null);
 
@@ -41,6 +42,18 @@ function SelectSeatsContent() {
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
   const blockLabel = (id) => blockDisplayName(blockCats, id);
+
+  // If activeBlock gets turned into counter-only in Supabase, auto-deselect it
+  useEffect(() => {
+    if (activeBlock && blockCats.length > 0 && !isOnlineBlock(activeBlock)) {
+      selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
+      setSelected([]);
+      setSelectedLabels({});
+      setActiveBlock(null);
+      setCounterNotice("This block is available for counter booking only. Please select another block.");
+      setTimeout(() => setCounterNotice(""), 5000);
+    }
+  }, [activeBlock, blockCats, eventId]);
 
   const getSeatRealPrice = useCallback(
     (key) => {
@@ -136,7 +149,11 @@ function SelectSeatsContent() {
   );
 
   const handleBlockSelect = (blockId) => {
-    if (!isOnlineBlock(blockId)) return;
+    if (!isOnlineBlock(blockId)) {
+      setCounterNotice("This block is available for counter booking only. Please select another block.");
+      setTimeout(() => setCounterNotice(""), 4500);
+      return;
+    }
     if (activeBlock !== blockId) {
       selected.forEach((k) => releaseSeatHold(eventId, activeBlock, k));
       setSelected([]);
@@ -152,6 +169,10 @@ function SelectSeatsContent() {
 
   const handleProceed = () => {
     if (!activeBlock || selected.length === 0) return;
+    if (!isOnlineBlock(activeBlock)) {
+      setCounterNotice("This block is available for counter booking only. Please select another block.");
+      return;
+    }
     const params = new URLSearchParams();
     if (eventId) params.set("eventId", eventId);
     if (eventName) params.set("event", eventName);
@@ -210,6 +231,10 @@ function SelectSeatsContent() {
             seatsByBlock={seatsByBlock}
             activeBlock={activeBlock}
             onSelectBlock={handleBlockSelect}
+            onCounterBlockClick={() => {
+              setCounterNotice("This block is available for counter booking only. Please select another block.");
+              setTimeout(() => setCounterNotice(""), 4500);
+            }}
             seatPrice={seatPrice}
             title="Stage & Block Map"
           />
@@ -291,6 +316,21 @@ function SelectSeatsContent() {
                 Proceed • ₹{totalAmount}
               </span>
               <i className="fa-solid fa-arrow-right" />
+            </button>
+          </div>
+        )}
+        {/* Counter Notice Toast */}
+        {counterNotice && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-amber-500 text-slate-950 font-black text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-amber-400 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <i className="fa-solid fa-store text-base text-amber-950 flex-shrink-0" />
+              <span className="truncate">{counterNotice}</span>
+            </div>
+            <button
+              onClick={() => setCounterNotice("")}
+              className="w-5 h-5 rounded-full bg-amber-600/30 hover:bg-amber-600/50 flex items-center justify-center text-slate-950 flex-shrink-0"
+            >
+              <i className="fa-solid fa-xmark text-[11px]" />
             </button>
           </div>
         )}

@@ -40,7 +40,7 @@ function PaymentContent() {
 
   const handlePayment = async () => {
     if (blockIsCounterOnly) {
-      setPayError(`Block ${blockLabel || block} is only sold at the counter.`);
+      setPayError("This block is available for counter booking only. Please select another block.");
       return;
     }
     setPayError("");
@@ -95,7 +95,9 @@ function PaymentContent() {
     } catch (err) {
       console.error("Failed to complete booking transaction:", err);
       setLoading(false);
-      if (err.code === "SEAT_COLLISION") {
+      if (err.code === "BLOCK_COUNTER_ONLY" || (err.message && err.message.includes("counter booking only"))) {
+        setPayError("This block is available for counter booking only. Please select another block.");
+      } else if (err.code === "SEAT_COLLISION") {
         setPayError(err.message || "One or more selected seats were just booked by someone else. Please choose other seats.");
       } else {
         setPayError(err.message || "Failed to process payment and confirm booking. Please try again.");
@@ -339,12 +341,28 @@ function PaymentContent() {
 
       {/* Bottom CTA */}
       <div className="p-4 bg-white border-t border-slate-100 sticky bottom-0 space-y-2">
+        {blockIsCounterOnly && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2">
+            <p className="text-xs font-bold text-amber-900 text-center flex items-center justify-center gap-1.5">
+              <i className="fa-solid fa-store text-amber-600" />
+              <span>This block is available for counter booking only. Please select another block.</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push(`/seats?eventId=${eventId}&event=${encodeURIComponent(eventName)}`)}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <i className="fa-solid fa-arrow-left" />
+              <span>Select Another Online Block</span>
+            </button>
+          </div>
+        )}
         {payError && (
           <div className="space-y-2">
             <p className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-center">
               {payError}
             </p>
-            {(payError.includes("Collision") || payError.includes("booked") || payError.includes("another user")) && (
+            {(payError.includes("Collision") || payError.includes("booked") || payError.includes("another user") || payError.includes("counter booking only")) && (
               <button
                 type="button"
                 onClick={() => router.push(`/seats?eventId=${eventId}&event=${encodeURIComponent(eventName)}`)}
@@ -358,8 +376,8 @@ function PaymentContent() {
         )}
         <button
           onClick={handlePayment}
-          disabled={loading}
-          className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50"
+          disabled={loading || blockIsCounterOnly}
+          className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
             <i className="fa-solid fa-spinner fa-spin" />

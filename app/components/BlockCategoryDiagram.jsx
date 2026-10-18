@@ -52,6 +52,7 @@ export default function BlockCategoryDiagram({
   seatsByBlock = {},
   activeBlock = null,
   onSelectBlock,
+  onCounterBlockClick,
   seatPrice = 0,
   compact = false,
   title = "Block Category Map",
@@ -61,9 +62,14 @@ export default function BlockCategoryDiagram({
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
-  const blockLabel = (id) => blockDisplayName(blockCats, id);
+  const blockLabel = (id) => {
+    const raw = blockDisplayName(blockCats, id);
+    if (!raw) return `Block ${id}`;
+    if (/^block\s+/i.test(raw)) return raw;
+    return `Block ${raw}`;
+  };
   const subLabel = (id) => blockChannelText(blockCats, id);
-  const channelColor = (id) => (isOnlineBlock(blockCats, id) ? "#dcfce7" : "#fffbeb");
+  const channelColor = (id) => (isOnlineBlock(id) ? "#bbf7d0" : "#fef08a");
 
   const blockFill = (id) => {
     const list = seatsByBlock[id] || [];
@@ -80,11 +86,16 @@ export default function BlockCategoryDiagram({
   const blockPrice = (id) => {
     const list = seatsByBlock[id] || [];
     const found = list.find((s) => s.price != null && Number(s.price) > 0);
-    return found ? Number(found.price) : seatPrice > 0 ? seatPrice : null;
+    return found ? Number(found.price) : seatPrice > 0 ? seatPrice : 200;
   };
 
   const handleClick = (id) => {
-    if (!isOnlineBlock(id)) return;
+    if (!isOnlineBlock(id)) {
+      if (onCounterBlockClick) {
+        onCounterBlockClick(id);
+      }
+      return;
+    }
     if (onSelectBlock) onSelectBlock(id);
   };
 
@@ -210,21 +221,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="195"
-            y="120"
+            y="105"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="32"
+            fontWeight="900"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("C2")}
           </text>
           <text
             x="195"
-            y="150"
+            y="142"
             textAnchor="middle"
             fill={channelColor("C2")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("C2")}
@@ -232,11 +248,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("C2") != null && (
             <text
               x="195"
-              y="178"
+              y="180"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="16"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("C2")}
@@ -262,21 +279,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="805"
-            y="120"
+            y="105"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="32"
+            fontWeight="900"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("A2")}
           </text>
           <text
             x="805"
-            y="150"
+            y="142"
             textAnchor="middle"
             fill={channelColor("A2")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("A2")}
@@ -284,11 +306,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("A2") != null && (
             <text
               x="805"
-              y="178"
+              y="180"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="16"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("A2")}
@@ -311,21 +334,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="105"
-            y="500"
+            y="490"
             textAnchor="middle"
             fill="#ffffff"
             fontSize="28"
-            fontWeight="bold"
+            fontWeight="900"
+            letterSpacing="-0.2"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("C3")}
           </text>
           <text
             x="105"
-            y="530"
+            y="528"
             textAnchor="middle"
             fill={channelColor("C3")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("C3")}
@@ -333,11 +361,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("C3") != null && (
             <text
               x="105"
-              y="558"
+              y="566"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="15"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("C3")}
@@ -360,33 +389,39 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="270"
-            y="420"
+            y="380"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="32"
+            fontWeight="900"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("C1")}
           </text>
           <text
             x="270"
-            y="450"
+            y="418"
             textAnchor="middle"
             fill={channelColor("C1")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("C1")}
           </text>
           {blockPrice("C1") != null && (
             <text
-              x="270"
-              y="478"
+              x="265"
+              y="456"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="15"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("C1")}
@@ -409,33 +444,39 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="730"
-            y="420"
+            y="380"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="32"
+            fontWeight="900"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("A1")}
           </text>
           <text
             x="730"
-            y="450"
+            y="418"
             textAnchor="middle"
             fill={channelColor("A1")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("A1")}
           </text>
           {blockPrice("A1") != null && (
             <text
-              x="730"
-              y="478"
+              x="735"
+              y="456"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="15"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("A1")}
@@ -458,21 +499,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="895"
-            y="500"
+            y="490"
             textAnchor="middle"
             fill="#ffffff"
             fontSize="28"
-            fontWeight="bold"
+            fontWeight="900"
+            letterSpacing="-0.2"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("A3")}
           </text>
           <text
             x="895"
-            y="530"
+            y="528"
             textAnchor="middle"
             fill={channelColor("A3")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("A3")}
@@ -480,11 +526,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("A3") != null && (
             <text
               x="895"
-              y="558"
+              y="566"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="15"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("A3")}
@@ -507,21 +554,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="500"
-            y="520"
+            y="505"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="38"
+            fontWeight="900"
+            letterSpacing="1"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("B1")}
           </text>
           <text
             x="500"
-            y="552"
+            y="548"
             textAnchor="middle"
             fill={channelColor("B1")}
-            fontSize="13"
+            fontSize="22"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("B1")}
@@ -529,11 +581,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("B1") != null && (
             <text
               x="500"
-              y="582"
+              y="590"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="16"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="28"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("B1")}
@@ -556,21 +609,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="290"
-            y="755"
+            y="742"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="32"
+            fontWeight="900"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("B2")}
           </text>
           <text
             x="290"
-            y="785"
+            y="780"
             textAnchor="middle"
             fill={channelColor("B2")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("B2")}
@@ -578,11 +636,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("B2") != null && (
             <text
               x="290"
-              y="813"
+              y="818"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="15"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("B2")}
@@ -605,21 +664,26 @@ export default function BlockCategoryDiagram({
           />
           <text
             x="710"
-            y="755"
+            y="742"
             textAnchor="middle"
             fill="#ffffff"
-            fontSize="28"
-            fontWeight="bold"
+            fontSize="32"
+            fontWeight="900"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {blockLabel("B3")}
           </text>
           <text
             x="710"
-            y="785"
+            y="780"
             textAnchor="middle"
             fill={channelColor("B3")}
-            fontSize="13"
+            fontSize="20"
+            fontWeight="800"
+            letterSpacing="0.5"
+            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
             pointerEvents="none"
           >
             {subLabel("B3")}
@@ -627,11 +691,12 @@ export default function BlockCategoryDiagram({
           {blockPrice("B3") != null && (
             <text
               x="710"
-              y="813"
+              y="818"
               textAnchor="middle"
-              fill="#fde68a"
-              fontSize="15"
-              fontWeight="bold"
+              fill="#fef08a"
+              fontSize="24"
+              fontWeight="900"
+              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
               ₹{blockPrice("B3")}
