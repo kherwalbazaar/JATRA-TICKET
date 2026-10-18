@@ -7,6 +7,7 @@ import {
   blockDisplayName,
   blockChannelText,
 } from "../../lib/blockCategories";
+import { subscribeTicketTypes, getPriceForRow } from "../../lib/ticketTypes";
 import { isHoldFresh } from "../../lib/seats";
 import MovingSpotlights from "./MovingSpotlights";
 
@@ -56,10 +57,16 @@ export default function BlockCategoryDiagram({
   seatPrice = 0,
   compact = false,
   title = "Block Category Map",
+  eventId = "",
+  ticketTypes: propTicketTypes = null,
 }) {
   const [blockCats, setBlockCats] = useState([]);
+  const [ticketTypes, setTicketTypes] = useState([]);
 
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
+  useEffect(() => {
+    return subscribeTicketTypes(setTicketTypes, eventId);
+  }, [eventId]);
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
   const blockLabel = (id) => {
@@ -83,10 +90,54 @@ export default function BlockCategoryDiagram({
     return isOnlineBlock(id) ? "#16a34a" : "#d97706";
   };
 
-  const blockPrice = (id) => {
+  /**
+   * Resolves unique seat prices per ticket category for a block (e.g. Star: 200, VIP: 150 -> [200, 150]).
+   */
+  const getBlockPrices = (id) => {
     const list = seatsByBlock[id] || [];
-    const found = list.find((s) => s.price != null && Number(s.price) > 0);
-    return found ? Number(found.price) : seatPrice > 0 ? seatPrice : 200;
+    const priceSet = new Set();
+    const effectiveTypes = propTicketTypes || ticketTypes;
+
+    if (list.length > 0) {
+      list.forEach((s) => {
+        const rawP = Number(s.price);
+        if (!isNaN(rawP) && rawP > 0) {
+          priceSet.add(rawP);
+        } else {
+          const rowPrice = getPriceForRow(s.rowId || s.row, effectiveTypes);
+          if (rowPrice && Number(rowPrice) > 0) {
+            priceSet.add(Number(rowPrice));
+          }
+        }
+      });
+    }
+
+    if (priceSet.size > 0) {
+      return Array.from(priceSet).sort((a, b) => b - a);
+    }
+
+    // Default category tier fallbacks when seats for a block are not loaded yet
+    if (id === "B1") return [200, 150]; // Star (A-E) 200 & VIP (F-K) 150
+    if (id === "B2" || id === "B3") return [150, 100];
+    if (id === "C3" || id === "A3") return [100, 80];
+    if (seatPrice > 0) return [seatPrice];
+    return [200];
+  };
+
+  const blockPriceText = (id) => {
+    const prices = getBlockPrices(id);
+    if (!prices || prices.length === 0) return null;
+    if (prices.length === 1) return `₹${prices[0]}`;
+    if (prices.length === 2) return `₹${prices[0]} & ₹${prices[1]}`;
+    return prices.map((p) => `₹${p}`).join(" & ");
+  };
+
+  const priceFontSize = (id) => {
+    const text = blockPriceText(id) || "";
+    if (id === "B1") return text.length > 8 ? "26" : "28";
+    if (id === "C3" || id === "A3") return text.length > 8 ? "18" : "24";
+    if (id === "C1" || id === "A1") return text.length > 8 ? "20" : "24";
+    return text.length > 8 ? "22" : "24";
   };
 
   const handleClick = (id) => {
@@ -245,18 +296,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("C2")}
           </text>
-          {blockPrice("C2") != null && (
+          {blockPriceText("C2") != null && (
             <text
               x="195"
               y="180"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("C2")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("C2")}
+              {blockPriceText("C2")}
             </text>
           )}
         </g>
@@ -303,18 +354,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("A2")}
           </text>
-          {blockPrice("A2") != null && (
+          {blockPriceText("A2") != null && (
             <text
               x="805"
               y="180"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("A2")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("A2")}
+              {blockPriceText("A2")}
             </text>
           )}
         </g>
@@ -358,18 +409,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("C3")}
           </text>
-          {blockPrice("C3") != null && (
+          {blockPriceText("C3") != null && (
             <text
               x="105"
               y="566"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("C3")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("C3")}
+              {blockPriceText("C3")}
             </text>
           )}
         </g>
@@ -413,18 +464,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("C1")}
           </text>
-          {blockPrice("C1") != null && (
+          {blockPriceText("C1") != null && (
             <text
               x="265"
               y="456"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("C1")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("C1")}
+              {blockPriceText("C1")}
             </text>
           )}
         </g>
@@ -468,18 +519,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("A1")}
           </text>
-          {blockPrice("A1") != null && (
+          {blockPriceText("A1") != null && (
             <text
               x="735"
               y="456"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("A1")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("A1")}
+              {blockPriceText("A1")}
             </text>
           )}
         </g>
@@ -523,18 +574,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("A3")}
           </text>
-          {blockPrice("A3") != null && (
+          {blockPriceText("A3") != null && (
             <text
               x="895"
               y="566"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("A3")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("A3")}
+              {blockPriceText("A3")}
             </text>
           )}
         </g>
@@ -578,18 +629,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("B1")}
           </text>
-          {blockPrice("B1") != null && (
+          {blockPriceText("B1") != null && (
             <text
               x="500"
               y="590"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="28"
+              fontSize={priceFontSize("B1")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("B1")}
+              {blockPriceText("B1")}
             </text>
           )}
         </g>
@@ -633,18 +684,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("B2")}
           </text>
-          {blockPrice("B2") != null && (
+          {blockPriceText("B2") != null && (
             <text
               x="290"
               y="818"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("B2")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("B2")}
+              {blockPriceText("B2")}
             </text>
           )}
         </g>
@@ -688,18 +739,18 @@ export default function BlockCategoryDiagram({
           >
             {subLabel("B3")}
           </text>
-          {blockPrice("B3") != null && (
+          {blockPriceText("B3") != null && (
             <text
               x="710"
               y="818"
               textAnchor="middle"
               fill="#fef08a"
-              fontSize="24"
+              fontSize={priceFontSize("B3")}
               fontWeight="900"
               style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
               pointerEvents="none"
             >
-              ₹{blockPrice("B3")}
+              {blockPriceText("B3")}
             </text>
           )}
         </g>

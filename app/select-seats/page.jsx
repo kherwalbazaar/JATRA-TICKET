@@ -236,6 +236,7 @@ function SelectSeatsContent() {
               setTimeout(() => setCounterNotice(""), 4500);
             }}
             seatPrice={seatPrice}
+            eventId={eventId}
             title="Stage & Block Map"
           />
 

@@ -836,6 +836,7 @@ export default function BookingForm({
                   seatPrice={seatPrice}
                   compact={true}
                   title="Stage & Block Map"
+                  eventId={resolvedEventId}
                 />
               </div>
 
