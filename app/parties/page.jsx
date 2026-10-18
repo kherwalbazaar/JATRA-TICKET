@@ -123,9 +123,13 @@ export default function PartiesPage() {
                       {party.name.slice(0, 2)}
                     </div>
 
-                    {party.activeShows > 0 && (
+                    {party.activeShows > 0 ? (
                       <span className="absolute top-1.5 right-1.5 bg-emerald-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full shadow-xs">
                         {party.activeShows} Live
+                      </span>
+                    ) : (
+                      <span className="absolute top-1.5 right-1.5 bg-slate-800/80 backdrop-blur-xs text-white font-bold text-[8px] px-1.5 py-0.5 rounded-full shadow-xs">
+                        0 Shows
                       </span>
                     )}
                   </div>
@@ -149,10 +153,28 @@ export default function PartiesPage() {
                       </div>
                     )}
 
-                    {party.contact && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium mb-2.5 truncate">
+                    {party.director && (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-medium mb-1 truncate">
+                        <i className="fa-solid fa-user-tie text-slate-400 text-[8px] flex-shrink-0" />
+                        <span className="text-slate-400 text-[9px]">Dir:</span>
+                        <span className="font-bold text-slate-700 truncate">{party.director}</span>
+                      </div>
+                    )}
+
+                    {party.writer && (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-medium mb-1 truncate">
+                        <i className="fa-solid fa-feather-pointed text-slate-400 text-[8px] flex-shrink-0" />
+                        <span className="text-slate-400 text-[9px]">Writer:</span>
+                        <span className="font-bold text-slate-700 truncate">{party.writer}</span>
+                      </div>
+                    )}
+
+                    {(party.phone || party.contact || party.phone2) && (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium mb-2 truncate">
                         <i className="fa-solid fa-phone text-indigo-500 text-[8px] flex-shrink-0" />
-                        <span className="truncate">{party.contact}</span>
+                        <span className="font-mono text-slate-700 truncate">
+                          {[party.phone || party.contact, party.phone2].filter(Boolean).join(" / ")}
+                        </span>
                       </div>
                     )}
 
@@ -163,7 +185,7 @@ export default function PartiesPage() {
                         className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-[10px] py-1.5 rounded-xl shadow-xs active:scale-95 transition-transform flex items-center justify-center gap-1 hover:brightness-110"
                       >
                         <i className="fa-solid fa-ticket text-[9px]" />
-                        <span>View Shows</span>
+                        <span>{party.activeShows > 0 ? "View Shows" : "Browse Shows"}</span>
                       </Link>
                     </div>
                   </div>
