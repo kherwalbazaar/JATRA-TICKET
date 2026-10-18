@@ -5,9 +5,11 @@ import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import { subscribeParties, DEFAULT_PARTIES, isCommitteeName } from "../../lib/parties";
+import { subscribeEvents } from "../../lib/events";
 
 export default function PartiesPage() {
   const [parties, setParties] = useState(DEFAULT_PARTIES);
+  const [events, setEvents] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -25,6 +27,25 @@ export default function PartiesPage() {
       return () => {};
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      const unsub = subscribeEvents((list) => {
+        if (Array.isArray(list)) setEvents(list);
+      });
+      return () => unsub();
+    } catch {
+      return () => {};
+    }
+  }, []);
+
+  const handlePartyClick = (party) => {
+    if (!party) return;
+    try {
+      sessionStorage.setItem(`party_${party.id}`, JSON.stringify(party));
+    } catch {}
+    window.location.href = `/parties/${encodeURIComponent(party.id)}`;
+  };
 
   const filteredParties = useMemo(() => {
     const validParties = parties.filter((p) => p && !isCommitteeName(p.name));
@@ -98,7 +119,16 @@ export default function PartiesPage() {
               {filteredParties.map((party) => (
                 <div
                   key={party.id || party.name}
-                  className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col p-3 hover:shadow-md hover:border-indigo-100 transition-all group"
+                  onClick={() => handlePartyClick(party)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handlePartyClick(party);
+                    }
+                  }}
+                  className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col p-3 hover:shadow-md hover:border-indigo-200 transition-all group cursor-pointer active:scale-[0.99]"
                 >
                   {/* Party Logo / Image Container */}
                   <div className="w-full aspect-[5/3] rounded-lg overflow-hidden bg-slate-100 relative mb-2.5 border border-slate-200/60 shadow-xs flex items-center justify-center">
@@ -140,53 +170,26 @@ export default function PartiesPage() {
                       {party.name}
                     </h3>
 
-                    {party.genre && (
-                      <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 rounded-md px-1.5 py-0.5 w-fit mb-1.5 border border-indigo-100/60">
-                        {party.genre}
-                      </span>
-                    )}
-
                     {party.location && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium mb-1 truncate">
+                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium mb-2 truncate">
                         <i className="fa-solid fa-location-dot text-rose-500 text-[8px] flex-shrink-0" />
                         <span className="truncate">{party.location}</span>
                       </div>
                     )}
 
-                    {party.director && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-medium mb-1 truncate">
-                        <i className="fa-solid fa-user-tie text-slate-400 text-[8px] flex-shrink-0" />
-                        <span className="text-slate-400 text-[9px]">Dir:</span>
-                        <span className="font-bold text-slate-700 truncate">{party.director}</span>
-                      </div>
-                    )}
-
-                    {party.writer && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-600 font-medium mb-1 truncate">
-                        <i className="fa-solid fa-feather-pointed text-slate-400 text-[8px] flex-shrink-0" />
-                        <span className="text-slate-400 text-[9px]">Writer:</span>
-                        <span className="font-bold text-slate-700 truncate">{party.writer}</span>
-                      </div>
-                    )}
-
-                    {(party.phone || party.contact || party.phone2) && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-medium mb-2 truncate">
-                        <i className="fa-solid fa-phone text-indigo-500 text-[8px] flex-shrink-0" />
-                        <span className="font-mono text-slate-700 truncate">
-                          {[party.phone || party.contact, party.phone2].filter(Boolean).join(" / ")}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* View Shows Button */}
+                    {/* View Shows / Browse Shows Action Button */}
                     <div className="mt-auto pt-1">
-                      <Link
-                        href={`/events`}
-                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-[10px] py-1.5 rounded-xl shadow-xs active:scale-95 transition-transform flex items-center justify-center gap-1 hover:brightness-110"
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePartyClick(party);
+                        }}
+                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-[10px] py-1.5 rounded-xl shadow-xs active:scale-95 transition-transform flex items-center justify-center gap-1 hover:brightness-110 cursor-pointer"
                       >
                         <i className="fa-solid fa-ticket text-[9px]" />
                         <span>{party.activeShows > 0 ? "View Shows" : "Browse Shows"}</span>
-                      </Link>
+                      </button>
                     </div>
                   </div>
                 </div>

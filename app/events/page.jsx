@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import BannerImage from "../components/BannerImage";
@@ -12,7 +13,9 @@ const TABS = [
   { key: "past", label: "Past" },
 ];
 
-export default function EventsPage() {
+function EventsContent() {
+  const searchParams = useSearchParams();
+  const partyParam = searchParams.get("party") || "";
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("upcoming");
@@ -41,6 +44,11 @@ export default function EventsPage() {
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   const filteredEvents = events.filter((ev) => {
+    if (partyParam) {
+      const pUpper = partyParam.toUpperCase();
+      const evParty = String(ev.partyName || ev.party_name || ev.name || ev.eventTitle || "").toUpperCase();
+      if (!evParty.includes(pUpper) && !pUpper.includes(evParty)) return false;
+    }
     const evDate = getEventDate(ev);
     evDate.setHours(0, 0, 0, 0);
     if (tab === "today") return evDate.getTime() === today.getTime();
@@ -67,6 +75,18 @@ export default function EventsPage() {
         <div className="p-4 pb-2">
           <h2 className="text-2xl font-black text-slate-900 font-brand">Events</h2>
           <p className="text-xs text-slate-500 font-medium">Explore upcoming jatra shows & book your tickets</p>
+          {partyParam && (
+            <div className="flex items-center gap-2 mt-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-1.5 w-fit">
+              <span className="text-[10px] text-indigo-700 font-bold">Party: {partyParam}</span>
+              <button
+                onClick={() => { window.location.href = "/events"; }}
+                className="text-xs text-indigo-400 hover:text-indigo-700 cursor-pointer"
+                aria-label="Clear party filter"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -158,5 +178,13 @@ export default function EventsPage() {
         <BottomNav active="events" />
       </div>
     </div>
+  );
+}
+
+export default function EventsPage() {
+  return (
+    <Suspense fallback={null}>
+      <EventsContent />
+    </Suspense>
   );
 }

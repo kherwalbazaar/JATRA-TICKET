@@ -6,6 +6,7 @@ import BottomNav from "../../components/BottomNav";
 import { subscribeEvents, fetchEvents } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
 import { getSavedCustomerProfile } from "../../../lib/supabase";
+import { findParty, findPartyForEvent } from "../../../lib/parties";
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
 
@@ -83,8 +84,8 @@ export default function EventDetail({ id }) {
     setEvent(null);
     setAllEvents([]);
 
-    // 1. Instantly read the event pre-saved by the list page
-    const cachedEvent = sessionStorage.getItem(`event_${id}`);
+    // 1. Instantly read the event pre-saved by the list page or match party
+    const cachedEvent = typeof window !== "undefined" ? sessionStorage.getItem(`event_${id}`) : null;
     if (cachedEvent) {
       try {
         const parsedData = JSON.parse(cachedEvent);
@@ -95,22 +96,81 @@ export default function EventDetail({ id }) {
       } catch (e) {
         console.error("Failed to parse cached event data", e);
       }
+    } else {
+      const fallbackParty = findParty(id);
+      if (fallbackParty) {
+        setEvent({
+          id: fallbackParty.id,
+          key: fallbackParty.id,
+          name: fallbackParty.name,
+          partyName: fallbackParty.name,
+          banner: fallbackParty.logo || "",
+          poster: fallbackParty.logo || "",
+          genre: fallbackParty.genre || "Santali Cultural Opera",
+          location: fallbackParty.location,
+          committeeLocation: fallbackParty.location,
+          director: fallbackParty.director,
+          writer: fallbackParty.writer,
+          phone: fallbackParty.phone,
+          phone2: fallbackParty.phone2,
+          about: `${fallbackParty.name} is a renowned ${fallbackParty.genre || "Santali Cultural Opera"} troupe from ${fallbackParty.location}. Dedicated to traditional Santali theatre, folk music, and cultural stories.`,
+          isPartyOnly: true,
+          activeShows: fallbackParty.activeShows || 0,
+        });
+        setFetching(false);
+      }
     }
 
-    // 2. Background sync with Firestore to keep data fresh
+    // 2. Background sync with database to keep data fresh
     async function syncFreshData() {
       try {
         const data = await fetchEvents();
         if (cancelled) return;
         const list = Array.isArray(data) ? data : [];
+        setAllEvents(list);
         const cleanId = String(id).trim();
-        const matched = list.find(
+        let matched = list.find(
           (item) =>
             String(item?.key || "").trim() === cleanId ||
             String(item?.id || "").trim() === cleanId ||
             String(item?.eventId || "").trim() === cleanId ||
             String(item?.showId || "").trim() === cleanId,
         );
+
+        // If not matched by event id, try matching by party name or party id
+        if (!matched) {
+          const upperId = cleanId.toUpperCase();
+          matched = list.find((item) => {
+            const pName = String(item?.partyName || item?.party_name || item?.name || item?.eventTitle || "").trim().toUpperCase();
+            return pName && (pName === upperId || upperId.includes(pName) || pName.includes(upperId));
+          });
+        }
+
+        // If still not matched, check if cleanId matches an Opera Party directly
+        if (!matched) {
+          const party = findParty(cleanId);
+          if (party) {
+            matched = {
+              id: party.id,
+              key: party.id,
+              name: party.name,
+              partyName: party.name,
+              banner: party.logo || "",
+              poster: party.logo || "",
+              genre: party.genre || "Santali Cultural Opera",
+              location: party.location,
+              committeeLocation: party.location,
+              director: party.director,
+              writer: party.writer,
+              phone: party.phone,
+              phone2: party.phone2,
+              about: `${party.name} is a renowned ${party.genre || "Santali Cultural Opera"} troupe from ${party.location}. Dedicated to traditional Santali theatre, folk music, and cultural stories.`,
+              isPartyOnly: true,
+              activeShows: party.activeShows || 0,
+            };
+          }
+        }
+
         if (matched) {
           setEvent(matched);
           setLoadError("");
@@ -202,7 +262,18 @@ export default function EventDetail({ id }) {
   );
   const cast = normalizeCast(castSource);
   const contact = event?.contact || event?.contactInformation || {};
-  const address = firstValue(contact.address, event?.fullAddress, event?.address, event?.addressLine);
+  const partyInfo = findPartyForEvent(event) || findParty(id) || null;
+  const partyName = firstValue(partyInfo?.name, event?.partyName, event?.party_name, event?.name);
+  const partyGenre = firstValue(partyInfo?.genre, event?.genre, "Santali Cultural Opera");
+  const partyLocation = firstValue(partyInfo?.location, event?.partyLocation, event?.committeeLocation, event?.location);
+  const partyDirector = firstValue(partyInfo?.director, event?.director, credits?.director);
+  const partyWriter = firstValue(partyInfo?.writer, event?.writer, credits?.writer);
+  const partyPhone1 = firstValue(partyInfo?.phone, event?.phone, contact?.phone);
+  const partyPhone2 = firstValue(partyInfo?.phone2, event?.phone2, "");
+  const partyPhones = [partyPhone1, partyPhone2].filter(Boolean);
+  const partyColor = partyInfo?.color || "from-indigo-600 to-purple-600";
+
+  const address = firstValue(contact.address, event?.fullAddress, event?.address, event?.addressLine, partyLocation);
   const committeeAddress = firstValue(
     event?.committeeLocation,
     event?.committee_location,
@@ -212,8 +283,8 @@ export default function EventDetail({ id }) {
     event?.committee?.address
   );
   const locationAddress = committeeAddress || address;
-  const phone = firstValue(contact.phone, contact.mobile, event?.contactNumber, event?.mdPhone, event?.phone);
-  const managingDirector = firstValue(contact.md, contact.managingDirector, event?.managingDirector, event?.mdName);
+  const phone = firstValue(contact.phone, contact.mobile, event?.contactNumber, event?.mdPhone, event?.phone, partyPhone1);
+  const managingDirector = firstValue(contact.md, contact.managingDirector, event?.managingDirector, event?.mdName, partyDirector);
   const committee = event?.committee || contact.committee;
   const about = event?.about || "";
   // Only keep URLs the browser can actually load (remote/data URLs).
@@ -225,10 +296,16 @@ export default function EventDetail({ id }) {
     if (/^(https?:)?\/\//i.test(trimmed) || trimmed.startsWith("data:")) return trimmed;
     return null;
   };
+  const partyLogo = firstValue(
+    toLoadableUrl(partyInfo?.logo),
+    toLoadableUrl(event?.poster),
+    toLoadableUrl(event?.banner)
+  );
   const sameYearEvents = allEvents.filter(
     (item) => String(item?.year || "") === String(event?.year || "")
   );
   const bannerCandidates = [
+    partyLogo,
     event?.poster,
     ...asArray(event?.banners),
     event?.bannerUrl,
@@ -301,11 +378,133 @@ export default function EventDetail({ id }) {
         )}
 
         <div className="px-4 py-4 space-y-4">
-          {/* Event Name & Party */}
+          {/* Event Name & Party Tag */}
           <div>
             <h1 className="text-xl font-black text-slate-900 font-brand">{event?.name || "Event"}</h1>
-            <p className="text-xs text-indigo-600 font-bold mt-0.5">{event?.partyName || event?.organizer || "TBD"}</p>
+            <p className="text-xs text-indigo-600 font-bold mt-0.5">{partyName || event?.partyName || event?.organizer || "Santali Opera Show"}</p>
           </div>
+
+          {/* =========================================================
+              OPERA TROUPE / PARTY DETAILS CARD
+              Displays traditional troupe details: Dir, Writer, Phones, Location, Genre
+             ========================================================= */}
+          {partyName && (
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🎭</span>
+                  <h3 className="text-sm font-black text-slate-900 font-brand">Opera Troupe / Party</h3>
+                </div>
+                <Link
+                  href="/parties"
+                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 flex items-center gap-1 active:scale-95 transition-transform"
+                >
+                  All Parties <i className="fa-solid fa-arrow-right text-[8px]" />
+                </Link>
+              </div>
+
+              <div className="flex items-start gap-3">
+                {/* Troupe Logo or Colored Monogram Avatar */}
+                <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200/80 shadow-xs relative flex items-center justify-center">
+                  {partyLogo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={partyLogo}
+                      alt={partyName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) fallback.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`w-full h-full ${partyLogo ? "hidden" : "flex"} items-center justify-center bg-gradient-to-tr ${partyColor} text-white font-black text-lg uppercase select-none`}
+                  >
+                    {partyName.slice(0, 2)}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-black text-slate-900 font-brand leading-tight">
+                    {partyName}
+                  </h4>
+                  {partyGenre && (
+                    <span className="inline-block text-[9px] font-bold text-indigo-700 bg-indigo-50 rounded-md px-1.5 py-0.5 mt-1 border border-indigo-100">
+                      {partyGenre}
+                    </span>
+                  )}
+                  {partyLocation && (
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium mt-1.5 truncate">
+                      <i className="fa-solid fa-location-dot text-rose-500 text-[10px] flex-shrink-0" />
+                      <span className="truncate">{partyLocation}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Director & Writer Details */}
+              {(partyDirector || partyWriter) && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {partyDirector ? (
+                    <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100">
+                      <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                        <i className="fa-solid fa-user-tie text-indigo-500 text-[9px]" />
+                        <span>Director</span>
+                      </div>
+                      <p className="text-xs font-black text-slate-800 mt-0.5 truncate">{partyDirector}</p>
+                    </div>
+                  ) : null}
+                  {partyWriter ? (
+                    <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-100">
+                      <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                        <i className="fa-solid fa-feather-pointed text-purple-500 text-[9px]" />
+                        <span>Writer</span>
+                      </div>
+                      <p className="text-xs font-black text-slate-800 mt-0.5 truncate">{partyWriter}</p>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Troupe Contact Numbers & Direct Call Action */}
+              {partyPhones.length > 0 && (
+                <div className="bg-indigo-50/60 rounded-xl p-2.5 border border-indigo-100/80 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                      <i className="fa-solid fa-phone text-xs" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase leading-none">Troupe Contact</p>
+                      <p className="text-xs font-mono font-bold text-slate-800 truncate mt-0.5">
+                        {partyPhones.join(" / ")}
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={`tel:${partyPhones[0].replace(/[^\d+]/g, "")}`}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1 flex-shrink-0 active:scale-95 transition-transform"
+                  >
+                    <i className="fa-solid fa-phone-volume text-[10px]" />
+                    <span>Call</span>
+                  </a>
+                </div>
+              )}
+
+              {event?.isPartyOnly && (
+                <div className="bg-amber-50 rounded-xl p-3 border border-amber-100 text-[11px] text-amber-900 flex items-start gap-2">
+                  <i className="fa-solid fa-circle-info text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-bold">Troupe Booking & Performance Enquiries</p>
+                    <p className="text-[10px] text-amber-700 mt-0.5 leading-relaxed">
+                      Online ticketed shows for this troupe will be announced soon. For village festival dates, committee bookings, or stage performances, contact the troupe management directly via the numbers above.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Location (Committee, Address) - only database data */}
           {(committee || locationAddress) && (
@@ -370,15 +569,25 @@ export default function EventDetail({ id }) {
             </div>
           )}
 
-          {/* Book Ticket Now (below Show Guide) - Vibrant Pulsing & Shimmering Animation */}
-          <button
-            onClick={handleBookTicketNow}
-            className="btn-book-ticket-glow w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-black text-base py-3.5 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"
-          >
-            <i className="fa-solid fa-ticket ticket-icon-wiggle text-xl" />
-            <span className="tracking-wide uppercase text-sm sm:text-base font-black drop-shadow-sm">Book Ticket Now</span>
-            <i className="fa-solid fa-angles-right text-xs ml-0.5 animate-pulse" />
-          </button>
+          {/* Book Ticket Now (or Call Troupe if troupe profile only) */}
+          {event?.isPartyOnly ? (
+            <a
+              href={`tel:${(partyPhone1 || partyPhones[0] || "").replace(/[^\d+]/g, "")}`}
+              className="btn-book-ticket-glow w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-black text-base py-3.5 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"
+            >
+              <i className="fa-solid fa-phone-volume text-xl" />
+              <span className="tracking-wide uppercase text-sm sm:text-base font-black drop-shadow-sm">Call Troupe for Bookings</span>
+            </a>
+          ) : (
+            <button
+              onClick={handleBookTicketNow}
+              className="btn-book-ticket-glow w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-black text-base py-3.5 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"
+            >
+              <i className="fa-solid fa-ticket ticket-icon-wiggle text-xl" />
+              <span className="tracking-wide uppercase text-sm sm:text-base font-black drop-shadow-sm">Book Ticket Now</span>
+              <i className="fa-solid fa-angles-right text-xs ml-0.5 animate-pulse" />
+            </button>
+          )}
 
           {/* Trailer - only when the database has one */}
           {trailer && (

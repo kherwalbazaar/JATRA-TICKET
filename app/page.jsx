@@ -188,6 +188,7 @@ export default function Home() {
   // The pricing cards are static, but a booking must always carry the real
   // `bookings.eventId` or the admin panel / gate scanner cannot match it.
   const [featuredEvent, setFeaturedEvent] = useState(null);
+  const [allEventsList, setAllEventsList] = useState([]);
   // Tier prices are authored in JATRA BAZAAR ADMIN (`ticketTypes`); the
   // static numbers below are only the fallback when nothing is stored yet.
   const [ticketTypes, setTicketTypes] = useState([]);
@@ -401,7 +402,10 @@ export default function Home() {
   useEffect(() => {
     try {
       const unsub = subscribeEvents((data) => {
-        if (Array.isArray(data) && data.length > 0) setFeaturedEvent(data[0]);
+        if (Array.isArray(data)) {
+          setAllEventsList(data);
+          if (data.length > 0) setFeaturedEvent(data[0]);
+        }
       });
       return () => unsub();
     } catch {
@@ -736,39 +740,46 @@ export default function Home() {
             </div>
 
             <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
-              {parties.map((party) => (
-                <Link
-                  key={party.id || party.name}
-                  href="/parties"
-                  className="flex-shrink-0 w-28 flex flex-col items-center bg-slate-50/80 hover:bg-indigo-50/50 border border-slate-100 hover:border-indigo-200/80 rounded-xl p-2 transition-all text-center group active:scale-95"
-                >
-                  <div className="w-full aspect-[5/3] rounded-lg overflow-hidden bg-white shadow-xs border border-slate-200/80 flex items-center justify-center mb-1.5 relative group-hover:scale-105 transition-transform">
-                    {party.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={party.logo}
-                        alt=""
+              {parties.map((party) => {
+                return (
+                  <Link
+                    key={party.id || party.name}
+                    href={`/parties/${encodeURIComponent(party.id)}`}
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem(`party_${party.id}`, JSON.stringify(party));
+                      } catch {}
+                    }}
+                    className="flex-shrink-0 w-28 flex flex-col items-center bg-slate-50/80 hover:bg-indigo-50/50 border border-slate-100 hover:border-indigo-200/80 rounded-xl p-2 transition-all text-center group active:scale-95"
+                  >
+                    <div className="w-full aspect-[5/3] rounded-lg overflow-hidden bg-white shadow-xs border border-slate-200/80 flex items-center justify-center mb-1.5 relative group-hover:scale-105 transition-transform">
+                      {party.logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={party.logo}
+                          alt=""
+                          aria-hidden="true"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
                         aria-hidden="true"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const fallback = e.currentTarget.nextElementSibling;
-                          if (fallback) fallback.style.display = "flex";
-                        }}
-                      />
-                    ) : null}
-                    <div
-                      aria-hidden="true"
-                      className={`w-full h-full ${party.logo ? "hidden" : "flex"} items-center justify-center bg-gradient-to-tr ${party.color || "from-indigo-600 to-purple-600"} text-white font-black text-xs uppercase select-none`}
-                    >
-                      {party.name.slice(0, 2)}
+                        className={`w-full h-full ${party.logo ? "hidden" : "flex"} items-center justify-center bg-gradient-to-tr ${party.color || "from-indigo-600 to-purple-600"} text-white font-black text-xs uppercase select-none`}
+                      >
+                        {party.name.slice(0, 2)}
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-[10px] font-black text-slate-800 leading-tight line-clamp-2 group-hover:text-indigo-600 transition-colors">
-                    {party.name}
-                  </span>
-                </Link>
-              ))}
+                    <span className="text-[10px] font-black text-slate-800 leading-tight line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                      {party.name}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
