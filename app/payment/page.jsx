@@ -2,14 +2,13 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { saveBooking } from "../../lib/bookings";
-import { reserveSeatsTransaction, markSeatsBooked } from "../../lib/seats";
 import { calculateCustomerCharges } from "../../lib/pricing";
 import {
   subscribeBlockCategories,
   blockDisplayName,
   isBlockOnline,
 } from "../../lib/blockCategories";
+import { getHoldSessionId } from "../../lib/seats";
 
 function PaymentContent() {
   const router = useRouter();
@@ -23,169 +22,149 @@ function PaymentContent() {
   const seatPrice = Number(searchParams.get("seatPrice")) || 100;
   const customerName = searchParams.get("customerName") ?? "";
   const customerPhone = searchParams.get("customerPhone") ?? "";
-  const [paymentMethod, setPaymentMethod] = useState("phonepe");
-  const seatCount = seats ? seats.split(",").filter(Boolean).length : 0;
+  const [paymentMethod, setPaymentMethod] = useState("paytm");
+  const seatList = seats ? seats.split(",").filter(Boolean) : [];
+  const seatCount = seatList.length;
   const rawTicketAmount = seatPrice * seatCount;
   const pricing = calculateCustomerCharges(rawTicketAmount);
-  const seatList = seats ? seats.split(",").filter(Boolean) : [];
-  const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [payError, setPayError] = useState("");
   const [blockCats, setBlockCats] = useState([]);
 
-  // Block rules + display name from the admin panel (shared Firestore config)
+  // Block rules + display name from shared config
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
   const blockLabel = block ? blockDisplayName(blockCats, block) : "";
   const blockIsCounterOnly = block ? !isBlockOnline(blockCats, block) : false;
 
-  const handlePayment = async () => {
+  const handleInitiatePayment = async () => {
     if (blockIsCounterOnly) {
       setPayError("This block is available for counter booking only. Please select another block.");
       return;
     }
+    if (seatList.length === 0) {
+      setPayError("No seats selected. Please go back and select your seats.");
+      return;
+    }
+
     setPayError("");
     setLoading(true);
+
     try {
-      if (block && seatList.length > 0) {
-        // Concurrency Safety: Atomic runTransaction verifying seat availability before booking
-        await reserveSeatsTransaction({
-          showId: eventId,
+      const sessionId = getHoldSessionId();
+
+      const res = await fetch("/api/payment/paytm/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          eventName,
+          date,
+          time,
           block,
           seats: seatList,
-          customerName,
-          customerPhone,
-          paymentMethod,
-          tier: { id: "seated", name: "SEATED", price: seatPrice, gate: `Block ${blockLabel || block}` },
-          eventName,
-          date,
-          time,
-          ticketAmount: pricing.ticketAmount,
-          convenienceFee: pricing.convenienceFee,
-          gstOnConvenienceFee: pricing.gstOnConvenienceFee,
-          platformCharge: pricing.platformCharge,
-          totalAmount: pricing.finalCustomerAmount,
-        });
+          seatPrice,
+          customerName: customerName || "Customer",
+          customerPhone: customerPhone || "",
+          holdSessionId: sessionId,
+          tierName: `SEATED (${blockLabel || block})`,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (data.code === "SEAT_COLLISION") {
+          throw new Error(data.error || "One or more selected seats were just taken by another user.");
+        }
+        throw new Error(data.error || "Failed to initiate payment gateway.");
+      }
+
+      // If in Staging Simulator Mode
+      if (data.isSimulator && data.simulatorUrl) {
+        router.push(data.simulatorUrl);
+        return;
+      }
+
+      // If Live / Staging Paytm Gateway: Create and auto-submit POST form
+      if (data.gatewayUrl && (data.formParams || data.txnToken)) {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = data.gatewayUrl;
+        form.name = "paytmForm";
+
+        const fields = data.formParams || {
+          mid: data.mid,
+          orderId: data.orderId,
+          txnToken: data.txnToken,
+        };
+
+        for (const [key, value] of Object.entries(fields)) {
+          if (value !== undefined && value !== null) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = key;
+            input.value = String(value);
+            form.appendChild(input);
+          }
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        return;
       } else {
-        await saveBooking({
-          tier: { id: "seated", name: "SEATED", price: seatPrice, gate: `Block ${blockLabel || block}` },
-          quantity: seatCount,
-          paymentMethod,
-          ticketAmount: pricing.ticketAmount,
-          convenienceFee: pricing.convenienceFee,
-          gstOnConvenienceFee: pricing.gstOnConvenienceFee,
-          platformCharge: pricing.platformCharge,
-          totalAmount: pricing.finalCustomerAmount,
-          eventId,
-          showId: eventId,
-          date,
-          time,
-          seats: seatList,
-          eventName,
-          customerName,
-          customerPhone,
-        });
+        throw new Error("Invalid payment gateway parameters returned by server.");
       }
-      setLoading(false);
-      try {
-        window.sessionStorage.removeItem("jatra:seatHold");
-      } catch (e) {
-        /* ignore */
-      }
-      setShowSuccess(true);
     } catch (err) {
-      console.error("Failed to complete booking transaction:", err);
+      console.error("Payment initiation error:", err);
       setLoading(false);
-      if (err.code === "BLOCK_COUNTER_ONLY" || (err.message && err.message.includes("counter booking only"))) {
-        setPayError("This block is available for counter booking only. Please select another block.");
-      } else if (err.code === "SEAT_COLLISION") {
-        setPayError(err.message || "One or more selected seats were just booked by someone else. Please choose other seats.");
-      } else {
-        setPayError(err.message || "Failed to process payment and confirm booking. Please try again.");
-      }
+      setPayError(err.message || "Failed to initiate payment. Please try again.");
     }
   };
 
   return (
     <div className="min-h-screen bg-[#f8faff] flex flex-col">
-      {/* Success Popup */}
-      {showSuccess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-8 mx-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-in zoom-in duration-300">
-            <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center">
-              <i className="fa-solid fa-check text-4xl text-emerald-600" />
-            </div>
-            <h3 className="text-xl font-black text-slate-900 text-center">Booking Confirmed!</h3>
-            <p className="text-sm text-slate-500 text-center">Your tickets have been booked successfully.</p>
-            <div className="w-full bg-slate-50 rounded-xl p-3 space-y-1.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Block</span>
-                <span className="font-bold text-slate-900">{blockLabel || block}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Seats</span>
-                <span className="font-bold text-slate-900">{seatList.join(", ")}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Ticket Amount</span>
-                <span className="font-semibold text-slate-800">₹{pricing.ticketAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Convenience & Fees</span>
-                <span className="font-semibold text-slate-800">₹{pricing.totalFees.toFixed(2)}</span>
-              </div>
-              <div className="border-t border-slate-200 pt-1 flex justify-between text-xs">
-                <span className="font-bold text-slate-700">Final Paid</span>
-                <span className="font-black text-emerald-600">₹{pricing.finalCustomerAmount.toFixed(2)}</span>
-              </div>
-            </div>
-            <button
-              onClick={() => router.push("/tickets")}
-              className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-            >
-              <i className="fa-solid fa-ticket" />
-              <span>View My Tickets</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="bg-white px-5 py-4 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-20">
-        <button onClick={() => router.back()} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+        <button
+          onClick={() => router.back()}
+          className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
+        >
           <i className="fa-solid fa-arrow-left text-xs" />
         </button>
         <div>
-          <h2 className="text-base font-black text-slate-900 tracking-tight">Payment</h2>
-          <p className="text-[10px] text-slate-400 font-semibold">Complete your payment</p>
+          <h2 className="text-base font-black text-slate-900 tracking-tight">Checkout & Payment</h2>
+          <p className="text-[10px] text-slate-400 font-semibold">Secure Paytm Payment Gateway</p>
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 p-4 space-y-4">
+      <div className="flex-1 p-4 space-y-4 max-w-lg mx-auto w-full">
         {/* Order Summary */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
-          <h3 className="text-xs font-black text-slate-900 uppercase">Order Summary</h3>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h3 className="text-xs font-black text-slate-900 uppercase">Order Summary</h3>
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">
+              {eventName || "Jatra Show"}
+            </span>
+          </div>
+
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Block</span>
+            <span className="text-slate-500 font-medium">Block</span>
             <span className="font-bold text-slate-900">{blockLabel || block}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Seats</span>
-            <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
+            <span className="text-slate-500 font-medium">Selected Seats ({seatCount})</span>
+            <div className="flex flex-wrap gap-1 justify-end max-w-[65%]">
               {seatList.map((s) => (
-                <span key={s} className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                <span key={s} className="bg-amber-100 text-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded">
                   {s}
                 </span>
               ))}
             </div>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Seat Price</span>
+            <span className="text-slate-500 font-medium">Seat Price</span>
             <span className="font-bold text-slate-900">₹{seatPrice}</span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Quantity</span>
-            <span className="font-bold text-slate-900">{seatCount}</span>
           </div>
 
           {/* Itemized Fee Breakdown */}
@@ -216,131 +195,55 @@ function PaymentContent() {
 
           <div className="border-t border-slate-200 pt-2.5 flex items-center justify-between">
             <div>
-              <span className="text-xs font-black text-slate-900 block leading-tight">Final Customer Amount</span>
+              <span className="text-xs font-black text-slate-900 block leading-tight">Total Amount to Pay</span>
               <span className="text-[9px] text-slate-400 font-semibold">All fees & taxes included</span>
             </div>
-            <span className="text-lg font-black text-emerald-600">₹{pricing.finalCustomerAmount.toFixed(2)}</span>
+            <span className="text-xl font-black text-emerald-600">₹{pricing.finalCustomerAmount.toFixed(2)}</span>
           </div>
         </div>
 
-        {/* Payment Method */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-2">
-          <h3 className="text-xs font-black text-slate-900 uppercase mb-2">Payment Method</h3>
-          {[
-            { key: "phonepe", title: "PhonePe", icon: <svg viewBox="0 0 24 24" className="w-6 h-6"><circle cx="12" cy="12" r="12" fill="#5F259F"/><text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="bold">P</text></svg> },
-            { key: "googlepay", title: "Google Pay", icon: <svg viewBox="0 0 24 24" className="w-6 h-6"><circle cx="12" cy="12" r="12" fill="#fff" stroke="#ddd" strokeWidth="1"/><text x="12" y="16" textAnchor="middle" fill="#4285F4" fontSize="11" fontWeight="bold">G</text></svg> },
-            { key: "paytm", title: "Paytm", icon: <svg viewBox="0 0 24 24" className="w-6 h-6"><circle cx="12" cy="12" r="12" fill="#00BAF2"/><text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="bold">P</text></svg> },
-            { key: "airtel", title: "Airtel Payment Bank", icon: <svg viewBox="0 0 24 24" className="w-6 h-6"><circle cx="12" cy="12" r="12" fill="#ED1C24"/><text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="bold">A</text></svg> },
-            { key: "postal", title: "IPPB", icon: <svg viewBox="0 0 24 24" className="w-6 h-6"><circle cx="12" cy="12" r="12" fill="#FF6600"/><text x="12" y="16" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="bold">I</text></svg> },
-          ].map((opt) => (
-            <label
-              key={opt.key}
-              onClick={() => setPaymentMethod(opt.key)}
-              className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                paymentMethod === opt.key
-                  ? "border-purple-600 bg-purple-50/40 shadow-xs"
-                  : "border-slate-200 bg-white hover:border-slate-300"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {opt.icon}
-                <span className="text-xs font-black text-slate-900">{opt.title}</span>
+        {/* Payment Gateway Option */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-black text-slate-900 uppercase">Payment Gateway</h3>
+            <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+              <i className="fa-solid fa-lock text-[9px]" /> 256-bit Secure
+            </span>
+          </div>
+
+          <label
+            onClick={() => setPaymentMethod("paytm")}
+            className="flex items-center justify-between p-3.5 rounded-2xl border-2 border-indigo-600 bg-indigo-50/30 cursor-pointer shadow-xs transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#002e6e] flex items-center justify-center text-white font-black text-xs shadow-xs">
+                <span>Pay<span className="text-[#00baf2]">tm</span></span>
               </div>
-              <input type="radio" checked={paymentMethod === opt.key} readOnly className="text-purple-600 focus:ring-purple-500" />
-            </label>
-          ))}
+              <div>
+                <span className="text-xs font-black text-slate-900 block">Paytm Payment Gateway</span>
+                <span className="text-[10px] text-slate-500 font-medium">UPI, Cards, NetBanking, Paytm Wallet</span>
+              </div>
+            </div>
+            <input type="radio" checked={paymentMethod === "paytm"} readOnly className="text-indigo-600 focus:ring-indigo-500" />
+          </label>
         </div>
 
-        {/* UPI QR Section */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col items-center space-y-4">
-          <div className="w-48 h-48 bg-white rounded-2xl flex items-center justify-center border border-slate-200 p-2">
-            <svg viewBox="0 0 100 100" className="w-full h-full">
-              {/* Corner patterns */}
-              <rect x="0" y="0" width="25" height="25" fill="#000" rx="2" />
-              <rect x="3" y="3" width="19" height="19" fill="#fff" rx="1" />
-              <rect x="6" y="6" width="13" height="13" fill="#000" rx="1" />
-              
-              <rect x="75" y="0" width="25" height="25" fill="#000" rx="2" />
-              <rect x="78" y="3" width="19" height="19" fill="#fff" rx="1" />
-              <rect x="81" y="6" width="13" height="13" fill="#000" rx="1" />
-              
-              <rect x="0" y="75" width="25" height="25" fill="#000" rx="2" />
-              <rect x="3" y="78" width="19" height="19" fill="#fff" rx="1" />
-              <rect x="6" y="81" width="13" height="13" fill="#000" rx="1" />
-              
-              {/* Data pattern */}
-              <rect x="30" y="0" width="5" height="5" fill="#000" />
-              <rect x="40" y="0" width="5" height="5" fill="#000" />
-              <rect x="50" y="0" width="5" height="5" fill="#000" />
-              <rect x="60" y="0" width="5" height="5" fill="#000" />
-              
-              <rect x="30" y="10" width="5" height="5" fill="#000" />
-              <rect x="45" y="10" width="5" height="5" fill="#000" />
-              <rect x="55" y="10" width="5" height="5" fill="#000" />
-              
-              <rect x="35" y="20" width="5" height="5" fill="#000" />
-              <rect x="50" y="20" width="5" height="5" fill="#000" />
-              <rect x="65" y="20" width="5" height="5" fill="#000" />
-              
-              <rect x="0" y="30" width="5" height="5" fill="#000" />
-              <rect x="10" y="30" width="5" height="5" fill="#000" />
-              <rect x="30" y="30" width="5" height="5" fill="#000" />
-              <rect x="40" y="30" width="5" height="5" fill="#000" />
-              <rect x="55" y="30" width="5" height="5" fill="#000" />
-              <rect x="70" y="30" width="5" height="5" fill="#000" />
-              <rect x="85" y="30" width="5" height="5" fill="#000" />
-              <rect x="95" y="30" width="5" height="5" fill="#000" />
-              
-              <rect x="5" y="40" width="5" height="5" fill="#000" />
-              <rect x="20" y="40" width="5" height="5" fill="#000" />
-              <rect x="35" y="40" width="5" height="5" fill="#000" />
-              <rect x="50" y="40" width="5" height="5" fill="#000" />
-              <rect x="60" y="40" width="5" height="5" fill="#000" />
-              <rect x="75" y="40" width="5" height="5" fill="#000" />
-              <rect x="90" y="40" width="5" height="5" fill="#000" />
-              
-              <rect x="0" y="50" width="5" height="5" fill="#000" />
-              <rect x="15" y="50" width="5" height="5" fill="#000" />
-              <rect x="30" y="50" width="5" height="5" fill="#000" />
-              <rect x="45" y="50" width="5" height="5" fill="#000" />
-              <rect x="65" y="50" width="5" height="5" fill="#000" />
-              <rect x="80" y="50" width="5" height="5" fill="#000" />
-              <rect x="95" y="50" width="5" height="5" fill="#000" />
-              
-              <rect x="10" y="60" width="5" height="5" fill="#000" />
-              <rect x="25" y="60" width="5" height="5" fill="#000" />
-              <rect x="40" y="60" width="5" height="5" fill="#000" />
-              <rect x="55" y="60" width="5" height="5" fill="#000" />
-              <rect x="70" y="60" width="5" height="5" fill="#000" />
-              <rect x="85" y="60" width="5" height="5" fill="#000" />
-              
-              <rect x="30" y="70" width="5" height="5" fill="#000" />
-              <rect x="45" y="70" width="5" height="5" fill="#000" />
-              <rect x="60" y="70" width="5" height="5" fill="#000" />
-              <rect x="75" y="70" width="5" height="5" fill="#000" />
-              <rect x="90" y="70" width="5" height="5" fill="#000" />
-              
-              <rect x="30" y="80" width="5" height="5" fill="#000" />
-              <rect x="40" y="80" width="5" height="5" fill="#000" />
-              <rect x="55" y="80" width="5" height="5" fill="#000" />
-              <rect x="70" y="80" width="5" height="5" fill="#000" />
-              <rect x="85" y="80" width="5" height="5" fill="#000" />
-              
-              <rect x="30" y="90" width="5" height="5" fill="#000" />
-              <rect x="50" y="90" width="5" height="5" fill="#000" />
-              <rect x="65" y="90" width="5" height="5" fill="#000" />
-              <rect x="80" y="90" width="5" height="5" fill="#000" />
-              <rect x="95" y="90" width="5" height="5" fill="#000" />
-            </svg>
+        {/* Security & Verification Banner */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex items-start gap-3">
+          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5">
+            <i className="fa-solid fa-shield-halved text-xs" />
           </div>
-          <p className="text-[10px] text-slate-500 font-medium text-center">
-            Scan the QR code or use UPI ID to pay
-          </p>
+          <div className="space-y-0.5">
+            <h4 className="text-xs font-bold text-slate-800">Verified Booking Assurance</h4>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Your tickets with unique QR codes will be generated immediately after your payment is verified by Paytm. Seats are reserved while you pay.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Bottom CTA */}
-      <div className="p-4 bg-white border-t border-slate-100 sticky bottom-0 space-y-2">
+      {/* Bottom Action Bar */}
+      <div className="p-4 bg-white border-t border-slate-100 sticky bottom-0 space-y-2 max-w-lg mx-auto w-full">
         {blockIsCounterOnly && (
           <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2">
             <p className="text-xs font-bold text-amber-900 text-center flex items-center justify-center gap-1.5">
@@ -357,12 +260,13 @@ function PaymentContent() {
             </button>
           </div>
         )}
+
         {payError && (
           <div className="space-y-2">
             <p className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-center">
               {payError}
             </p>
-            {(payError.includes("Collision") || payError.includes("booked") || payError.includes("another user") || payError.includes("counter booking only")) && (
+            {(payError.includes("Collision") || payError.includes("booked") || payError.includes("another user")) && (
               <button
                 type="button"
                 onClick={() => router.push(`/seats?eventId=${eventId}&event=${encodeURIComponent(eventName)}`)}
@@ -374,17 +278,21 @@ function PaymentContent() {
             )}
           </div>
         )}
+
         <button
-          onClick={handlePayment}
-          disabled={loading || blockIsCounterOnly}
-          className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleInitiatePayment}
+          disabled={loading || blockIsCounterOnly || seatCount === 0}
+          className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold text-sm py-4 rounded-2xl shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
-            <i className="fa-solid fa-spinner fa-spin" />
+            <span className="flex items-center gap-2">
+              <i className="fa-solid fa-spinner fa-spin text-sm" />
+              <span>Connecting to Paytm Gateway...</span>
+            </span>
           ) : (
             <>
-              <i className="fa-solid fa-check" />
-              <span>Proceed To Payment • ₹{pricing.finalCustomerAmount.toFixed(2)}</span>
+              <i className="fa-solid fa-lock text-xs" />
+              <span>Pay via Paytm Gateway • ₹{pricing.finalCustomerAmount.toFixed(2)}</span>
             </>
           )}
         </button>
@@ -396,7 +304,7 @@ function PaymentContent() {
 export default function PaymentPage() {
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="p-8 text-center text-white">Loading payment...</div>}>
         <PaymentContent />
       </Suspense>
     </div>

@@ -62,6 +62,22 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
     const bDocUpper = String(b.id || b.key || "").toUpperCase();
     let ticketsForBooking = ticketsByBookingId.get(bIdUpper) || ticketsByBookingId.get(bDocUpper) || [];
 
+    // Ensure pending, failed, or cancelled bookings do NOT issue or synthesize tickets (Requirement 4 & 9)
+    const isConfirmed =
+      (b.status === "Confirmed" || b.bookingStatus === "Confirmed") &&
+      (b.paymentStatus === "Successful" || b.payment_status === "Successful" || !b.payment_status);
+
+    if (!isConfirmed) {
+      return {
+        booking: b,
+        tickets: [],
+        totalCount: 0,
+        enteredCount: 0,
+        remainingCount: 0,
+        allEntered: false,
+      };
+    }
+
     // If no records in tickets collection (legacy booking), synthesize them:
     if (ticketsForBooking.length === 0) {
       const seats = Array.isArray(b.seats) ? b.seats.filter(Boolean) : [];

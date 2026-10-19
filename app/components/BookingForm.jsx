@@ -439,29 +439,34 @@ export default function BookingForm({
 
       const blockLabel = getBlockName(activeBlock) || activeBlock;
 
-      // Atomic server validation and reservation (writes to Firestore and Supabase)
-      const bookingResult = await reserveSeatsTransaction({
-        showId: resolvedEventId,
-        block: activeBlock,
-        seats: displaySeats,
-        customerName: profile?.full_name || "Customer",
-        customerPhone: profile?.mobile || "",
-        paymentMethod: paymentMethod.toUpperCase(),
-        tier: {
-          id: (selectedTierName || "seated").toLowerCase(),
-          name: `${selectedTierName || "SEATED"} (${blockLabel})`,
-          price: seatPrice,
-          gate: `Block ${blockLabel}`,
-        },
-        eventName: resolvedEventName,
-        date: eventDate,
-        time: eventTime,
-        ticketAmount: pricing.ticketAmount,
-        convenienceFee: pricing.convenienceFee,
-        gstOnConvenienceFee: pricing.gstOnConvenienceFee,
-        platformCharge: pricing.platformCharge,
-        totalAmount: pricing.finalCustomerAmount,
+      // 1. Connect to Paytm Gateway initiation
+      const sessionId = getHoldSessionId();
+      const res = await fetch("/api/payment/paytm/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: resolvedEventId,
+          eventName: resolvedEventName,
+          date: eventDate,
+          time: eventTime,
+          block: activeBlock,
+          seats: displaySeats,
+          seatPrice,
+          customerName: profile?.full_name || "Customer",
+          customerPhone: profile?.mobile || "",
+          customerEmail: profile?.email || null,
+          holdSessionId: sessionId,
+          tierName: `${selectedTierName || "SEATED"} (${blockLabel})`,
+        }),
       });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (data.code === "SEAT_COLLISION") {
+          setActiveStep(1);
+        }
+        throw new Error(data.error || "Failed to initiate payment gateway.");
+      }
 
       // Clear hold session storage
       try {
@@ -470,22 +475,41 @@ export default function BookingForm({
         }
       } catch (e) {}
 
-      // Display Booking Confirmation Modal
-      setBookingConfirmed({
-        ticketNumber:
-          bookingResult?.ticketNumber ||
-          bookingResult?.bookingId ||
-          "JB-" + Date.now().toString().slice(-6),
-        event: resolvedEventName,
-        date: eventDate,
-        time: eventTime,
-        block: blockLabel,
-        seats: displaySeats,
-        amount: pricing.finalCustomerAmount,
-        customerName: profile?.full_name || "",
-        customerPhone: profile?.mobile || "",
-        paymentMethod: paymentMethod.toUpperCase(),
-      });
+      // If in Simulator Mode (Staging testing)
+      if (data.isSimulator && data.simulatorUrl) {
+        router.push(data.simulatorUrl);
+        return;
+      }
+
+      // If Live / Staging Gateway: Auto-submit POST form
+      if (data.gatewayUrl && (data.formParams || data.txnToken)) {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = data.gatewayUrl;
+        form.name = "paytmForm";
+
+        const fields = data.formParams || {
+          mid: data.mid,
+          orderId: data.orderId,
+          txnToken: data.txnToken,
+        };
+
+        for (const [key, value] of Object.entries(fields)) {
+          if (value !== undefined && value !== null) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = key;
+            input.value = String(value);
+            form.appendChild(input);
+          }
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+
+      throw new Error("Invalid payment gateway parameters returned by server.");
     } catch (err) {
       console.error("Booking confirmation error:", err);
       if (err?.code === "SEAT_COLLISION") {
@@ -1353,13 +1377,13 @@ export default function BookingForm({
                 {isSubmitting ? (
                   <>
                     <i className="fa-solid fa-spinner fa-spin text-sm" />
-                    <span>Verifying Seats & Confirming Booking...</span>
+                    <span>Connecting to Paytm Gateway...</span>
                   </>
                 ) : (
                   <>
-                    <i className="fa-solid fa-ticket -rotate-12 text-sm" />
+                    <i className="fa-solid fa-lock text-xs" />
                     <span>
-                      Confirm & Book &bull; ₹{totalAmountPayable.toFixed(2)}
+                      Pay via Paytm Gateway &bull; ₹{totalAmountPayable.toFixed(2)}
                     </span>
                     <i className="fa-solid fa-chevron-right text-xs ml-0.5" />
                   </>
