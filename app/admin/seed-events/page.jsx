@@ -11,7 +11,7 @@ const DUMMY_EVENTS = [
     month: "OCT",
     day: "1",
     year: "2026",
-    location: "Balanada Ground, Khunta, Mayurbhanj",
+    location: "Bahanada Ground, Khunta, Mayurbhanj",
     banner: "/jarpa.png",
     time: "08:30 PM - 04:30 AM",
     entry_time: "07:45 PM",

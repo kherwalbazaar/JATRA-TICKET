@@ -29,7 +29,7 @@ export default function TicketDetail({ ticket }) {
         showBack
         showShare
         title="Ticket Details"
-        onShare={() => copy(`${ticket.name} | ${ticket.id} | ${ticket.category} | ${ticket.gate} | 22 Oct 2026 | Balanada`)}
+        onShare={() => copy(`${ticket.name} | ${ticket.id} | ${ticket.category} | ${ticket.gate} | 22 Oct 2026 | Bahanada`)}
       />
 
       {/* Notification Bar */}
@@ -61,7 +61,7 @@ export default function TicketDetail({ ticket }) {
               </div>
               <div className="flex items-center gap-1.5">
                 <i className="fa-solid fa-location-dot text-rose-500 text-[11px]" />
-                <span className="truncate">Balanada</span>
+                <span className="truncate">Bahanada</span>
               </div>
             </div>
           </div>

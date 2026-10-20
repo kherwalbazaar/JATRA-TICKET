@@ -252,7 +252,7 @@ export default function SupportPage() {
 
               {/* Email Support */}
               <a
-                href="mailto:support@adimlahahmandawa.com"
+                href="mailto:support@jatrabazaar.com"
                 className="flex items-center gap-3 bg-white/10 border border-white/15 rounded-xl px-3 py-2.5 hover:bg-white/20 transition-all active:scale-98"
               >
                 <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -260,7 +260,7 @@ export default function SupportPage() {
                 </div>
                 <div className="text-xs truncate">
                   <p className="text-[9px] uppercase font-bold text-slate-300 tracking-wider">Email</p>
-                  <p className="font-black text-white truncate">support@adimlahahmandawa.com</p>
+                  <p className="font-black text-white truncate">support@jatrabazaar.com</p>
                 </div>
               </a>
 
@@ -271,7 +271,7 @@ export default function SupportPage() {
                 </div>
                 <div className="text-xs">
                   <p className="text-[9px] uppercase font-bold text-slate-300 tracking-wider">Office</p>
-                  <p className="font-black text-white text-[11px]">Balanada, Khunta, Mayurbhanj, Odisha</p>
+                  <p className="font-black text-white text-[11px]">Bahanada, Khunta, Mayurbhanj, Odisha</p>
                 </div>
               </div>
             </div>
