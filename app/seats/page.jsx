@@ -16,6 +16,7 @@ import {
 } from "../../lib/blockCategories";
 import { getSavedCustomerProfile } from "../../lib/supabase";
 import { getPriceForRow } from "../../lib/ticketTypes";
+import LoginRequiredModal from "../components/LoginRequiredModal";
 
 const EVENT_ID_KEY = "jatra:eventId";
 const HOLD_KEY = "jatra:seatHold";
@@ -64,15 +65,16 @@ function SeatSelectionContent() {
   const [currentEventData, setCurrentEventData] = useState(null);
   const [eventOptions, setEventOptions] = useState([]);
   const [selected, setSelected] = useState([]);
-  const [activeBlock, setActiveBlock] = useState(blockParam || null);
-  const [showSeatPanel, setShowSeatPanel] = useState(!!blockParam);
-  const [showBlockSelector, setShowBlockSelector] = useState(!!blockParam);
+  const [activeBlock, setActiveBlock] = useState(blockParam || "B1");
+  const [showSeatPanel, setShowSeatPanel] = useState(true);
+  const [showBlockSelector, setShowBlockSelector] = useState(true);
   const [clickedFromMap, setClickedFromMap] = useState(!!blockParam);
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
   const [eventReady, setEventReady] = useState(!!eventIdParam);
   const [blockCats, setBlockCats] = useState([]);
   const [counterNotice, setCounterNotice] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const seatGridRef = useRef(null);
 
   // Live block-category config from Supabase (source of truth)
@@ -260,6 +262,11 @@ function SeatSelectionContent() {
   };
 
   const toggleSeat = useCallback((key) => {
+    const profile = getSavedCustomerProfile();
+    if (!profile || !profile.full_name) {
+      setShowLoginModal(true);
+      return;
+    }
     if (!activeBlock || !isOnlineBlock(activeBlock)) {
       setCounterNotice("This block is available for counter booking only. Please select another block.");
       setTimeout(() => setCounterNotice(""), 4500);
@@ -906,7 +913,8 @@ function SeatSelectionContent() {
               const targetUrl = `/book?event=${encodeURIComponent(eventName)}&eventId=${eventId}&date=${encodeURIComponent(eventDate)}&time=${encodeURIComponent(eventTime)}&block=${activeBlock}&seats=${displaySeats.join(',')}&seatPrice=${seatPrice}`;
               const profile = getSavedCustomerProfile();
               if (!profile || !profile.full_name) {
-                router.push(`/profile?redirect=${encodeURIComponent(targetUrl)}`);
+                setShowLoginModal(true);
+                return;
               } else {
                 router.push(targetUrl);
               }
@@ -922,6 +930,15 @@ function SeatSelectionContent() {
         )}
 
         {/* Counter Notice Toast */}
+        {/* Login Required Modal */}
+        <LoginRequiredModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          title="Please Register or Log In First"
+          message="You can freely explore all seat rows, stage layout, and event details. Please register or log in first, then you can book seat tickets."
+          actionText="Register / Log In to Book"
+        />
+
         {counterNotice && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-amber-500 text-slate-950 font-black text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-amber-400 animate-in fade-in slide-in-from-bottom-4">
             <div className="flex items-center gap-2.5 min-w-0">

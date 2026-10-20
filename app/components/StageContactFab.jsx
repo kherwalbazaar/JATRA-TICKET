@@ -79,7 +79,7 @@ export default function StageContactFab({ className = "" }) {
         <a
           href={`tel:${PHONE_TEL}`}
           tabIndex={isOpen ? 0 : -1}
-          className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-400 hover:from-sky-500 hover:to-cyan-300 text-white flex items-center justify-center shadow-xl shadow-sky-500/40 border border-sky-300/40 transition-all duration-200 hover:scale-110 active:scale-95"
+          className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-pink-600 via-pink-500 to-rose-400 hover:from-pink-700 hover:to-rose-500 text-white flex items-center justify-center shadow-xl shadow-pink-500/40 border border-pink-300/40 transition-all duration-200 hover:scale-110 active:scale-95"
           title="Direct Call"
           aria-label="Direct Call"
         >
@@ -99,15 +99,15 @@ export default function StageContactFab({ className = "" }) {
         onClick={() => setIsOpen((prev) => !prev)}
         className={`relative group w-12 h-12 sm:w-13 sm:h-13 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 active:scale-90 focus:outline-hidden ${
           isOpen
-            ? "bg-slate-800 text-rose-400 border border-slate-600 shadow-2xl shadow-black/70 rotate-90"
-            : "bg-gradient-to-tr from-emerald-600 via-teal-500 to-sky-500 text-white shadow-2xl shadow-emerald-500/45 hover:shadow-emerald-500/65 hover:scale-105"
+            ? "bg-slate-800 text-pink-400 border border-slate-600 shadow-2xl shadow-black/70 rotate-90"
+            : "bg-gradient-to-tr from-pink-600 via-pink-500 to-rose-400 text-white shadow-2xl shadow-pink-500/45 hover:shadow-pink-500/65 hover:scale-105 border border-pink-300/30"
         }`}
         aria-expanded={isOpen}
         aria-label={isOpen ? "Close options" : "Contact options"}
       >
         {/* Subtle Ambient Pulse Ring when closed */}
         {!isOpen && (
-          <span className="absolute -inset-1 rounded-full bg-emerald-400/30 animate-ping pointer-events-none" />
+          <span className="absolute -inset-1 rounded-full bg-pink-400/30 animate-ping pointer-events-none" />
         )}
 
         {/* Icon: switches between phone and close */}

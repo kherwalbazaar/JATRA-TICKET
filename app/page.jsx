@@ -13,6 +13,7 @@ import { subscribeBanners } from "../lib/banners";
 import { subscribeTicketTypes } from "../lib/ticketTypes";
 import { subscribeParties, DEFAULT_PARTIES } from "../lib/parties";
 import { getSavedCustomerProfile } from "../lib/supabase";
+import LoginRequiredModal from "./components/LoginRequiredModal";
 
 const DEFAULT_TIERS = [
   { id: "star", name: "STAR", price: 200, rows: ["A", "B", "C", "D", "E"], badgeText: "Exclusive" },
@@ -193,6 +194,8 @@ export default function Home() {
   // static numbers below are only the fallback when nothing is stored yet.
   const [ticketTypes, setTicketTypes] = useState([]);
   const [countdown, setCountdown] = useState({ d: "00", h: "00", m: "00", s: "00" });
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginTargetUrl, setLoginTargetUrl] = useState("");
 
   const handleBookTicketNow = (e, tierId = null) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -206,15 +209,11 @@ export default function Home() {
     if (eventName) params.set("event", eventName);
     if (date) params.set("date", date);
     if (time) params.set("time", time);
-    if (tierId) params.set("tier", tierId);
+    params.set("block", "B1");
 
-    const bookingUrl = `/book?${params.toString()}`;
-    const profile = getSavedCustomerProfile();
-    if (!profile || !profile.full_name) {
-      router.push(`/profile?redirect=${encodeURIComponent(bookingUrl)}`);
-    } else {
-      router.push(bookingUrl);
-    }
+    // Direct guest navigation: allows viewing all seat rows and auditorium layout freely
+    const seatsUrl = `/seats?${params.toString()}`;
+    router.push(seatsUrl);
   };
 
   const displayTiers = useMemo(() => {
@@ -799,6 +798,15 @@ export default function Home() {
         {/* ==============================================
           10. FIXED BOTTOM NAVIGATION BAR (animated)
         ============================================== */}
+        {/* Login Required Modal */}
+        <LoginRequiredModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          redirectUrl={loginTargetUrl}
+          title="Login First to Book Tickets"
+          message="You can freely browse events, parties, and view seat layouts. However, you must log in to your account before you can book tickets."
+        />
+
         <BottomNav active="home" />
       </div>
 

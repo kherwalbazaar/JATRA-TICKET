@@ -78,7 +78,7 @@ function StatusContent() {
                 Booking Successful!
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Your payment via Paytm has been successfully verified.
+                Your online ticket booking has been successfully confirmed.
               </p>
             </div>
 
@@ -117,7 +117,7 @@ function StatusContent() {
                   </div>
                   {booking.gateway_transaction_id && (
                     <div className="flex justify-between">
-                      <span className="text-slate-500 font-medium">Paytm Txn ID</span>
+                      <span className="text-slate-500 font-medium">Txn Reference</span>
                       <span className="font-mono text-[10px] text-slate-600 font-bold">
                         {booking.gateway_transaction_id}
                       </span>

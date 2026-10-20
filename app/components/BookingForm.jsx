@@ -26,6 +26,7 @@ import { fetchEvents } from "../../lib/events";
 import { subscribeTicketTypes, getPriceForRow } from "../../lib/ticketTypes";
 import UserSeatGrid from "./UserSeatGrid";
 import BlockCategoryDiagram from "./BlockCategoryDiagram";
+import LoginRequiredModal from "./LoginRequiredModal";
 
 export const bookingTiers = [
   { id: "standing", name: "STANDING", price: 50, gate: "Gate A" },
@@ -81,6 +82,7 @@ export default function BookingForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingConfirmed, setBookingConfirmed] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // 1. Subscribe to Live Block Categories
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
@@ -142,12 +144,6 @@ export default function BookingForm({
           setProfileLoading(false);
         } else {
           setProfileLoading(false);
-          // Redirect to Profile Create page
-          if (typeof window !== "undefined") {
-            const currentPath =
-              window.location.pathname + window.location.search;
-            router.push(`/profile?redirect=${encodeURIComponent(currentPath)}`);
-          }
         }
       }
     }
@@ -336,6 +332,11 @@ export default function BookingForm({
   // Seat toggle handler
   const toggleSeat = useCallback(
     (key) => {
+      const profile = getSavedCustomerProfile();
+      if (!profile || !profile.full_name) {
+        setShowLoginModal(true);
+        return;
+      }
       const list = seatsByBlock[activeBlock] || [];
       const fs = list.find(
         (s) =>
@@ -413,6 +414,10 @@ export default function BookingForm({
 
   // Step 4 Confirm & Book Submission
   const handleConfirmAndBook = async () => {
+    if (!profile || !profile.full_name) {
+      setShowLoginModal(true);
+      return;
+    }
     if (!isStep4Enabled) return;
     if (isSubmitting) return;
 
@@ -897,7 +902,13 @@ export default function BookingForm({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setActiveStep(2)}
+                      onClick={() => {
+                        if (!profile || !profile.full_name) {
+                          setShowLoginModal(true);
+                          return;
+                        }
+                        setActiveStep(2);
+                      }}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all shrink-0"
                     >
                       <span>Continue &bull; ₹{ticketSubtotal}</span>
@@ -1443,6 +1454,10 @@ export default function BookingForm({
               <button
                 type="button"
                 onClick={() => {
+                  if (!profile || !profile.full_name) {
+                    setShowLoginModal(true);
+                    return;
+                  }
                   if (activeStep < 4) {
                     setActiveStep((s) => s + 1);
                   } else {
@@ -1465,6 +1480,15 @@ export default function BookingForm({
           </div>
         </div>
       )}
+
+      {/* Login Required Modal */}
+      <LoginRequiredModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        title="Please Register or Log In First"
+        message="You can freely explore all seat rows, stage layout, and event details. Please register or log in first, then you can book seat tickets."
+        actionText="Register / Log In to Book"
+      />
     </div>
   );
 }

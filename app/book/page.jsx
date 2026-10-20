@@ -17,17 +17,6 @@ function BookContent() {
   const seatPrice = Number(searchParams.get("seatPrice")) || 0;
   const tier = searchParams.get("tier") ?? "vip";
 
-  // Check if profile exists; if not, redirect immediately to /profile?redirect=...
-  useEffect(() => {
-    const profile = getSavedCustomerProfile();
-    if (!profile || !profile.full_name) {
-      if (typeof window !== "undefined") {
-        const fullCurrentPath = window.location.pathname + window.location.search;
-        router.push(`/profile?redirect=${encodeURIComponent(fullCurrentPath)}`);
-      }
-    }
-  }, [router]);
-
   return (
     <BookingForm
       fullPage

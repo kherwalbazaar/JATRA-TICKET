@@ -17,6 +17,8 @@ import {
   blockDisplayName,
 } from "../../lib/blockCategories";
 import { getPriceForRow } from "../../lib/ticketTypes";
+import { getSavedCustomerProfile } from "../../lib/supabase";
+import LoginRequiredModal from "../components/LoginRequiredModal";
 
 function SelectSeatsContent() {
   const router = useRouter();
@@ -35,6 +37,7 @@ function SelectSeatsContent() {
   const [loading, setLoading] = useState(true);
   const [blockCats, setBlockCats] = useState([]);
   const [counterNotice, setCounterNotice] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const seatGridRef = useRef(null);
 
@@ -108,6 +111,11 @@ function SelectSeatsContent() {
 
   const toggleSeat = useCallback(
     (key) => {
+      const profile = getSavedCustomerProfile();
+      if (!profile || !profile.full_name) {
+        setShowLoginModal(true);
+        return;
+      }
       const list = seatsByBlock[activeBlock] || [];
       const fs = list.find(
         (s) =>
@@ -168,6 +176,11 @@ function SelectSeatsContent() {
   const totalAmount = selectedTotal;
 
   const handleProceed = () => {
+    const profile = getSavedCustomerProfile();
+    if (!profile || !profile.full_name) {
+      setShowLoginModal(true);
+      return;
+    }
     if (!activeBlock || selected.length === 0) return;
     if (!isOnlineBlock(activeBlock)) {
       setCounterNotice("This block is available for counter booking only. Please select another block.");
@@ -321,6 +334,15 @@ function SelectSeatsContent() {
           </div>
         )}
         {/* Counter Notice Toast */}
+        {/* Login Required Modal */}
+        <LoginRequiredModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          title="Please Register or Log In First"
+          message="You can freely explore all seat rows, stage layout, and event details. Please register or log in first, then you can book seat tickets."
+          actionText="Register / Log In to Book"
+        />
+
         {counterNotice && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-amber-500 text-slate-950 font-black text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-amber-400 animate-in fade-in slide-in-from-bottom-4">
             <div className="flex items-center gap-2.5 min-w-0">

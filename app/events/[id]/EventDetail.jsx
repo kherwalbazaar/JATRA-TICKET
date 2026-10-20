@@ -6,6 +6,7 @@ import BottomNav from "../../components/BottomNav";
 import { subscribeEvents, fetchEvents } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
 import { getSavedCustomerProfile } from "../../../lib/supabase";
+import LoginRequiredModal from "../../components/LoginRequiredModal";
 import { findParty, findPartyForEvent } from "../../../lib/parties";
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
@@ -75,6 +76,7 @@ export default function EventDetail({ id }) {
   const [allEvents, setAllEvents] = useState([]);
   const [fetching, setFetching] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +98,7 @@ export default function EventDetail({ id }) {
       } catch (e) {
         console.error("Failed to parse cached event data", e);
       }
+
     } else {
       const fallbackParty = findParty(id);
       if (fallbackParty) {
@@ -215,6 +218,14 @@ export default function EventDetail({ id }) {
           <i className={`${icon} text-4xl text-slate-300`} />
           <p className="text-sm text-slate-600 font-semibold">{message}</p>
         </div>
+        {/* Login Required Modal */}
+        <LoginRequiredModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          title="Login First to Book Tickets"
+          message="You can freely view all event details, cast, and schedules. However, you must log in to your account before you can book tickets."
+        />
+
         <BottomNav active="events" />
       </div>
     </div>
@@ -341,13 +352,10 @@ export default function EventDetail({ id }) {
     if (eventName) params.set("event", eventName);
     if (date) params.set("date", date);
     if (time) params.set("time", time);
-    const bookingUrl = `/book?${params.toString()}`;
-    const profile = getSavedCustomerProfile();
-    if (!profile || !profile.full_name) {
-      window.location.href = `/profile?redirect=${encodeURIComponent(bookingUrl)}`;
-    } else {
-      window.location.href = bookingUrl;
-    }
+    params.set("block", "B1");
+    // Direct guest navigation: unhindered view of stage and seat rows
+    const seatsUrl = `/seats?${params.toString()}`;
+    window.location.href = seatsUrl;
   };
 
   return (
@@ -805,6 +813,14 @@ export default function EventDetail({ id }) {
             </div>
           )}
         </div>
+
+        {/* Login Required Modal */}
+        <LoginRequiredModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          title="Login First to Book Tickets"
+          message="You can freely view all event details, cast, and schedules. However, you must log in to your account before you can book tickets."
+        />
 
         <BottomNav active="events" />
       </div>
