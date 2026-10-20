@@ -739,7 +739,19 @@ function SeatSelectionContent() {
           {/* Stage Area - Top Center */}
           <div className="flex flex-col items-center">
             {showBlockSelector && !loading && eventReady && (
-              <div className="w-[95%] max-w-lg bg-white rounded-2xl border border-slate-200 shadow-md px-4 py-3 flex flex-col items-center mb-4">
+              <div className="w-[95%] max-w-lg bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden mb-4">
+                <div className="bg-[#12193b] text-white px-4 py-2.5 flex items-center justify-between border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-shapes text-sky-400 text-xs" />
+                    <span className="text-xs font-black uppercase tracking-wider">Select Block</span>
+                  </div>
+                  {activeBlock && (
+                    <span className="bg-sky-500 text-slate-950 font-black text-xs px-2.5 py-0.5 rounded-md uppercase">
+                      Block {activeBlock}
+                    </span>
+                  )}
+                </div>
+                <div className="px-4 py-3 flex flex-col items-center">
                 <div className="text-center mb-3">
                   <p className="text-xs text-slate-600 font-medium">
                     {activeBlock
@@ -840,6 +852,7 @@ function SeatSelectionContent() {
                     <span className="text-sm font-black text-red-500 block">{getBlockStats(activeBlock).total - getBlockStats(activeBlock).available}</span>
                     <span className="text-[8px] font-bold text-red-400 uppercase">Booked</span>
                   </div>
+                </div>
                 </div>
               </div>
             )}
