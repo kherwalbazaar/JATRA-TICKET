@@ -1,5 +1,9 @@
 {
   "appId": "com.jatrabazaar.app",
   "appName": "JATRA BAZAAR",
-  "webDir": "out"
+  "webDir": "out",
+  "server": {
+    "url": "https://jatra-ticket.vercel.app",
+    "cleartext": true
+  }
 }
