@@ -11,6 +11,7 @@ import {
 import { getHoldSessionId } from "../../lib/seats";
 import { getSavedCustomerProfile } from "../../lib/supabase";
 import LoginRequiredModal from "../components/LoginRequiredModal";
+import FakePaymentModal from "../components/FakePaymentModal";
 
 function PaymentContent() {
   const router = useRouter();
@@ -24,7 +25,7 @@ function PaymentContent() {
   const seatPrice = Number(searchParams.get("seatPrice")) || 100;
   const customerName = searchParams.get("customerName") ?? "";
   const customerPhone = searchParams.get("customerPhone") ?? "";
-  const [paymentMethod, setPaymentMethod] = useState("paytm");
+  const [paymentMethod, setPaymentMethod] = useState("instant");
   const seatList = seats ? seats.split(",").filter(Boolean) : [];
   const seatCount = seatList.length;
   const rawTicketAmount = seatPrice * seatCount;
@@ -59,16 +60,17 @@ function PaymentContent() {
     setShowDemoModal(true);
   };
 
-  const handleConfirmDemoPayment = async () => {
+  const handleConfirmDemoPayment = async (details = {}) => {
     setPayError("");
     setLoading(true);
-    setProcessingState("Checking seat availability & holding seats...");
+    setProcessingState("Reserving seats & confirming booking...");
 
     try {
       const sessionId = getHoldSessionId();
+      const profile = getSavedCustomerProfile();
 
-      // Step 1: Create real pending booking and reserve seats in Supabase
-      const res = await fetch("/api/payment/paytm/initiate", {
+      // Direct booking endpoint with simulated payment reference
+      const res = await fetch("/api/bookings/direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -79,10 +81,13 @@ function PaymentContent() {
           block,
           seats: seatList,
           seatPrice,
-          customerName: customerName || "Customer",
-          customerPhone: customerPhone || "",
+          customerName: customerName || profile?.full_name || "Customer",
+          customerPhone: customerPhone || profile?.mobile || "9876543210",
+          customerEmail: profile?.email || null,
           holdSessionId: sessionId,
           tierName: `SEATED (${blockLabel || block})`,
+          paymentMethod: details.method ? `Simulated ${details.method.toUpperCase()}` : "Simulated UPI (Google Pay)",
+          transactionId: details.transactionId || `TXN_SIM_${Date.now()}`,
         }),
       });
 
@@ -92,48 +97,23 @@ function PaymentContent() {
         if (data.code === "SEAT_COLLISION") {
           throw new Error(data.error || "One or more selected seats were just taken by another user.");
         }
-        throw new Error(data.error || "Failed to initiate payment gateway.");
+        throw new Error(data.error || "Failed to confirm booking.");
       }
 
-      setProcessingState("Simulating payment authorization...");
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      setProcessingState("Booking Confirmed! Redirecting to ticket pass...");
 
-      setProcessingState("Payment Approved! Generating QR tickets & confirming booking...");
-
-      // Step 2: Call callback endpoint to confirm booking and generate real tickets in Supabase
-      const fakeTxnId = `SIM_TXN_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      const callbackRes = await fetch("/api/payment/paytm/callback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ORDERID: data.orderId,
-          TXNID: fakeTxnId,
-          TXNAMOUNT: String(data.amount || pricing.finalCustomerAmount.toFixed(2)),
-          CURRENCY: "INR",
-          STATUS: "TXN_SUCCESS",
-          RESPCODE: "01",
-          RESPMSG: "Txn Successful (Demo Mode)",
-          PAYMENTMODE: "UPI_DEMO",
-          BANKTXNID: `BANK_${Date.now()}`,
-          CHECKSUMHASH: `DEMO_HASH_${Date.now()}`,
-          IS_SIMULATOR: "true",
-        }),
-      });
-
-      const callbackData = await callbackRes.json().catch(() => null);
-
-      // Step 3: Redirect to confirmed ticket status page
+      // Redirect to confirmed ticket status page
       const targetUrl =
-        callbackData?.redirectUrl ||
+        data.redirectUrl ||
         `/payment/status?orderId=${encodeURIComponent(data.orderId)}&status=success`;
 
       router.push(targetUrl);
     } catch (err) {
-      console.error("Payment initiation error:", err);
+      console.error("Booking confirmation error:", err);
       setLoading(false);
       setProcessingState("");
       setShowDemoModal(false);
-      setPayError(err.message || "Failed to initiate payment. Please try again.");
+      setPayError(err.message || "Failed to confirm booking. Please try again.");
     }
   };
 
@@ -247,7 +227,7 @@ function PaymentContent() {
                 </span>
               </div>
             </div>
-            <input type="radio" checked={paymentMethod === "demo" || paymentMethod === "paytm"} readOnly className="text-indigo-600 focus:ring-indigo-500" />
+            <input type="radio" checked={paymentMethod === "demo" || paymentMethod === "instant"} readOnly className="text-indigo-600 focus:ring-indigo-500" />
           </label>
         </div>
 
@@ -321,116 +301,21 @@ function PaymentContent() {
         </button>
       </div>
 
-      {/* ── DEMO PAYMENT NOTICE & CONFIRMATION MODAL ── */}
-      {showDemoModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 p-5 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white text-lg shadow-inner">
-                  <i className="fa-solid fa-shield-heart" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black tracking-tight leading-tight">Demo Payment Mode</h3>
-                  <p className="text-[11px] text-amber-100 font-semibold">Safe Simulation • Real Seat Booking</p>
-                </div>
-              </div>
-              {!loading && (
-                <button
-                  onClick={() => setShowDemoModal(false)}
-                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-xs transition-colors"
-                >
-                  <i className="fa-solid fa-xmark" />
-                </button>
-              )}
-            </div>
+      {/* ── SIMULATED / FAKE PAYMENT GATEWAY MODAL ── */}
+      <FakePaymentModal
+        isOpen={showDemoModal}
+        onClose={() => setShowDemoModal(false)}
+        onConfirmPayment={handleConfirmDemoPayment}
+        amount={pricing.finalCustomerAmount}
+        eventName={eventName || "Jatra Show"}
+        block={blockLabel || block}
+        seats={seatList}
+        customerName={customerName || "Customer"}
+        customerPhone={customerPhone || ""}
+        loading={loading}
+        processingState={processingState}
+      />
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-4">
-              {/* Prominent Notice Card */}
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
-                  <i className="fa-solid fa-circle-exclamation text-amber-600 text-sm" />
-                  <span>No Real Money Will Be Deducted</span>
-                </div>
-                <p className="text-xs text-amber-900/90 leading-relaxed font-medium">
-                  This is a <strong>demonstration payment mode</strong> for testing. No real money will be charged or deducted from your bank account, credit/debit card, or UPI wallet.
-                </p>
-                <div className="pt-2 border-t border-amber-200/60 flex items-center gap-1.5 text-[11px] text-emerald-800 font-bold">
-                  <i className="fa-solid fa-circle-check text-emerald-600" />
-                  <span>Your seats and official QR tickets will be booked for real!</span>
-                </div>
-              </div>
-
-              {/* Booking Summary Mini-Table */}
-              <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/70 space-y-2 text-xs">
-                <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
-                  <span className="text-slate-500 font-medium">Event</span>
-                  <span className="font-bold text-slate-800 truncate max-w-[65%]">{eventName || "Jatra Show"}</span>
-                </div>
-                <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
-                  <span className="text-slate-500 font-medium">Block & Seats</span>
-                  <span className="font-bold text-amber-800">
-                    {blockLabel || block} • {seatList.join(", ")} ({seatCount})
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60">
-                  <span className="text-slate-500 font-medium">Customer</span>
-                  <span className="font-semibold text-slate-700">
-                    {customerName || "Customer"} ({customerPhone || "N/A"})
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-0.5">
-                  <span className="text-slate-700 font-bold">Total Amount</span>
-                  <div className="text-right">
-                    <span className="text-base font-black text-emerald-600">
-                      ₹{pricing.finalCustomerAmount.toFixed(2)}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-semibold block leading-none">
-                      (Simulated)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Indicator (if loading) */}
-              {loading ? (
-                <div className="py-4 flex flex-col items-center justify-center space-y-3">
-                  <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                  <div className="text-center space-y-1">
-                    <p className="text-xs font-black text-slate-800">
-                      {processingState || "Processing Demo Payment..."}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-semibold">
-                      Please do not refresh. Confirming seats and issuing tickets...
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={handleConfirmDemoPayment}
-                    disabled={loading}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-sm py-3.5 rounded-2xl shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer"
-                  >
-                    <i className="fa-solid fa-circle-check text-xs" />
-                    <span>Confirm & Pay (Demo Mode)</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowDemoModal(false)}
-                    disabled={loading}
-                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {/* Login Required Modal */}
       <LoginRequiredModal
         isOpen={showLoginModal}

@@ -16,6 +16,7 @@ import { calculateCustomerCharges } from "../../lib/pricing";
 import {
   getSavedCustomerProfile,
   getActiveCustomerProfile,
+  recordCustomerVisit,
 } from "../../lib/supabase";
 import {
   subscribeBlockCategories,
@@ -27,6 +28,7 @@ import { subscribeTicketTypes, getPriceForRow } from "../../lib/ticketTypes";
 import UserSeatGrid from "./UserSeatGrid";
 import BlockCategoryDiagram from "./BlockCategoryDiagram";
 import LoginRequiredModal from "./LoginRequiredModal";
+import FakePaymentModal from "./FakePaymentModal";
 
 export const bookingTiers = [
   { id: "standing", name: "STANDING", price: 50, gate: "Gate A" },
@@ -78,11 +80,13 @@ export default function BookingForm({
   );
 
   // Payment & Submission States
-  const [paymentMethod, setPaymentMethod] = useState("phonepe");
+  const [paymentMethod, setPaymentMethod] = useState("direct");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingConfirmed, setBookingConfirmed] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showFakePayModal, setShowFakePayModal] = useState(false);
+  const [fakePayState, setFakePayState] = useState("");
 
   // 1. Subscribe to Live Block Categories
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
@@ -134,6 +138,12 @@ export default function BookingForm({
           setProfile(saved);
           setProfileLoading(false);
         }
+        if (saved.mobile) {
+          try {
+            window.localStorage.setItem("jatra:customer_mobile", String(saved.mobile).replace(/\D/g, "").slice(-10));
+          } catch (e) {}
+        }
+        recordCustomerVisit();
         return;
       }
 
@@ -142,6 +152,12 @@ export default function BookingForm({
         if (active && active.full_name) {
           setProfile(active);
           setProfileLoading(false);
+          if (active.mobile) {
+            try {
+              window.localStorage.setItem("jatra:customer_mobile", String(active.mobile).replace(/\D/g, "").slice(-10));
+            } catch (e) {}
+          }
+          recordCustomerVisit();
         } else {
           setProfileLoading(false);
         }
@@ -421,8 +437,17 @@ export default function BookingForm({
     if (!isStep4Enabled) return;
     if (isSubmitting) return;
 
+    if (paymentMethod === "counter") {
+      await handleExecuteBooking({ method: "Pay at Counter" });
+    } else {
+      setShowFakePayModal(true);
+    }
+  };
+
+  const handleExecuteBooking = async (details = {}) => {
     setIsSubmitting(true);
     setErrorMessage("");
+    setFakePayState("Reserving seats and confirming ticket...");
 
     try {
       // Revalidate and normalize seat keys
@@ -444,9 +469,9 @@ export default function BookingForm({
 
       const blockLabel = getBlockName(activeBlock) || activeBlock;
 
-      // 1. Connect to Paytm Gateway initiation
+      // Direct Booking confirmation with simulated payment details
       const sessionId = getHoldSessionId();
-      const res = await fetch("/api/payment/paytm/initiate", {
+      const res = await fetch("/api/bookings/direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -458,10 +483,12 @@ export default function BookingForm({
           seats: displaySeats,
           seatPrice,
           customerName: profile?.full_name || "Customer",
-          customerPhone: profile?.mobile || "",
+          customerPhone: profile?.mobile || "9876543210",
           customerEmail: profile?.email || null,
           holdSessionId: sessionId,
           tierName: `${selectedTierName || "SEATED"} (${blockLabel})`,
+          paymentMethod: details.method ? `Simulated ${details.method.toUpperCase()}` : "Simulated UPI (Google Pay)",
+          transactionId: details.transactionId || `TXN_SIM_${Date.now()}`,
         }),
       });
 
@@ -470,7 +497,7 @@ export default function BookingForm({
         if (data.code === "SEAT_COLLISION") {
           setActiveStep(1);
         }
-        throw new Error(data.error || "Failed to initiate payment gateway.");
+        throw new Error(data.error || "Failed to confirm booking.");
       }
 
       // Clear hold session storage
@@ -480,43 +507,17 @@ export default function BookingForm({
         }
       } catch (e) {}
 
-      // If in Simulator Mode (Staging testing)
-      if (data.isSimulator && data.simulatorUrl) {
-        router.push(data.simulatorUrl);
-        return;
-      }
+      setFakePayState("Booking Confirmed! Redirecting to ticket pass...");
 
-      // If Live / Staging Gateway: Auto-submit POST form
-      if (data.gatewayUrl && (data.formParams || data.txnToken)) {
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = data.gatewayUrl;
-        form.name = "paytmForm";
-
-        const fields = data.formParams || {
-          mid: data.mid,
-          orderId: data.orderId,
-          txnToken: data.txnToken,
-        };
-
-        for (const [key, value] of Object.entries(fields)) {
-          if (value !== undefined && value !== null) {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = key;
-            input.value = String(value);
-            form.appendChild(input);
-          }
-        }
-
-        document.body.appendChild(form);
-        form.submit();
-        return;
-      }
-
-      throw new Error("Invalid payment gateway parameters returned by server.");
+      // Direct success redirect to ticket confirmation
+      const targetUrl =
+        data.redirectUrl ||
+        `/payment/status?orderId=${encodeURIComponent(data.orderId)}&status=success`;
+      router.push(targetUrl);
+      return;
     } catch (err) {
       console.error("Booking confirmation error:", err);
+      setShowFakePayModal(false);
       if (err?.code === "SEAT_COLLISION") {
         setErrorMessage(
           err.message ||
@@ -1305,43 +1306,33 @@ export default function BookingForm({
           {/* Section Body */}
           {activeStep === 4 && isStep3Completed && (
             <div className="p-4 space-y-4">
-              {/* Payment Methods */}
+              {/* Booking & Confirmation Method */}
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  Select Payment Method:
+                  Select Booking Method:
                 </p>
                 <div className="space-y-2">
                   {[
                     {
-                      id: "phonepe",
-                      name: "PhonePe UPI",
-                      badge: "Fastest",
-                      icon: "fa-mobile-screen-button text-purple-600",
+                      id: "direct",
+                      name: "Direct Instant Booking",
+                      badge: "Active • Direct",
+                      description: "Direct ticket confirmation without payment gateway",
+                      icon: "fa-bolt-lightning text-amber-500",
                     },
                     {
-                      id: "gpay",
-                      name: "Google Pay",
-                      badge: "UPI",
-                      icon: "fa-google-pay text-sky-600",
-                    },
-                    {
-                      id: "paytm",
-                      name: "Paytm / UPI",
-                      badge: "UPI",
-                      icon: "fa-wallet text-blue-600",
-                    },
-                    {
-                      id: "qr",
-                      name: "Dynamic UPI QR",
-                      badge: "Scan & Pay",
-                      icon: "fa-qrcode text-slate-700",
+                      id: "counter",
+                      name: "Pay at Entry Gate / Counter",
+                      badge: "Available",
+                      description: "Book seats now, show e-ticket and pay at counter",
+                      icon: "fa-store text-emerald-600",
                     },
                   ].map((m) => (
                     <label
                       key={m.id}
                       onClick={() => setPaymentMethod(m.id)}
                       className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
-                        paymentMethod === m.id
+                        paymentMethod === m.id || (paymentMethod !== "counter" && m.id === "direct")
                           ? "border-indigo-600 bg-indigo-50/40 shadow-xs"
                           : "border-slate-200 bg-white hover:border-slate-300"
                       }`}
@@ -1355,13 +1346,13 @@ export default function BookingForm({
                             {m.name}
                           </p>
                           <span className="text-[9px] font-bold text-slate-400">
-                            {m.badge}
+                            {m.description}
                           </span>
                         </div>
                       </div>
                       <input
                         type="radio"
-                        checked={paymentMethod === m.id}
+                        checked={paymentMethod === m.id || (paymentMethod !== "counter" && m.id === "direct")}
                         readOnly
                         className="text-indigo-600 focus:ring-indigo-500"
                       />
@@ -1371,10 +1362,10 @@ export default function BookingForm({
               </div>
 
               {/* Safety notice */}
-              <div className="flex items-center gap-2 bg-slate-50 rounded-xl p-2.5 text-[10px] text-slate-500 font-medium">
-                <i className="fa-solid fa-shield-halved text-emerald-600 text-xs" />
+              <div className="flex items-center gap-2 bg-emerald-50 rounded-xl p-2.5 text-[10px] text-emerald-800 font-semibold border border-emerald-200/60">
+                <i className="fa-solid fa-circle-check text-emerald-600 text-xs" />
                 <span>
-                  100% Secure reservation verified atomically via Supabase & system.
+                  Direct Booking Enabled: Your seats are reserved and tickets issued immediately.
                 </span>
               </div>
 
@@ -1388,13 +1379,13 @@ export default function BookingForm({
                 {isSubmitting ? (
                   <>
                     <i className="fa-solid fa-spinner fa-spin text-sm" />
-                    <span>Connecting to Paytm Gateway...</span>
+                    <span>Confirming & Booking Ticket...</span>
                   </>
                 ) : (
                   <>
-                    <i className="fa-solid fa-lock text-xs" />
+                    <i className="fa-solid fa-ticket text-xs" />
                     <span>
-                      Pay via Paytm Gateway &bull; ₹{totalAmountPayable.toFixed(2)}
+                      Confirm & Book Ticket &bull; ₹{totalAmountPayable.toFixed(2)}
                     </span>
                     <i className="fa-solid fa-chevron-right text-xs ml-0.5" />
                   </>
@@ -1480,6 +1471,21 @@ export default function BookingForm({
           </div>
         </div>
       )}
+
+      {/* Fake Payment Modal */}
+      <FakePaymentModal
+        isOpen={showFakePayModal}
+        onClose={() => setShowFakePayModal(false)}
+        onConfirmPayment={handleExecuteBooking}
+        amount={totalAmountPayable}
+        eventName={resolvedEventName}
+        block={getBlockName(activeBlock) || activeBlock}
+        seats={selectedSeats}
+        customerName={profile?.full_name || "Customer"}
+        customerPhone={profile?.mobile || ""}
+        loading={isSubmitting}
+        processingState={fakePayState}
+      />
 
       {/* Login Required Modal */}
       <LoginRequiredModal

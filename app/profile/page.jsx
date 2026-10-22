@@ -7,6 +7,7 @@ import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import {
   signInWithGoogle,
+  quickDemoGoogleLogin,
   signInWithEmail,
   signUpWithEmail,
   resetPassword,
@@ -16,6 +17,7 @@ import {
   logoutCustomer,
   getSavedCustomerProfile,
   sbFetchBookingsByPhone,
+  recordCustomerVisit,
   supabase,
 } from "../../lib/supabase";
 
@@ -151,41 +153,47 @@ function ProfileContent() {
       setPhotoInput(existingProfile.profile_photo || googlePhoto);
       setMobileInput(existingProfile.mobile || userMobile || "");
       setStep("VIEW_PROFILE");
+      if (existingProfile.mobile) {
+        try {
+          window.localStorage.setItem("jatra:customer_mobile", String(existingProfile.mobile).replace(/\D/g, "").slice(-10));
+        } catch (e) {}
+      }
+      recordCustomerVisit();
       if (existingProfile.mobile || userMobile) {
         loadCustomerStats(existingProfile.mobile || userMobile);
       }
 
-      // If user came from a booking flow with complete profile, redirect back immediately
-      if (redirectUrl && (existingProfile.full_name || "").trim() && (existingProfile.mobile || userMobile)) {
+      // If user came from a booking flow, redirect back immediately
+      if (redirectUrl && (existingProfile.full_name || existingProfile.email)) {
         router.replace(redirectUrl);
         return;
       }
     } else {
-      // First-time user: prepopulate name, email, avatar, mobile from metadata
-      setFullNameInput(googleName);
+      // First-time Google / OAuth customer: auto-complete profile
+      const effectiveName = (googleName || (googleEmail ? googleEmail.split("@")[0] : "Google Customer")).trim();
+      const cleanMobile = userMobile ? userMobile.replace(/\D/g, "").slice(-10) : "";
+      setFullNameInput(effectiveName);
       setEmailInput(googleEmail);
       setPhotoInput(googlePhoto);
-      setMobileInput(userMobile || "");
+      setMobileInput(cleanMobile || "");
 
-      // If both name and mobile are already present (e.g. from sign up), auto-complete profile
-      if (googleName.trim() && userMobile.replace(/\D/g, "").slice(-10).length === 10) {
-        try {
-          const saved = await saveCustomerProfile({
-            id: userId,
-            mobile: userMobile.replace(/\D/g, "").slice(-10),
-            full_name: googleName.trim(),
-            email: googleEmail || null,
-            profile_photo: googlePhoto || null,
-          });
-          setProfile(saved);
-          setStep("VIEW_PROFILE");
-          loadCustomerStats(userMobile);
-          if (redirectUrl) {
-            router.replace(redirectUrl);
-            return;
-          }
+      try {
+        const saved = await saveCustomerProfile({
+          id: userId,
+          mobile: cleanMobile || null,
+          full_name: effectiveName,
+          email: googleEmail || null,
+          profile_photo: googlePhoto || null,
+        });
+        setProfile(saved);
+        setStep("VIEW_PROFILE");
+        if (cleanMobile) loadCustomerStats(cleanMobile);
+        if (redirectUrl) {
+          router.replace(redirectUrl);
           return;
-        } catch (e) {}
+        }
+      } catch (e) {
+        console.warn("Auto-save Google profile notice:", e);
       }
 
       setStep("COMPLETE_PROFILE");
@@ -219,6 +227,7 @@ function ProfileContent() {
             if (cached.mobile) {
               loadCustomerStats(cached.mobile);
             }
+            recordCustomerVisit();
           } else {
             setStep("SIGN_IN");
           }
@@ -339,6 +348,27 @@ function ProfileContent() {
       await signInWithGoogle(target);
     } catch (err) {
       setErrorMsg(err.message || "Failed to initialize Google Sign In.");
+      setLoading(false);
+    }
+  };
+
+  // Instant 1-Click Demo Google Login for rapid testing
+  const handleQuickDemoLogin = async () => {
+    setErrorMsg("");
+    setLoading(true);
+    try {
+      const demo = await quickDemoGoogleLogin();
+      setProfile(demo);
+      setFullNameInput(demo.full_name);
+      setEmailInput(demo.email);
+      setMobileInput(demo.mobile);
+      setStep("VIEW_PROFILE");
+      if (redirectUrl) {
+        router.replace(redirectUrl);
+      }
+    } catch (err) {
+      setErrorMsg("Quick login failed. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
@@ -744,6 +774,17 @@ function ProfileContent() {
                     <span className="text-slate-800 text-xs font-black tracking-tight">
                       {loading ? "Connecting to Google..." : "Continue with Google"}
                     </span>
+                  </button>
+
+                  {/* Fast 1-Click Demo Google Account for Instant Testing */}
+                  <button
+                    type="button"
+                    onClick={handleQuickDemoLogin}
+                    disabled={loading}
+                    className="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-[0.98] text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-bolt text-amber-300" />
+                    <span>Instant 1-Click Test Login (Google Demo)</span>
                   </button>
                 </div>
 

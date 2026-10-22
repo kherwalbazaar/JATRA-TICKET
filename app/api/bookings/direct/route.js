@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
-import { initiatePaytmTransaction } from "@/lib/server/paytm";
 import { calculateCustomerCharges } from "@/lib/pricing";
+import { firestore } from "@/lib/firebase";
+import { doc, setDoc, writeBatch } from "firebase/firestore";
+import crypto from "crypto";
 
 function isHoldFresh(reservedAt) {
   if (!reservedAt) return false;
   const at = Date.parse(reservedAt);
   if (Number.isNaN(at)) return false;
   return Date.now() - at < 10 * 60 * 1000;
+}
+
+function generateQrToken() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  return "tkn_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 async function getNextTicketNumber() {
@@ -131,13 +140,13 @@ export async function POST(request) {
       }
     }
 
-    // 3. Server-side Pricing Calculation (Tamper-proof)
+    // 3. Pricing Calculation
     const unitPrice = Number(seatPrice) || 100;
     const rawTicketAmount = unitPrice * seatList.length;
     const pricing = calculateCustomerCharges(rawTicketAmount);
     const finalAmount = pricing.finalCustomerAmount;
 
-    // 4. Unique Order ID & Sequential Ticket Number
+    // 4. Order ID & Ticket Number
     const orderId = `JB_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const ticketNumber = await getNextTicketNumber();
     const nowIso = new Date().toISOString();
@@ -145,8 +154,9 @@ export async function POST(request) {
     const bookingDate = date || new Date().toISOString().slice(0, 10);
     const bookingTime = time || "11:00 PM";
     const resolvedEventName = eventName || "Jatra Show";
+    const assignedGate = cleanBlock ? `Block ${cleanBlock}` : "Main Gate";
 
-    // 5. Create Pending Booking in Supabase (NO tickets created yet!)
+    // 5. Create Confirmed Booking in Supabase
     const bookingRow = {
       id: orderId,
       ticket_number: ticketNumber,
@@ -167,11 +177,12 @@ export async function POST(request) {
       total_fees: pricing.totalFees,
       final_customer_amount: finalAmount,
       source: "Online",
-      payment_method: "UPI",
+      payment_method: "Direct Booking",
       payment_channel: "Online",
-      status: "Pending",
-      booking_status: "Pending",
-      payment_status: "Pending",
+      payment_date: nowIso,
+      status: "Confirmed",
+      booking_status: "Confirmed",
+      payment_status: "Successful",
       date: bookingDate,
       time: bookingTime,
       block: cleanBlock || null,
@@ -180,6 +191,7 @@ export async function POST(request) {
       seat_count: seatList.length,
       entered_count: 0,
       remaining_count: seatList.length,
+      assigned_gate: assignedGate,
       created_at: nowIso,
       updated_at: nowIso,
     };
@@ -189,55 +201,197 @@ export async function POST(request) {
       .insert([bookingRow]);
 
     if (bookingErr) {
-      console.error("Failed to insert pending booking in Supabase:", bookingErr.message);
+      console.error("Failed to insert booking in Supabase:", bookingErr.message);
       return NextResponse.json(
-        { success: false, error: `Failed to initiate booking: ${bookingErr.message}` },
+        { success: false, error: `Failed to create booking: ${bookingErr.message}` },
         { status: 500 }
       );
     }
 
-    // 6. Hold seats for this order in Supabase
+    // 6. Update seats in Supabase to "booked"
     for (const seatKey of seatList) {
       const cleanKey = String(seatKey).trim();
       await supabaseAdmin
         .from("seats")
         .update({
-          status: "reserved",
-          reserved_at: nowIso,
-          reserved_by: orderId,
+          status: "booked",
+          booked_at: nowIso,
+          booking_id: ticketNumber,
+          reserved_at: null,
+          reserved_by: null,
           updated_at: nowIso,
         })
         .eq("event_id", eventId)
         .or(`id.eq.${cleanKey},seat_label.eq.${cleanKey}`);
     }
 
-    // 7. Initiate Paytm Transaction
-    const paytmResult = await initiatePaytmTransaction({
-      orderId,
-      amount: finalAmount,
-      customerId: `CUST_${customerPhone.replace(/\D/g, "").slice(-10) || orderId}`,
-      mobile: customerPhone,
-      email: customerEmail,
-    });
+    // 7. Insert Individual Tickets in Supabase
+    const ticketCount = seatList.length;
+    const ticketRows = [];
+    const individualTicketIds = [];
+
+    for (let i = 0; i < ticketCount; i++) {
+      const individualTicketId =
+        ticketCount === 1 ? ticketNumber : `${ticketNumber}-${i + 1}`;
+      individualTicketIds.push(individualTicketId);
+      const individualSeat = seatList[i] || null;
+      const qrToken = generateQrToken();
+
+      ticketRows.push({
+        id: individualTicketId,
+        ticket_id: individualTicketId,
+        booking_id: ticketNumber,
+        booking_doc_id: orderId,
+        ticket_index: i + 1,
+        total_tickets: ticketCount,
+        event_id: eventId,
+        event_name: resolvedEventName,
+        ticket_type_name: tierName || "SEATED",
+        seat: individualSeat,
+        seat_index: i + 1,
+        seat_count: ticketCount,
+        block: cleanBlock || null,
+        assigned_gate: assignedGate,
+        customer_name: bookingRow.customer_name,
+        customer_phone: bookingRow.customer_phone,
+        serial_number: individualTicketId,
+        qr_token: qrToken,
+        status: "ACTIVE",
+        date: bookingDate,
+        time: bookingTime,
+        unit_price: unitPrice,
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+    }
+
+    const { error: ticketsInsertErr } = await supabaseAdmin
+      .from("tickets")
+      .upsert(ticketRows);
+
+    if (ticketsInsertErr) {
+      console.error("Failed to insert tickets in Supabase:", ticketsInsertErr.message);
+    }
+
+    // 8. Update event stats in Supabase
+    try {
+      const { data: eventData } = await supabaseAdmin
+        .from("events")
+        .select("tickets_sold, total_revenue")
+        .eq("id", eventId)
+        .single();
+
+      if (eventData) {
+        const nextSold = (Number(eventData.tickets_sold) || 0) + ticketCount;
+        const nextRev = (Number(eventData.total_revenue) || 0) + finalAmount;
+        await supabaseAdmin
+          .from("events")
+          .update({
+            tickets_sold: nextSold,
+            total_revenue: nextRev,
+            updated_at: nowIso,
+          })
+          .eq("id", eventId);
+      }
+    } catch (evErr) {
+      console.warn("Failed to update event revenue:", evErr?.message);
+    }
+
+    // 9. DUAL-WRITE TO FIRESTORE:
+    // This guarantees that JATRA BAZAAR ADMIN and SCANNER immediately see the booking and tickets in real time!
+    try {
+      const batch = writeBatch(firestore);
+
+      // Firestore booking doc
+      const fsBookingRef = doc(firestore, "bookings", orderId);
+      const fsBookingData = {
+        id: orderId,
+        bookingId: ticketNumber,
+        ticketNumber: ticketNumber,
+        showId: eventId,
+        eventId: eventId,
+        eventName: resolvedEventName,
+        customerName: bookingRow.customer_name,
+        customerPhone: bookingRow.customer_phone,
+        customerEmail: bookingRow.customer_email,
+        ticketTypeName: tierName || "SEATED",
+        quantity: ticketCount,
+        unitPrice: unitPrice,
+        amount: finalAmount,
+        ticketAmount: pricing.ticketAmount,
+        finalCustomerAmount: finalAmount,
+        source: "Online",
+        paymentMethod: "Direct Booking",
+        status: "Confirmed",
+        bookingStatus: "Confirmed",
+        paymentStatus: "Successful",
+        date: bookingDate,
+        time: bookingTime,
+        assignedGate: assignedGate,
+        block: cleanBlock,
+        seats: seatList,
+        seatNumber: seatList.join(", "),
+        seatCount: ticketCount,
+        enteredCount: 0,
+        remainingCount: ticketCount,
+        usedTickets: [],
+        usedSeats: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      batch.set(fsBookingRef, fsBookingData, { merge: true });
+
+      // Firestore tickets
+      for (const t of ticketRows) {
+        const fsTicketRef = doc(firestore, "tickets", t.id);
+        batch.set(
+          fsTicketRef,
+          {
+            id: t.id,
+            ticketId: t.ticket_id,
+            bookingId: t.booking_id,
+            bookingDocId: t.booking_doc_id,
+            ticketIndex: t.ticket_index,
+            totalTickets: t.total_tickets,
+            eventId: t.event_id,
+            eventName: t.event_name,
+            ticketTypeName: t.ticket_type_name,
+            seat: t.seat,
+            seatIndex: t.seat_index,
+            seatCount: t.seat_count,
+            block: t.block,
+            assignedGate: t.assigned_gate,
+            customerName: t.customer_name,
+            customerPhone: t.customer_phone,
+            serialNumber: t.serial_number,
+            qrToken: t.qr_token,
+            status: "ACTIVE",
+            date: t.date,
+            time: t.time,
+            unitPrice: t.unit_price,
+            createdAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+
+      await batch.commit();
+    } catch (fsErr) {
+      console.warn("Firestore dual-write notice:", fsErr?.message);
+    }
 
     return NextResponse.json({
       success: true,
       orderId,
       ticketNumber,
       amount: finalAmount,
-      pricing,
-      txnToken: paytmResult.txnToken,
-      mid: paytmResult.mid,
-      gatewayUrl: paytmResult.gatewayUrl,
-      formParams: paytmResult.formParams,
-      callbackUrl: paytmResult.callbackUrl,
-      isSimulator: paytmResult.isSimulator,
-      simulatorUrl: paytmResult.simulatorUrl,
+      seats: seatList,
+      redirectUrl: `/payment/status?orderId=${encodeURIComponent(orderId)}&status=success`,
     });
   } catch (err) {
-    console.error("API /api/payment/paytm/initiate error:", err);
+    console.error("Direct booking error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to initiate payment." },
+      { success: false, error: err.message || "Failed to complete direct booking." },
       { status: 500 }
     );
   }

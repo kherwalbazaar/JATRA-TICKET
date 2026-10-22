@@ -14,7 +14,7 @@ import {
 } from "../../lib/bookings";
 import { subscribeEvents } from "../../lib/events";
 import { ticketQrUrl } from "../../lib/ticket-qr";
-import { getSavedCustomerProfile, getActiveCustomerProfile } from "../../lib/supabase";
+import { getSavedCustomerProfile, getActiveCustomerProfile, recordCustomerVisit } from "../../lib/supabase";
 
 const cardGradients = [
   "bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-500",
@@ -82,9 +82,10 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
     if (ticketsForBooking.length === 0) {
       const seats = Array.isArray(b.seats) ? b.seats.filter(Boolean) : [];
       const count = seats.length || Number(b.quantity) || 1;
-      const bUsedTickets = (Array.isArray(b.usedTickets) ? b.usedTickets : []).map((s) => String(s).toUpperCase());
-      const bUsedSeats = (Array.isArray(b.usedSeats) ? b.usedSeats : []).map((s) => String(s).toUpperCase());
-      const effectiveUsedCount = Number(b.usedCount || 0);
+      const bUsedTickets = (Array.isArray(b.usedTickets || b.used_tickets) ? (b.usedTickets || b.used_tickets) : []).map((s) => String(s).toUpperCase());
+      const bUsedSeats = (Array.isArray(b.usedSeats || b.used_seats) ? (b.usedSeats || b.used_seats) : []).map((s) => String(s).toUpperCase());
+      const effectiveUsedCount = Number(b.usedCount || b.used_count || b.entered_count || 0);
+      const bRawStatus = String(b.status || b.booking_status || b.bookingStatus || "").toLowerCase();
 
       ticketsForBooking = Array.from({ length: count }, (_, i) => {
         const seat = seats[i] || null;
@@ -99,7 +100,7 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
           isUsed = true;
         } else if (effectiveUsedCount > 0 && i < effectiveUsedCount) {
           isUsed = true;
-        } else if (count === 1 && (b.status === "Checked-in" || b.status === "Used")) {
+        } else if (count === 1 && (bRawStatus === "checked-in" || bRawStatus === "used" || bRawStatus === "entered" || usedCodesSet.has(String(b.ticketNumber || "").toUpperCase()))) {
           isUsed = true;
         }
 
@@ -129,12 +130,15 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
       // Map stored tickets
       ticketsForBooking = ticketsForBooking.map((t, idx) => {
         const derived = getTicketStatus(t, usedCodesSet, b);
+        const tStatus = String(t.status || "").toUpperCase();
+        const isActuallyUsed = derived === "used" || tStatus === "ENTERED" || tStatus === "USED";
         return {
           ...t,
           ticketNumber: t.ticketId || t.ticketNumber || t.id,
           seatIndex: t.ticketIndex || idx + 1,
           seatCount: ticketsForBooking.length,
-          derivedStatus: derived,
+          status: isActuallyUsed ? "ENTERED" : t.status || "ACTIVE",
+          derivedStatus: isActuallyUsed ? "used" : derived,
         };
       });
     }
@@ -142,7 +146,7 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
     // Sort tickets by sequence
     ticketsForBooking.sort((a, b) => (a.seatIndex || a.ticketIndex || 0) - (b.seatIndex || b.ticketIndex || 0));
 
-    const enteredCount = ticketsForBooking.filter((t) => t.derivedStatus === "used" || t.status === "ENTERED").length;
+    const enteredCount = ticketsForBooking.filter((t) => t.derivedStatus === "used" || t.status === "ENTERED" || t.status === "USED").length;
     const totalCount = ticketsForBooking.length;
     const remainingCount = Math.max(0, totalCount - enteredCount);
 
@@ -173,6 +177,7 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    recordCustomerVisit();
     let unsubBookings = () => {};
     let unsubTickets = () => {};
     let unsubEntries = () => {};
@@ -231,12 +236,15 @@ export default function TicketsPage() {
   const usedCodesSet = useMemo(() => {
     const set = new Set();
     ticketEntries.forEach((entry) => {
-      const status = String(entry.status || entry.entryStatus || "").toLowerCase();
-      const result = String(entry.scanResult || "").toUpperCase();
-      if (status === "entered" || result === "SUCCESS" || !status) {
-        if (entry.ticketNumber) set.add(String(entry.ticketNumber).toUpperCase());
-        if (entry.ticketId) set.add(String(entry.ticketId).toUpperCase());
-        if (entry.bookingId) set.add(String(entry.bookingId).toUpperCase());
+      const status = String(entry.status || entry.entryStatus || entry.entry_status || "").toLowerCase();
+      const result = String(entry.scanResult || entry.scan_result || "").toUpperCase();
+      if (status === "entered" || status === "used" || result === "SUCCESS" || !status) {
+        const tNum = String(entry.ticketNumber || entry.ticket_number || "").trim().toUpperCase();
+        const tId = String(entry.ticketId || entry.ticket_id || entry.id || "").trim().toUpperCase();
+        const bId = String(entry.bookingId || entry.booking_id || "").trim().toUpperCase();
+        if (tNum) set.add(tNum);
+        if (tId) set.add(tId);
+        if (bId) set.add(bId);
       }
     });
     return set;
@@ -255,15 +263,17 @@ export default function TicketsPage() {
   }, []);
 
   const userMobile = profile?.mobile ? String(profile.mobile).replace(/\D/g, "").slice(-10) : "";
+  const userEmail = (profile?.email || "").toLowerCase().trim();
 
   const userBookings = useMemo(() => {
-    if (!userMobile) return bookings;
+    if (!userMobile && !userEmail) return bookings;
     const matched = bookings.filter((b) => {
       const bPhone = String(b.customerPhone || b.customer_phone || "").replace(/\D/g, "").slice(-10);
-      return bPhone && bPhone === userMobile;
+      const bEmail = String(b.customerEmail || b.customer_email || "").toLowerCase().trim();
+      return (userMobile && bPhone === userMobile) || (userEmail && bEmail === userEmail);
     });
     return matched.length > 0 ? matched : bookings;
-  }, [bookings, userMobile]);
+  }, [bookings, userMobile, userEmail]);
 
   const bookingGroups = useMemo(() => {
     return buildBookingTicketGroups(userBookings, storedTickets, usedCodesSet, ticketEntries, eventsMap);

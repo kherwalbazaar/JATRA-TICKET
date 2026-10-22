@@ -243,12 +243,12 @@ export default function TicketDetailPage({ params }) {
         const set = new Set();
         const map = new Map();
         entries.forEach((entry) => {
-          const status = String(entry.status || entry.entryStatus || "").toLowerCase();
-          const result = String(entry.scanResult || "").toUpperCase();
-          if (status === "entered" || result === "SUCCESS" || !status) {
-            const tNum = String(entry.ticketNumber || entry.ticket_number || "").toUpperCase();
-            const tId = String(entry.ticketId || entry.ticket_id || entry.id || "").toUpperCase();
-            const bId = String(entry.bookingId || entry.booking_id || "").toUpperCase();
+          const status = String(entry.status || entry.entryStatus || entry.entry_status || "").toLowerCase();
+          const result = String(entry.scanResult || entry.scan_result || "").toUpperCase();
+          if (status === "entered" || status === "used" || result === "SUCCESS" || !status) {
+            const tNum = String(entry.ticketNumber || entry.ticket_number || "").trim().toUpperCase();
+            const tId = String(entry.ticketId || entry.ticket_id || entry.id || "").trim().toUpperCase();
+            const bId = String(entry.bookingId || entry.booking_id || "").trim().toUpperCase();
             if (tNum) { set.add(tNum); map.set(tNum, entry); }
             if (tId) { set.add(tId); map.set(tId, entry); }
             if (bId) { set.add(bId); map.set(bId, entry); }

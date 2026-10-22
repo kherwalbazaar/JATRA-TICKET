@@ -26,7 +26,7 @@ function StatusContent() {
     }
     setChecking(true);
     try {
-      const res = await fetch(`/api/payment/paytm/status?orderId=${encodeURIComponent(orderId)}`);
+      const res = await fetch(`/api/payment/status?orderId=${encodeURIComponent(orderId)}`);
       const data = await res.json();
       if (data.success && data.booking) {
         setBooking(data.booking);
@@ -135,16 +135,27 @@ function StatusContent() {
 
             <div className="w-full space-y-2 pt-2">
               <button
-                onClick={() => router.push("/tickets")}
-                className="w-full bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                onClick={() => {
+                  const targetId = booking?.ticket_number || (tickets[0]?.ticket_id) || orderId;
+                  router.push(`/tickets/${encodeURIComponent(targetId)}`);
+                }}
+                className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 hover:from-emerald-700 hover:to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-transform cursor-pointer"
               >
-                <span>View My Tickets & QR Codes</span>
-                <i className="fa-solid fa-arrow-right" />
+                <i className="fa-solid fa-qrcode text-base" />
+                <span>Open Digital Ticket Pass (QR Code)</span>
+              </button>
+
+              <button
+                onClick={() => router.push("/tickets")}
+                className="w-full bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs py-3 rounded-xl shadow-xs flex items-center justify-center gap-2 active:scale-[0.98] transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-ticket" />
+                <span>View All My Tickets</span>
               </button>
 
               <button
                 onClick={() => router.push("/")}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition-colors"
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
               >
                 Return to Home
               </button>

@@ -45,7 +45,7 @@ const helpTopics = [
       "Select your show and choose your desired available seats.",
       "Review the displayed payment breakdown including ticket price and taxes.",
       "Choose PhonePe, UPI QR code, or Card as your preferred payment method.",
-      "Authorize the transaction in your UPI app (PhonePe, Google Pay, Paytm) or card gateway.",
+      "Authorize the transaction in your UPI app (PhonePe, Google Pay, BHIM) or card gateway.",
       "Wait for instant verification on the payment screen — do not hit refresh or back.",
       "Once payment is confirmed by the gateway, your ticket is immediately issued."
     ],
@@ -179,7 +179,7 @@ const faqs = [
   },
   {
     q: "Which payment methods are accepted?",
-    a: "We accept PhonePe, Google Pay, Paytm, all UPI apps, online credit/debit cards, net banking, and cash at official ticket counters."
+    a: "We accept PhonePe, Google Pay, BHIM, all UPI apps, online credit/debit cards, net banking, and cash at official ticket counters."
   }
 ];
 
