@@ -8,7 +8,7 @@ import BottomNav from "./components/BottomNav";
 import Header from "./components/Header";
 import BannerImage from "./components/BannerImage";
 import { saveBooking, subscribeBookings } from "../lib/bookings";
-import { subscribeEvents } from "../lib/events";
+import { subscribeEvents, getEventExpiryInfo } from "../lib/events";
 import { subscribeBanners } from "../lib/banners";
 import { subscribeTicketTypes } from "../lib/ticketTypes";
 import { subscribeParties, DEFAULT_PARTIES } from "../lib/parties";
@@ -197,8 +197,16 @@ export default function Home() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginTargetUrl, setLoginTargetUrl] = useState("");
 
+  const featuredExpiryInfo = useMemo(() => {
+    return getEventExpiryInfo(featuredEvent);
+  }, [featuredEvent]);
+
   const handleBookTicketNow = (e, tierId = null) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (featuredExpiryInfo.isExpired) {
+      alert(`This event is expired on date ${featuredExpiryInfo.formattedDate}. Ticket booking is closed.`);
+      return;
+    }
     const eventId = featuredEvent?.key || featuredEvent?.id || "";
     const eventName = featuredEvent?.eventTitle || featuredEvent?.name || "Event";
     const date = featuredEvent?.date || "";
@@ -785,14 +793,29 @@ export default function Home() {
           {/* ==============================================
             9. PRIMARY CALL TO ACTION BUTTON
           ============================================== */}
-          <button
-            onClick={(e) => handleBookTicketNow(e)}
-            className="btn-book-ticket-glow w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-black text-base py-3.5 px-4 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"
-          >
-            <i className="fa-solid fa-ticket ticket-icon-wiggle text-xl" />
-            <span className="tracking-wide uppercase text-sm sm:text-base font-black drop-shadow-sm">Book Ticket Now</span>
-            <i className="fa-solid fa-angles-right text-xs ml-0.5 animate-pulse" />
-          </button>
+          {featuredExpiryInfo.isExpired ? (
+            <div className="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl p-4 text-center space-y-1">
+              <div className="inline-flex items-center gap-1.5 text-rose-600 font-black text-xs uppercase tracking-wide">
+                <i className="fa-solid fa-ban" />
+                <span>Booking Closed</span>
+              </div>
+              <p className="text-xs font-black text-slate-800">
+                This event is expired on date {featuredExpiryInfo.formattedDate}
+              </p>
+              <p className="text-[10px] text-slate-500 font-medium">
+                Online bookings are closed for past shows.
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={(e) => handleBookTicketNow(e)}
+              className="btn-book-ticket-glow w-full bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 text-white font-black text-base py-3.5 px-4 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"
+            >
+              <i className="fa-solid fa-ticket ticket-icon-wiggle text-xl" />
+              <span className="tracking-wide uppercase text-sm sm:text-base font-black drop-shadow-sm">Book Ticket Now</span>
+              <i className="fa-solid fa-angles-right text-xs ml-0.5 animate-pulse" />
+            </button>
+          )}
         </main>
 
         {/* ==============================================

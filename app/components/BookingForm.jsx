@@ -23,7 +23,7 @@ import {
   blockDisplayName,
   isBlockOnline,
 } from "../../lib/blockCategories";
-import { fetchEvents } from "../../lib/events";
+import { fetchEvents, getEventExpiryInfo } from "../../lib/events";
 import { subscribeTicketTypes, getPriceForRow } from "../../lib/ticketTypes";
 import UserSeatGrid from "./UserSeatGrid";
 import BlockCategoryDiagram from "./BlockCategoryDiagram";
@@ -507,12 +507,10 @@ export default function BookingForm({
         }
       } catch (e) {}
 
-      setFakePayState("Booking Confirmed! Redirecting to ticket pass...");
+      setFakePayState("Booking Confirmed! Redirecting to My Tickets...");
 
-      // Direct success redirect to ticket confirmation
-      const targetUrl =
-        data.redirectUrl ||
-        `/payment/status?orderId=${encodeURIComponent(data.orderId)}&status=success`;
+      // Direct success redirect to My Tickets page
+      const targetUrl = data.redirectUrl || "/tickets";
       router.push(targetUrl);
       return;
     } catch (err) {
@@ -534,6 +532,31 @@ export default function BookingForm({
       setIsSubmitting(false);
     }
   };
+
+  const expiryInfo = getEventExpiryInfo({ date: eventDate, time: eventTime });
+
+  if (expiryInfo.isExpired) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-center min-h-[400px] bg-white rounded-3xl border border-slate-200">
+        <div className="w-16 h-16 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-3xl mb-3 shadow-xs">
+          <i className="fa-solid fa-calendar-xmark" />
+        </div>
+        <h3 className="text-lg font-black text-slate-900 font-brand">Booking Closed</h3>
+        <p className="text-xs font-black text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-1.5 mt-2">
+          This event is expired on date {expiryInfo.formattedDate}
+        </p>
+        <p className="text-xs text-slate-500 mt-2 font-medium">
+          Ticket reservations cannot be completed for past shows.
+        </p>
+        <button
+          onClick={() => router.push("/events")}
+          className="mt-5 bg-[#12193b] hover:bg-[#1a2350] text-white font-extrabold text-xs py-2.5 px-5 rounded-xl shadow-md transition-all active:scale-95"
+        >
+          View Upcoming Events
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div

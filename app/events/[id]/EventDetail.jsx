@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
-import { subscribeEvents, fetchEvents } from "../../../lib/events";
+import { subscribeEvents, fetchEvents, getEventExpiryInfo } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
 import { getSavedCustomerProfile } from "../../../lib/supabase";
 import LoginRequiredModal from "../../components/LoginRequiredModal";
@@ -342,7 +342,13 @@ export default function EventDetail({ id }) {
     return `${date.getDate()} ${date.toLocaleString("en-US", { month: "short" })} ${date.getFullYear()}`;
   };
 
+  const expiryInfo = getEventExpiryInfo(event);
+
   const handleBookTicketNow = () => {
+    if (expiryInfo.isExpired) {
+      alert(`This event is expired on date ${expiryInfo.formattedDate}. Ticket booking is closed.`);
+      return;
+    }
     const eventName = event?.name || event?.eventTitle || "Event";
     const eventId = event?.key || id;
     const date = event?.date || "";
@@ -386,6 +392,23 @@ export default function EventDetail({ id }) {
         )}
 
         <div className="px-4 py-4 space-y-4">
+          {/* Expired Event Banner */}
+          {expiryInfo.isExpired && (
+            <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                <i className="fa-solid fa-calendar-xmark text-lg" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-800 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200">
+                  Show Completed • Booking Closed
+                </span>
+                <p className="text-xs font-black text-rose-950 mt-1">
+                  This event is expired on date {expiryInfo.formattedDate}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Event Name & Party Tag */}
           <div>
             <h1 className="text-xl font-black text-slate-900 font-brand">{event?.name || "Event"}</h1>
@@ -577,8 +600,30 @@ export default function EventDetail({ id }) {
             </div>
           )}
 
-          {/* Book Ticket Now (or Call Troupe if troupe profile only) */}
-          {event?.isPartyOnly ? (
+          {/* Book Ticket Now / Expired State */}
+          {expiryInfo.isExpired ? (
+            <div className="space-y-2.5">
+              <div className="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl p-4 text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 text-rose-600 font-black text-xs uppercase tracking-wide">
+                  <i className="fa-solid fa-ban" />
+                  <span>Booking Closed</span>
+                </div>
+                <p className="text-xs font-black text-slate-800">
+                  This event is expired on date {expiryInfo.formattedDate}
+                </p>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Seat selection and ticket booking are unavailable for completed shows.
+                </p>
+              </div>
+              <Link
+                href="/events"
+                className="w-full bg-[#12193b] hover:bg-[#1a2350] text-white font-extrabold text-xs py-3 rounded-xl shadow-md flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
+                <i className="fa-solid fa-calendar-days text-amber-400" />
+                <span>Explore Upcoming Events</span>
+              </Link>
+            </div>
+          ) : event?.isPartyOnly ? (
             <a
               href={`tel:${(partyPhone1 || partyPhones[0] || "").replace(/[^\d+]/g, "")}`}
               className="btn-book-ticket-glow w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-black text-base py-3.5 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer border-0 select-none hover:brightness-110"

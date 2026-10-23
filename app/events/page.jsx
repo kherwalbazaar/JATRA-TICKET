@@ -5,12 +5,12 @@ import { useSearchParams } from "next/navigation";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
 import BannerImage from "../components/BannerImage";
-import { subscribeEvents } from "../../lib/events";
+import { subscribeEvents, getEventExpiryInfo } from "../../lib/events";
 
 const TABS = [
-  { key: "today", label: "Today's" },
-  { key: "upcoming", label: "Upcoming" },
   { key: "past", label: "Past" },
+  { key: "today", label: "Todays" },
+  { key: "upcoming", label: "Upcoming" },
 ];
 
 function EventsContent() {
@@ -91,20 +91,34 @@ function EventsContent() {
 
         {/* Tabs */}
         <div className="px-4 pb-1 pt-1">
-          <div className="flex items-center bg-slate-200/70 p-1 rounded-2xl text-xs font-bold gap-1">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`flex-1 py-2 rounded-xl transition-all text-center ${
-                  tab === t.key
-                    ? "bg-[#12193b] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="relative flex items-center bg-slate-200/80 p-1 rounded-2xl text-xs font-bold select-none">
+            {/* Smooth sliding background pill */}
+            <div
+              className="absolute top-1 bottom-1 rounded-xl bg-[#12193b] shadow-md transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] pointer-events-none"
+              style={{
+                width: `calc((100% - 8px) / 3)`,
+                left: "4px",
+                transform: `translateX(${Math.max(0, TABS.findIndex((t) => t.key === tab)) * 100}%)`,
+              }}
+            />
+
+            {TABS.map((t) => {
+              const isActive = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={`relative z-10 flex-1 py-2 rounded-xl text-center font-bold text-xs transition-colors duration-200 cursor-pointer ${
+                    isActive
+                      ? "text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -129,6 +143,7 @@ function EventsContent() {
             <div className="grid grid-cols-2 gap-3 pb-4">
               {filteredEvents.map((ev, i) => {
                 const formattedDate = formatDate(ev.month || "OCT", ev.day || "22", ev.year || "2026");
+                const expiryInfo = getEventExpiryInfo(ev);
                 const committeeName = ev.organizationName || ev.committeeName || "ADIM LAHAH MANDAWA";
                 return (
                   <div
@@ -163,10 +178,24 @@ function EventsContent() {
                           {formattedDate}
                         </span>
                       </div>
-                      <div className="mt-2.5 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1">
-                        <i className="fa-solid fa-ticket -rotate-12 text-[9px]" />
-                        View Details
-                      </div>
+                      {expiryInfo.isExpired && (
+                        <div className="mt-1.5 bg-rose-50 border border-rose-200 text-rose-700 px-1.5 py-1 rounded text-[8.5px] font-black flex items-center gap-1">
+                          <i className="fa-solid fa-clock-rotate-left text-[8px] text-rose-500 shrink-0" />
+                          <span className="truncate">This event is expired on date {expiryInfo.formattedDate}</span>
+                        </div>
+                      )}
+
+                      {expiryInfo.isExpired ? (
+                        <div className="mt-2 w-full bg-slate-100 border border-slate-200 text-slate-500 font-black text-[9.5px] py-1.5 rounded-lg flex items-center justify-center gap-1">
+                          <i className="fa-solid fa-ban text-[8px] text-rose-500" />
+                          <span>Expired • Details</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2.5 w-full bg-gradient-to-r from-rose-500 to-pink-600 text-white font-extrabold text-[10px] py-1.5 rounded-lg shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-1">
+                          <i className="fa-solid fa-ticket -rotate-12 text-[9px]" />
+                          View Details
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -100,12 +100,10 @@ function PaymentContent() {
         throw new Error(data.error || "Failed to confirm booking.");
       }
 
-      setProcessingState("Booking Confirmed! Redirecting to ticket pass...");
+      setProcessingState("Booking Confirmed! Redirecting to My Tickets...");
 
-      // Redirect to confirmed ticket status page
-      const targetUrl =
-        data.redirectUrl ||
-        `/payment/status?orderId=${encodeURIComponent(data.orderId)}&status=success`;
+      // Redirect to My Tickets page
+      const targetUrl = data.redirectUrl || "/tickets";
 
       router.push(targetUrl);
     } catch (err) {

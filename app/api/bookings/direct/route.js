@@ -66,6 +66,34 @@ export async function POST(request) {
       );
     }
 
+    // Verify event is not expired
+    const { data: eventRow } = await supabaseAdmin
+      .from("events")
+      .select("date, start_time, time, status")
+      .eq("id", eventId)
+      .maybeSingle();
+
+    const evDateStr = eventRow?.date || date;
+    if (evDateStr) {
+      let isExp = false;
+      let expFormatted = "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(evDateStr)) {
+        const [y, m, d] = evDateStr.split("-");
+        expFormatted = `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${y}`;
+        const dt = new Date(Number(y), Number(m) - 1, Number(d), 23, 59, 59);
+        isExp = dt.getTime() < Date.now();
+      }
+      if (isExp || eventRow?.status === "expired" || eventRow?.status === "completed") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `This event is expired on date ${expFormatted || evDateStr}. Ticket booking is closed.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const seatList = Array.isArray(seats) ? seats.filter(Boolean) : [];
     if (seatList.length === 0) {
       return NextResponse.json(
@@ -386,7 +414,7 @@ export async function POST(request) {
       ticketNumber,
       amount: finalAmount,
       seats: seatList,
-      redirectUrl: `/payment/status?orderId=${encodeURIComponent(orderId)}&status=success`,
+      redirectUrl: "/tickets",
     });
   } catch (err) {
     console.error("Direct booking error:", err);

@@ -115,20 +115,34 @@ export default function TodaysShowPage() {
 
         {/* Tabs */}
         <div className="px-4 py-3">
-          <div className="flex items-center bg-slate-200/70 p-1 rounded-2xl text-xs font-bold gap-1">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`flex-1 py-2 rounded-xl transition-all text-center ${
-                  tab === t.key
-                    ? "bg-[#12193b] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="relative flex items-center bg-slate-200/80 p-1 rounded-2xl text-xs font-bold select-none">
+            {/* Smooth sliding background pill */}
+            <div
+              className="absolute top-1 bottom-1 rounded-xl bg-[#12193b] shadow-md transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] pointer-events-none"
+              style={{
+                width: `calc((100% - 8px) / 3)`,
+                left: "4px",
+                transform: `translateX(${Math.max(0, TABS.findIndex((t) => t.key === tab)) * 100}%)`,
+              }}
+            />
+
+            {TABS.map((t) => {
+              const isActive = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={`relative z-10 flex-1 py-2 rounded-xl text-center font-bold text-xs transition-colors duration-200 cursor-pointer ${
+                    isActive
+                      ? "text-white"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 

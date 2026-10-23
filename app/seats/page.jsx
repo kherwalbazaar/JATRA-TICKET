@@ -7,7 +7,7 @@ import ChairSvg from "../components/ChairSvg";
 import UserSeatGrid from "../components/UserSeatGrid";
 import MovingSpotlights from "../components/MovingSpotlights";
 import { subscribeSeats, BLOCK_GROUPS, holdSeat, releaseSeatHold, getHoldSessionId, isHoldFresh } from "../../lib/seats";
-import { fetchEvents } from "../../lib/events";
+import { fetchEvents, getEventExpiryInfo } from "../../lib/events";
 import {
   subscribeBlockCategories,
   isBlockOnline,
@@ -444,6 +444,38 @@ function SeatSelectionContent() {
         ),
       }));
   };
+
+  const expiryInfo = getEventExpiryInfo(
+    currentEventData || {
+      date: searchParams.get("date"),
+      time: searchParams.get("time"),
+    }
+  );
+
+  if (expiryInfo.isExpired) {
+    return (
+      <div className="min-h-screen bg-[#f8faff] flex flex-col items-center justify-center p-6 text-center text-slate-800">
+        <div className="w-16 h-16 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-3xl mb-4 shadow-xs">
+          <i className="fa-solid fa-calendar-xmark" />
+        </div>
+        <h2 className="text-xl font-black text-slate-900 font-brand">Event Expired</h2>
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5 mt-3 max-w-sm">
+          <p className="text-xs font-black text-rose-700">
+            This event is expired on date {expiryInfo.formattedDate}
+          </p>
+        </div>
+        <p className="text-xs text-slate-500 mt-2 max-w-sm font-medium">
+          Ticket bookings and seat selection are closed for completed shows.
+        </p>
+        <button
+          onClick={() => router.push("/events")}
+          className="mt-6 bg-[#12193b] hover:bg-[#1a2350] text-white font-extrabold text-xs py-3 px-6 rounded-xl shadow-md transition-all active:scale-95"
+        >
+          View Upcoming Events
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-900 min-h-screen text-slate-800 antialiased selection:bg-rose-500 selection:text-white">
