@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { calculateCustomerCharges } from "@/lib/pricing";
+import { resolveBookingParameters } from "@/lib/paymentMethods";
 import { firestore } from "@/lib/firebase";
 import { doc, setDoc, writeBatch } from "firebase/firestore";
 import crypto from "crypto";
@@ -57,7 +58,29 @@ export async function POST(request) {
       customerEmail = null,
       holdSessionId = "",
       tierName = "SEATED",
+      bookingMethod = "direct",
+      paymentMethod = "",
+      transactionId = "",
     } = body;
+
+    // Resolve canonical payment method and booking parameters
+    let bookingParams;
+    try {
+      bookingParams = resolveBookingParameters({
+        bookingMethod,
+        paymentMethodInput: paymentMethod,
+        isCounterSale: false,
+      });
+    } catch (valErr) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_PAYMENT_METHOD",
+          error: valErr.message || "Invalid payment method specified.",
+        },
+        { status: 400 }
+      );
+    }
 
     if (!eventId) {
       return NextResponse.json(
@@ -204,13 +227,15 @@ export async function POST(request) {
       platform_charge: pricing.platformCharge,
       total_fees: pricing.totalFees,
       final_customer_amount: finalAmount,
-      source: "Online",
-      payment_method: "Direct Booking",
-      payment_channel: "Online",
-      payment_date: nowIso,
-      status: "Confirmed",
-      booking_status: "Confirmed",
-      payment_status: "Successful",
+      source: bookingParams.source,
+      payment_method: bookingParams.canonicalMethod,
+      payment_channel: bookingParams.paymentChannel,
+      payment_date: bookingParams.paymentStatus === "Successful" ? nowIso : null,
+      status: bookingParams.status,
+      booking_status: bookingParams.bookingStatus,
+      payment_status: bookingParams.paymentStatus,
+      transaction_id: transactionId || (bookingParams.canonicalMethod === "Cash" ? `COUNTER_${Date.now()}` : `TXN_SIM_${Date.now()}`),
+      gateway_transaction_id: transactionId || null,
       date: bookingDate,
       time: bookingTime,
       block: cleanBlock || null,
@@ -229,9 +254,18 @@ export async function POST(request) {
       .insert([bookingRow]);
 
     if (bookingErr) {
-      console.error("Failed to insert booking in Supabase:", bookingErr.message);
+      console.error("[Booking Direct Error]", {
+        operation: "insert_booking",
+        orderId,
+        paymentMethod: bookingParams.canonicalMethod,
+        pgCode: bookingErr.code,
+        message: bookingErr.message,
+      });
       return NextResponse.json(
-        { success: false, error: `Failed to create booking: ${bookingErr.message}` },
+        {
+          success: false,
+          error: "Unable to complete booking at this time. Please verify your details and try again.",
+        },
         { status: 500 }
       );
     }
@@ -348,11 +382,15 @@ export async function POST(request) {
         amount: finalAmount,
         ticketAmount: pricing.ticketAmount,
         finalCustomerAmount: finalAmount,
-        source: "Online",
-        paymentMethod: "Direct Booking",
-        status: "Confirmed",
-        bookingStatus: "Confirmed",
-        paymentStatus: "Successful",
+        source: bookingParams.source,
+        paymentMethod: bookingParams.canonicalMethod,
+        bookingMethod: bookingParams.bookingMethod,
+        paymentChannel: bookingParams.paymentChannel,
+        status: bookingParams.status,
+        bookingStatus: bookingParams.bookingStatus,
+        paymentStatus: bookingParams.paymentStatus,
+        transactionId: bookingRow.transaction_id,
+        gatewayTransactionId: bookingRow.gateway_transaction_id,
         date: bookingDate,
         time: bookingTime,
         assignedGate: assignedGate,
@@ -417,9 +455,11 @@ export async function POST(request) {
       redirectUrl: "/tickets",
     });
   } catch (err) {
-    console.error("Direct booking error:", err);
+    console.error("[Direct booking unhandled error]:", {
+      message: err?.message,
+    });
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to complete direct booking." },
+      { success: false, error: err.message || "Failed to complete booking." },
       { status: 500 }
     );
   }

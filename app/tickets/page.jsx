@@ -63,9 +63,19 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
     let ticketsForBooking = ticketsByBookingId.get(bIdUpper) || ticketsByBookingId.get(bDocUpper) || [];
 
     // Ensure pending, failed, or cancelled bookings do NOT issue or synthesize tickets (Requirement 4 & 9)
+    // NOTE: Confirmed counter / pay-at-gate bookings are allowed so the customer can present their ticket at the counter
+    const isPayAtCounter =
+      b.paymentMethod === "Cash" ||
+      b.payment_method === "Cash" ||
+      b.source === "Counter" ||
+      b.payment_channel === "Counter";
+
     const isConfirmed =
       (b.status === "Confirmed" || b.bookingStatus === "Confirmed") &&
-      (b.paymentStatus === "Successful" || b.payment_status === "Successful" || !b.payment_status);
+      (b.paymentStatus === "Successful" ||
+        b.payment_status === "Successful" ||
+        isPayAtCounter ||
+        !b.payment_status);
 
     if (!isConfirmed) {
       return {

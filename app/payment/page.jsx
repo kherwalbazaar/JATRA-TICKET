@@ -86,7 +86,8 @@ function PaymentContent() {
           customerEmail: profile?.email || null,
           holdSessionId: sessionId,
           tierName: `SEATED (${blockLabel || block})`,
-          paymentMethod: details.method ? `Simulated ${details.method.toUpperCase()}` : "Simulated UPI (Google Pay)",
+          bookingMethod: "direct",
+          paymentMethod: details.method || "UPI",
           transactionId: details.transactionId || `TXN_SIM_${Date.now()}`,
         }),
       });

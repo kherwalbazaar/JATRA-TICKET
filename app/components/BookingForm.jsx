@@ -438,7 +438,7 @@ export default function BookingForm({
     if (isSubmitting) return;
 
     if (paymentMethod === "counter") {
-      await handleExecuteBooking({ method: "Pay at Counter" });
+      await handleExecuteBooking({ bookingMethod: "counter", method: "Cash" });
     } else {
       setShowFakePayModal(true);
     }
@@ -469,7 +469,11 @@ export default function BookingForm({
 
       const blockLabel = getBlockName(activeBlock) || activeBlock;
 
-      // Direct Booking confirmation with simulated payment details
+      // Clean canonical booking & payment parameters
+      const isCounter = (details.bookingMethod || paymentMethod) === "counter";
+      const resolvedBookingMethod = isCounter ? "counter" : "direct";
+      const resolvedPaymentMethod = isCounter ? "Cash" : (details.method || "UPI");
+
       const sessionId = getHoldSessionId();
       const res = await fetch("/api/bookings/direct", {
         method: "POST",
@@ -487,8 +491,9 @@ export default function BookingForm({
           customerEmail: profile?.email || null,
           holdSessionId: sessionId,
           tierName: `${selectedTierName || "SEATED"} (${blockLabel})`,
-          paymentMethod: details.method ? `Simulated ${details.method.toUpperCase()}` : "Simulated UPI (Google Pay)",
-          transactionId: details.transactionId || `TXN_SIM_${Date.now()}`,
+          bookingMethod: resolvedBookingMethod,
+          paymentMethod: resolvedPaymentMethod,
+          transactionId: details.transactionId || (isCounter ? `COUNTER_${Date.now()}` : `TXN_SIM_${Date.now()}`),
         }),
       });
 
