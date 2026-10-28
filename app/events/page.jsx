@@ -158,9 +158,9 @@ function EventsContent() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <BannerImage
-                      src={ev.banner || ev.img || "/jarpa.png"}
+                      src={ev.banner || ev.img || "https://ik.imagekit.io/kherwalbazaar/MANDAWA/JARPA%202026.jpg?updatedAt=1789577829940"}
                       alt={committeeName}
-                      className="w-full h-28 object-contain bg-slate-100"
+                      className="w-full h-28 object-cover bg-slate-100"
                     />
                     <div className="p-2.5">
                       <h4 className="text-xs font-black text-slate-900 font-brand truncate">{committeeName}</h4>

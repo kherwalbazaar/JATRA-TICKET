@@ -8,7 +8,7 @@ import BottomNav from "./components/BottomNav";
 import Header from "./components/Header";
 import BannerImage from "./components/BannerImage";
 import { saveBooking, subscribeBookings } from "../lib/bookings";
-import { subscribeEvents, getEventExpiryInfo } from "../lib/events";
+import { subscribeEvents, getEventExpiryInfo, isLogoUrl } from "../lib/events";
 import { subscribeBanners } from "../lib/banners";
 import { subscribeTicketTypes } from "../lib/ticketTypes";
 import { subscribeParties, DEFAULT_PARTIES } from "../lib/parties";
@@ -878,7 +878,7 @@ function TodaysShow() {
             const partyName = ev.partyName || ev.organizer || "";
             const organizationName = ev.organizationName || ev.committeeName || "";
             const location = ev.location || ev.venue || ev.address || "Mayurbhanj, Odisha";
-            const banner = ev.poster || ev.banner || ev.img || "/jarpa.png";
+            const banner = ev.banner || (ev.banners && ev.banners[0]) || (!isLogoUrl(ev.poster) ? ev.poster : null) || ev.img || "https://ik.imagekit.io/kherwalbazaar/MANDAWA/JARPA%202026.jpg?updatedAt=1789577829940";
             const time = ev.time || ev.startTime || ev.entryTime || "11:00 PM";
 
             return {
@@ -953,7 +953,7 @@ function TodaysShow() {
             className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <BannerImage
               src={show.banner}
               alt={show.organizationName || show.name}
               className="w-full h-32 object-cover"
@@ -994,7 +994,7 @@ function HeroCarousel() {
           const slides = data
             .map((ev) => {
               const eventKey = ev.key || ev.id || "";
-              const img = ev.poster || ev.banner || ev.img || "";
+              const img = ev.banner || (ev.banners && ev.banners[0]) || (!isLogoUrl(ev.poster) ? ev.poster : null) || ev.img || "";
               return {
                 ...ev,
                 key: eventKey,

@@ -7,7 +7,7 @@ const showsData = {
   "1": {
     name: "ADIM OWAR JARPA OPERA",
     partyName: "Adim Opera Group",
-    banner: "/jarpa.png",
+    banner: "https://ik.imagekit.io/kherwalbazaar/MANDAWA/JARPA%202026.jpg?updatedAt=1789577829940",
     date: "14 Sept 2026",
     time: "10:00 PM - 05:00 AM",
     location: "Bahanada, Khunta, Mayurbhanj",
@@ -34,7 +34,7 @@ const showsData = {
   "2": {
     name: "RAMRAJ GAYAN MOHAL",
     partyName: "Ramraj Opera",
-    banner: "/ramraj.png",
+    banner: "https://raw.githubusercontent.com/kherwalbazaar/Jatra-bazaar-assest/refs/heads/main/ramaraja.jpeg",
     date: "23 Oct 2026",
     time: "10:00 PM - 05:00 AM",
     location: "Bahanada, Khunta, Mayurbhanj",

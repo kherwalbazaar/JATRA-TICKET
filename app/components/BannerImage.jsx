@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const FALLBACK_IMAGE = "/jarpa.png";
+const FALLBACK_IMAGE = "https://ik.imagekit.io/kherwalbazaar/MANDAWA/JARPA%202026.jpg?updatedAt=1789577829940";
 
 export function getImageSource(value, fallback = FALLBACK_IMAGE) {
   let source = value;

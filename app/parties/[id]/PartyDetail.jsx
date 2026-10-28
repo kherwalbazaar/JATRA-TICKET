@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { findParty, subscribeParties, DEFAULT_PARTIES } from "../../../lib/parties";
-import { subscribeEvents } from "../../../lib/events";
+import { subscribeEvents, isLogoUrl } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
 
 export default function PartyDetail({ id }) {
@@ -329,7 +329,7 @@ export default function PartyDetail({ id }) {
               <div className="space-y-3 pt-1">
                 {partyShows.map((show) => {
                   const showTitle = show.name || show.eventTitle || pName;
-                  const showPoster = show.banner || show.poster || show.img || partyLogoUrl;
+                  const showPoster = show.banner || (show.banners && show.banners[0]) || (!isLogoUrl(show.poster) ? show.poster : null) || show.img || partyLogoUrl;
                   const showVenue = show.committeeLocation || show.location || show.venue || pLocation;
                   const showDate = `${show.day || "22"} ${show.month || "OCT"} ${show.year || "2026"}`;
 

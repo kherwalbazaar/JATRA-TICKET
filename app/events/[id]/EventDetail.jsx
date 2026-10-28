@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
-import { subscribeEvents, fetchEvents, getEventExpiryInfo } from "../../../lib/events";
+import { subscribeEvents, fetchEvents, getEventExpiryInfo, isLogoUrl } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
 import { getSavedCustomerProfile } from "../../../lib/supabase";
 import LoginRequiredModal from "../../components/LoginRequiredModal";
@@ -309,26 +309,35 @@ export default function EventDetail({ id }) {
   };
   const partyLogo = firstValue(
     toLoadableUrl(partyInfo?.logo),
-    toLoadableUrl(event?.poster),
-    toLoadableUrl(event?.banner)
+    toLoadableUrl(event?.logo),
+    isLogoUrl(event?.poster) ? toLoadableUrl(event?.poster) : null,
+    toLoadableUrl(event?.partyLogo),
+    toLoadableUrl(event?.poster)
   );
   const sameYearEvents = allEvents.filter(
     (item) => String(item?.year || "") === String(event?.year || "")
   );
   const bannerCandidates = [
-    partyLogo,
-    event?.poster,
-    ...asArray(event?.banners),
+    event?.banner,
     event?.bannerUrl,
     event?.bannerImg,
     event?.imageUrl,
-    event?.image,
+    ...asArray(event?.banners),
+    ...asArray(event?.additionalBanners),
+    ...asArray(event?.additional_banners),
+    partyInfo?.banner,
+    (!isLogoUrl(event?.poster) ? event?.poster : null),
     event?.img,
-    event?.banner,
-    ...sameYearEvents.flatMap((item) => [item?.poster, item?.banner, ...asArray(item?.banners)]),
+    ...sameYearEvents.flatMap((item) => [item?.banner, ...asArray(item?.banners)]),
   ];
-  const displayBanners = [...new Set(bannerCandidates.map(toLoadableUrl).filter(Boolean))];
-  const topBanner = displayBanners[0] || null;
+  const displayBanners = [
+    ...new Set(
+      bannerCandidates
+        .map(toLoadableUrl)
+        .filter((url) => Boolean(url) && !isLogoUrl(url))
+    ),
+  ];
+  const topBanner = displayBanners[0] || toLoadableUrl(event?.banner) || null;
 
   const formatDate = (month, day, year) => {
     if (!month || !day || !year) return "TBD";
