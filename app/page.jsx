@@ -941,42 +941,53 @@ function TodaysShow() {
       </div>
 
       <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
-        {displayShows.map((show) => (
-          <div
-            key={show.key}
-            onClick={() => {
-              try {
-                sessionStorage.setItem(`event_${show.key}`, JSON.stringify(show));
-              } catch {}
-              window.location.href = `/event-details?id=${encodeURIComponent(show.key)}`;
-            }}
-            className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <BannerImage
-              src={show.banner}
-              alt={show.organizationName || show.name}
-              className="w-full h-32 object-cover"
-            />
-            <div className="p-2.5">
-              <h4 className="text-xs font-black text-slate-900 font-brand truncate">{show.organizationName || show.name}</h4>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
-                <i className="fa-solid fa-user-group text-indigo-500 text-[9px] flex-shrink-0" />
-                <span className="truncate">{show.partyName || "Party TBD"}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
-                <i className="fa-solid fa-location-dot text-rose-500 text-[9px] flex-shrink-0" />
-                <span className="truncate">{show.location}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] mt-1.5">
-                <i className="fa-regular fa-calendar text-emerald-600 text-[9px] flex-shrink-0" />
-                <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-200/80">
-                  {show.month} {show.day}, {show.year}
-                </span>
+        {displayShows.map((show) => {
+          const expiryInfo = getEventExpiryInfo(show);
+          return (
+            <div
+              key={show.key}
+              onClick={() => {
+                try {
+                  sessionStorage.setItem(`event_${show.key}`, JSON.stringify(show));
+                } catch {}
+                window.location.href = `/event-details?id=${encodeURIComponent(show.key)}`;
+              }}
+              className="min-w-[260px] flex-shrink-0 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform cursor-pointer"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <BannerImage
+                src={show.banner}
+                alt={show.organizationName || show.name}
+                className="w-full h-32 object-cover"
+              />
+              <div className="p-2.5">
+                <h4 className="text-xs font-black text-slate-900 font-brand truncate">{show.organizationName || show.name}</h4>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
+                  <i className="fa-solid fa-user-group text-indigo-500 text-[9px] flex-shrink-0" />
+                  <span className="truncate">{show.partyName || "Party TBD"}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold mt-1">
+                  <i className="fa-solid fa-location-dot text-rose-500 text-[9px] flex-shrink-0" />
+                  <span className="truncate">{show.location}</span>
+                </div>
+                <div className="flex items-center justify-between gap-1.5 text-[10px] mt-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <i className="fa-regular fa-calendar text-emerald-600 text-[9px] flex-shrink-0" />
+                    <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-200/80 whitespace-nowrap">
+                      {show.month} {show.day}, {show.year}
+                    </span>
+                  </div>
+                  {expiryInfo.isExpired && (
+                    <span className="bg-rose-600 text-white font-black text-[9px] px-2 py-0.5 rounded-md shadow-xs uppercase tracking-wider flex items-center gap-1 flex-shrink-0">
+                      <i className="fa-solid fa-ban text-[8px]" />
+                      Expired
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

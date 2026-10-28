@@ -172,11 +172,19 @@ function EventsContent() {
                         <i className="fa-solid fa-location-dot text-rose-500 text-[8px] flex-shrink-0" />
                         <span className="truncate">{ev.committeeLocation || ev.location || "TBD"}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] mt-1.5">
-                        <i className="fa-regular fa-calendar text-emerald-600 text-[9px] flex-shrink-0" />
-                        <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[9px] border border-emerald-200/80">
-                          {formattedDate}
-                        </span>
+                      <div className="flex items-center justify-between gap-1 text-[10px] mt-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <i className="fa-regular fa-calendar text-emerald-600 text-[9px] flex-shrink-0" />
+                          <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[9px] border border-emerald-200/80 whitespace-nowrap">
+                            {formattedDate}
+                          </span>
+                        </div>
+                        {expiryInfo.isExpired && (
+                          <span className="bg-rose-600 text-white font-black text-[8.5px] px-1.5 py-0.5 rounded-md shadow-xs uppercase tracking-wider flex items-center gap-1 flex-shrink-0">
+                            <i className="fa-solid fa-ban text-[7.5px]" />
+                            Expired
+                          </span>
+                        )}
                       </div>
                       {expiryInfo.isExpired && (
                         <div className="mt-1.5 bg-rose-50 border border-rose-200 text-rose-700 px-1.5 py-1 rounded text-[8.5px] font-black flex items-center gap-1">

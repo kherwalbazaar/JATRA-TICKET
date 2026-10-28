@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Header from "../components/Header";
 import BannerImage from "../components/BannerImage";
-import { subscribeEvents } from "../../lib/events";
+import { subscribeEvents, getEventExpiryInfo } from "../../lib/events";
 
 const TABS = [
   { key: "today", label: "Today's" },
@@ -156,33 +156,44 @@ export default function TodaysShowPage() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            {filteredShows.map((show) => (
-              <Link key={show.key} href={`/todays-show/${show.key}`} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <BannerImage
-                  src={show.banner}
-                  alt={show.name}
-                  className="w-full h-28 object-cover"
-                />
-                <div className="p-2">
-                  <h4 className="text-[10px] font-black text-slate-900 font-brand truncate leading-tight">{show.name}</h4>
-                  <div className="flex items-center gap-1 text-[9px] text-slate-600 font-semibold mt-0.5">
-                    <i className="fa-solid fa-users text-indigo-500 text-[7px]" />
-                    <span className="truncate">{show.partyName}</span>
+            {filteredShows.map((show) => {
+              const expiryInfo = getEventExpiryInfo(show);
+              return (
+                <Link key={show.key} href={`/todays-show/${show.key}`} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden active:scale-95 transition-transform">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <BannerImage
+                    src={show.banner}
+                    alt={show.name}
+                    className="w-full h-28 object-cover"
+                  />
+                  <div className="p-2">
+                    <h4 className="text-[10px] font-black text-slate-900 font-brand truncate leading-tight">{show.name}</h4>
+                    <div className="flex items-center gap-1 text-[9px] text-slate-600 font-semibold mt-0.5">
+                      <i className="fa-solid fa-users text-indigo-500 text-[7px]" />
+                      <span className="truncate">{show.partyName}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[9px] text-slate-600 font-semibold mt-0.5">
+                      <i className="fa-solid fa-location-dot text-rose-500 text-[7px]" />
+                      <span className="truncate">{show.location}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1 text-[9px] mt-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <i className="fa-regular fa-calendar text-emerald-600 text-[7px] flex-shrink-0" />
+                        <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[8px] border border-emerald-200/80 whitespace-nowrap">
+                          {show.day} {show.month} {show.year}
+                        </span>
+                      </div>
+                      {expiryInfo.isExpired && (
+                        <span className="bg-rose-600 text-white font-black text-[8px] px-1.5 py-0.5 rounded shadow-xs uppercase tracking-wider flex items-center gap-0.5 flex-shrink-0">
+                          <i className="fa-solid fa-ban text-[6.5px]" />
+                          Expired
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-[9px] text-slate-600 font-semibold mt-0.5">
-                    <i className="fa-solid fa-location-dot text-rose-500 text-[7px]" />
-                    <span className="truncate">{show.location}</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-[9px] mt-1">
-                    <i className="fa-regular fa-calendar text-emerald-600 text-[7px]" />
-                    <span className="bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[8px] border border-emerald-200/80">
-                      {show.day} {show.month} {show.year}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>
