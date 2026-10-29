@@ -7,10 +7,28 @@ import { findParty, subscribeParties, DEFAULT_PARTIES } from "../../../lib/parti
 import { subscribeEvents, isLogoUrl } from "../../../lib/events";
 import { getImageSource } from "../../components/BannerImage";
 
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+function showDateOf(show) {
+  const year = Number(show?.year);
+  const monthIndex = MONTH_LABELS.findIndex(
+    (label) => label.toUpperCase() === String(show?.month || "").trim().toUpperCase()
+  );
+  const day = Number(show?.day);
+  if (!year || monthIndex < 0 || !day) return null;
+  return new Date(year, monthIndex, day);
+}
+
 export default function PartyDetail({ id }) {
   const [party, setParty] = useState(null);
   const [allEvents, setAllEvents] = useState([]);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [slotYear, setSlotYear] = useState(() => new Date().getFullYear());
+  const [slotMonth, setSlotMonth] = useState(() => new Date().getMonth());
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [autoJumped, setAutoJumped] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +105,55 @@ export default function PartyDetail({ id }) {
       );
     });
   }, [party, allEvents]);
+
+  // Booking calendar: real month grid of this troupe's show dates
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // Open on the troupe's next show month so the active month is the first thing seen
+  useEffect(() => {
+    if (autoJumped || !party) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming = partyShows
+      .map((show) => ({ show, date: showDateOf(show) }))
+      .filter(({ date }) => date && date >= today)
+      .sort((a, b) => a.date - b.date)[0];
+    if (upcoming) {
+      setSlotYear(upcoming.date.getFullYear());
+      setSlotMonth(upcoming.date.getMonth());
+    }
+    setAutoJumped(true);
+  }, [autoJumped, party, partyShows]);
+
+  const monthShows = useMemo(() => {
+    const map = new Map();
+    partyShows.forEach((show) => {
+      const date = showDateOf(show);
+      if (!date || date.getFullYear() !== slotYear || date.getMonth() !== slotMonth) return;
+      map.set(date.getDate(), show);
+    });
+    return map;
+  }, [partyShows, slotYear, slotMonth]);
+
+  const yearShowCount = useMemo(
+    () => partyShows.filter((show) => showDateOf(show)?.getFullYear() === slotYear).length,
+    [partyShows, slotYear]
+  );
+
+  const daysInMonth = new Date(slotYear, slotMonth + 1, 0).getDate();
+  const leadingDays = new Date(slotYear, slotMonth, 1).getDay();
+  const daysInPrevMonth = new Date(slotYear, slotMonth, 0).getDate();
+  const trailingDays = (7 - ((leadingDays + daysInMonth) % 7)) % 7;
+  const todayStart = new Date(currentYear, now.getMonth(), now.getDate());
+  const selectedShow = selectedDay ? monthShows.get(selectedDay) : null;
+
+  const changeMonth = (delta) => {
+    const next = new Date(slotYear, slotMonth + delta, 1);
+    setSlotYear(next.getFullYear());
+    setSlotMonth(next.getMonth());
+    setSelectedDay(null);
+  };
 
   const toLoadableUrl = (val) => {
     const src = getImageSource(val, "");
@@ -219,8 +286,149 @@ export default function PartyDetail({ id }) {
           </div>
         </div>
 
-        {/* Troupe Key Leadership & Creative Details */}
         <div className="px-4 py-2 space-y-3">
+          {/* Troupe Booking Slots Calendar */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-black text-slate-900 font-brand uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-regular fa-calendar-check text-emerald-600 text-xs" />
+                Booking Slots
+              </h3>
+              <span className="text-[9px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100 shrink-0">
+                {yearShowCount} show{yearShowCount === 1 ? "" : "s"} in {slotYear}
+              </span>
+            </div>
+
+            {/* Active month */}
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => changeMonth(-1)}
+                aria-label="Previous month"
+                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center active:scale-95 transition-all"
+              >
+                <i className="fa-solid fa-chevron-left text-[10px]" />
+              </button>
+              <p className="text-xs font-black text-slate-900">
+                {MONTH_FULL[slotMonth]} {slotYear}
+              </p>
+              <button
+                type="button"
+                onClick={() => changeMonth(1)}
+                aria-label="Next month"
+                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center active:scale-95 transition-all"
+              >
+                <i className="fa-solid fa-chevron-right text-[10px]" />
+              </button>
+            </div>
+
+            {/* Weekday names + dates */}
+            <div className="grid grid-cols-7 gap-1.5 text-center">
+              {WEEKDAYS.map((weekday, index) => (
+                <span
+                  key={`weekday-${index}`}
+                  className="text-[9px] font-bold text-slate-400 uppercase tracking-wide py-1"
+                >
+                  {weekday}
+                </span>
+              ))}
+
+              {Array.from({ length: leadingDays }, (_, index) => (
+                <span
+                  key={`prev-${index}`}
+                  className="aspect-square rounded-lg border border-transparent text-[11px] font-bold flex items-center justify-center bg-slate-50 text-slate-300"
+                >
+                  {daysInPrevMonth - leadingDays + 1 + index}
+                </span>
+              ))}
+
+              {Array.from({ length: daysInMonth }, (_, index) => {
+                const day = index + 1;
+                const show = monthShows.get(day);
+                const isPast = new Date(slotYear, slotMonth, day) < todayStart;
+                const isToday =
+                  slotYear === currentYear && slotMonth === now.getMonth() && day === now.getDate();
+                const isSelected = selectedDay === day;
+
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    disabled={isPast && !show}
+                    onClick={() => setSelectedDay(isSelected ? null : day)}
+                    aria-pressed={isSelected}
+                    title={show ? show.name || show.eventTitle || "Show day" : undefined}
+                    className={`aspect-square rounded-lg text-[11px] font-bold flex flex-col items-center justify-center border transition-colors ${
+                      show
+                        ? "bg-red-600 border-red-700 text-white shadow-sm"
+                        : isPast
+                          ? "bg-rose-100 border-rose-200 text-rose-400"
+                          : "bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200 active:scale-95"
+                    } ${isSelected ? "ring-2 ring-indigo-600 ring-offset-1" : ""} ${
+                      isToday && !isSelected ? "ring-2 ring-indigo-400 ring-inset" : ""
+                    }`}
+                  >
+                    <span>{day}</span>
+                    {show && <span className="w-1 h-1 rounded-full bg-white/90 mt-0.5" />}
+                  </button>
+                );
+              })}
+
+              {Array.from({ length: trailingDays }, (_, index) => (
+                <span
+                  key={`next-${index}`}
+                  className="aspect-square rounded-lg border border-transparent text-[11px] font-bold flex items-center justify-center bg-slate-50 text-slate-300"
+                >
+                  {index + 1}
+                </span>
+              ))}
+            </div>
+
+            {selectedDay && (
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2">
+                <div className="min-w-0">
+                  {selectedShow ? (
+                    <>
+                      <p className="text-[9px] font-bold uppercase text-rose-600">
+                        Show on {selectedDay} {MONTH_LABELS[slotMonth]} {slotYear}
+                      </p>
+                      <p className="text-[11px] font-black text-slate-900 truncate">
+                        {selectedShow.name || selectedShow.eventTitle || "Jatra Show"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[11px] font-bold text-indigo-900">
+                      Enquire for {selectedDay} {MONTH_LABELS[slotMonth]} {slotYear}
+                    </p>
+                  )}
+                </div>
+
+                {selectedShow ? (
+                  <Link
+                    href={`/event-details?id=${encodeURIComponent(selectedShow.key || selectedShow.id)}`}
+                    className="bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
+                  >
+                    <i className="fa-solid fa-ticket text-[9px]" />
+                    View Show
+                  </Link>
+                ) : phoneNumbers[0] ? (
+                  <a
+                    href={`tel:${phoneNumbers[0].replace(/[^\d+]/g, "")}`}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
+                  >
+                    <i className="fa-solid fa-phone-volume text-[9px]" />
+                    Call Troupe
+                  </a>
+                ) : (
+                  <span className="text-[10px] font-semibold text-indigo-700 shrink-0">
+                    Contact via support
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Troupe Key Leadership & Creative Details */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
             <h3 className="text-xs font-black text-slate-900 font-brand uppercase tracking-wider flex items-center gap-1.5">
               <i className="fa-solid fa-users text-indigo-600 text-xs" />
@@ -229,31 +437,25 @@ export default function PartyDetail({ id }) {
 
             <div className="grid grid-cols-2 gap-2.5">
               {/* Director */}
-              <div className="bg-gradient-to-br from-indigo-50/70 to-blue-50/50 rounded-xl p-3 border border-indigo-100/70 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                    <i className="fa-solid fa-user-tie text-indigo-600 text-[9px]" />
-                    <span>Director</span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 mt-1">
-                    {pDirector || "Management Directed"}
-                  </p>
+              <div className="bg-gradient-to-br from-indigo-50/70 to-blue-50/50 rounded-xl p-3 border border-indigo-100/70">
+                <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                  <i className="fa-solid fa-user-tie text-indigo-600 text-[9px]" />
+                  <span>Director</span>
                 </div>
-                <span className="text-[9px] text-indigo-600 font-semibold mt-2">Stage Director</span>
+                <p className="text-xs sm:text-sm font-black text-slate-900 mt-1">
+                  {pDirector || "Management Directed"}
+                </p>
               </div>
 
               {/* Writer */}
-              <div className="bg-gradient-to-br from-purple-50/70 to-pink-50/50 rounded-xl p-3 border border-purple-100/70 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                    <i className="fa-solid fa-feather-pointed text-purple-600 text-[9px]" />
-                    <span>Writer</span>
-                  </div>
-                  <p className="text-xs sm:text-sm font-black text-slate-900 mt-1">
-                    {pWriter || "Cultural Scriptwriting"}
-                  </p>
+              <div className="bg-gradient-to-br from-purple-50/70 to-pink-50/50 rounded-xl p-3 border border-purple-100/70">
+                <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                  <i className="fa-solid fa-feather-pointed text-purple-600 text-[9px]" />
+                  <span>Writer</span>
                 </div>
-                <span className="text-[9px] text-purple-600 font-semibold mt-2">Playwright / Drama</span>
+                <p className="text-xs sm:text-sm font-black text-slate-900 mt-1">
+                  {pWriter || "Cultural Scriptwriting"}
+                </p>
               </div>
             </div>
           </div>

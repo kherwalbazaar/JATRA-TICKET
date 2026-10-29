@@ -10,6 +10,7 @@ import {
 } from "../../lib/blockCategories";
 import { getHoldSessionId } from "../../lib/seats";
 import { getSavedCustomerProfile } from "../../lib/supabase";
+import { saveBookedTickets } from "../../lib/myTickets";
 import LoginRequiredModal from "../components/LoginRequiredModal";
 import FakePaymentModal from "../components/FakePaymentModal";
 
@@ -102,6 +103,11 @@ function PaymentContent() {
       }
 
       setProcessingState("Booking Confirmed! Redirecting to My Tickets...");
+
+      // Keep an offline copy so My Tickets renders instantly after redirect.
+      if (data.booking && Array.isArray(data.tickets)) {
+        saveBookedTickets(data.booking, data.tickets);
+      }
 
       // Redirect to My Tickets page
       const targetUrl = data.redirectUrl || "/tickets";

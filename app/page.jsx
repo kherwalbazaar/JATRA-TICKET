@@ -233,8 +233,11 @@ export default function Home() {
   useEffect(() => {
     try {
       const eventId = featuredEvent?.key || featuredEvent?.id || "";
+      if (!eventId) return () => {};
+      // Scope tiers to the featured (upcoming) show so past events' pricing
+      // never leaks into these cards.
       const unsub = subscribeTicketTypes((list) => {
-        if (Array.isArray(list) && list.length > 0) setTicketTypes(list);
+        setTicketTypes(Array.isArray(list) ? list : []);
       }, eventId);
       return () => unsub();
     } catch {
@@ -411,7 +414,12 @@ export default function Home() {
       const unsub = subscribeEvents((data) => {
         if (Array.isArray(data)) {
           setAllEventsList(data);
-          if (data.length > 0) setFeaturedEvent(data[0]);
+          if (data.length > 0) {
+            // List is sorted ascending; feature the next bookable show rather
+            // than the oldest (possibly already completed) one.
+            const nextUpcoming = data.find((ev) => !getEventExpiryInfo(ev).isExpired);
+            setFeaturedEvent(nextUpcoming || data[data.length - 1]);
+          }
         }
       });
       return () => unsub();
@@ -920,10 +928,8 @@ function TodaysShow() {
   const parseShowDate = (show) => new Date(Number(show.year), monthMap[show.month], Number(show.day));
 
   // Show all shows instead of filtering by date
-  const displayShows = allShows.sort((a, b) => parseShowDate(a) - parseShowDate(b));
+  const displayShows = [...allShows].sort((a, b) => parseShowDate(a) - parseShowDate(b));
   const title = "All Shows";
-
-  console.log("TodaysShow display shows:", displayShows);
 
   if (loading) return null;
   if (displayShows.length === 0) return null;

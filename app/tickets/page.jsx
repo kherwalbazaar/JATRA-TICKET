@@ -13,6 +13,7 @@ import {
   isEventDateExpired,
 } from "../../lib/bookings";
 import { subscribeEvents } from "../../lib/events";
+import { readLocalBookings, readLocalTickets, mergeBookings, mergeTickets } from "../../lib/myTickets";
 import { ticketQrUrl } from "../../lib/ticket-qr";
 import { getSavedCustomerProfile, getActiveCustomerProfile, recordCustomerVisit } from "../../lib/supabase";
 
@@ -172,7 +173,7 @@ function buildBookingTicketGroups(bookings, storedTickets = [], usedCodesSet = n
 }
 
 // Unique React key — one booking expands to several per-seat tickets that
-// all share the same Firestore doc id (`key`).
+// all share the same booking id (`key`).
 function ticketKey(t) {
   return `${t.key || t.id || t.baseTicketNumber || t.ticketNumber}-${t.ticketIndex || t.seatIndex || 0}-${t.seat || "0"}`;
 }
@@ -193,22 +194,31 @@ export default function TicketsPage() {
     let unsubEntries = () => {};
     let unsubEvents = () => {};
 
+    // Render the locally saved copy immediately; database records override it.
+    const localBookings = readLocalBookings();
+    const localTickets = readLocalTickets();
+    if (localBookings.length > 0) {
+      setBookings(localBookings);
+      setLoading(false);
+    }
+    if (localTickets.length > 0) setStoredTickets(localTickets);
+
     try {
       unsubBookings = subscribeBookings((data) => {
-        setBookings(data || []);
+        setBookings(mergeBookings(readLocalBookings(), data || []));
         setLoading(false);
       });
     } catch (err) {
       console.error("Failed to subscribe to bookings:", err);
       fetchBookings()
-        .then((data) => setBookings(data || []))
+        .then((data) => setBookings(mergeBookings(readLocalBookings(), data || [])))
         .catch(() => {})
         .finally(() => setLoading(false));
     }
 
     try {
       unsubTickets = subscribeAllTickets((tList) => {
-        setStoredTickets(tList || []);
+        setStoredTickets(mergeTickets(readLocalTickets(), tList || []));
       });
     } catch (err) {
       console.warn("Failed to subscribe to tickets:", err);

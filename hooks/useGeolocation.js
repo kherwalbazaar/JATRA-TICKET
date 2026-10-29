@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { detectDeviceLocation, detectIPLocation, validateCoords } from "../lib/location/geolocation";
+import { detectDeviceLocation, validateCoords } from "../lib/location/geolocation";
 import { reverseGeocode, formatLocationName } from "../lib/location/reverseGeocode";
 
 /**
@@ -16,29 +16,48 @@ function classifyErrorCode(code) {
   }
 }
 
+const EMPTY_STATE = {
+  latitude: null,
+  longitude: null,
+  accuracy: null,
+  timestamp: null,
+
+  locality: null,
+  city: null,
+  district: null,
+  state: null,
+  country: null,
+  postalCode: null,
+  formattedAddress: null,
+  displayName: null,
+
+  source: null,
+  status: "idle",
+  error: null,
+};
+
+/** Only a real GPS fix may be restored; IP-derived values are never trusted. */
+function readLastGpsFix() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("jatra_detected_location");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.source !== "gps" || !validateCoords(parsed.latitude, parsed.longitude)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * useGeolocation hook — centralized location state.
- * Supports smart auto-detection: GPS (High/Low) -> IP Network Geolocation -> Default Region.
+ * Detection is GPS / device-position only; no IP or hardcoded fallbacks.
  */
 export function useGeolocation({ onError } = {}) {
-  const [state, setState] = useState({
-    latitude: null,
-    longitude: null,
-    accuracy: null,
-    timestamp: null,
-
-    locality: null,
-    city: null,
-    district: null,
-    state: null,
-    country: null,
-    postalCode: null,
-    formattedAddress: null,
-    displayName: null,
-
-    source: null,
-    status: "idle",
-    error: null,
+  const [state, setState] = useState(() => {
+    const lastFix = readLastGpsFix();
+    return lastFix ? { ...EMPTY_STATE, ...lastFix, status: "success", error: null } : EMPTY_STATE;
   });
 
   const detectingRef = useRef(false);
@@ -58,19 +77,13 @@ export function useGeolocation({ onError } = {}) {
         const { latitude, longitude, accuracy, source } = gpsData;
 
         if (!validateCoords(latitude, longitude)) {
-          // Fallback to IP geolocation if coords are invalid
-          try {
-            const ipData = await detectIPLocation();
-            if (ipData && ipData.displayName) {
-              setState((prev) => ({ ...prev, ...ipData, status: "success" }));
-              try {
-                localStorage.setItem("jatra_detected_location", JSON.stringify(ipData));
-                localStorage.setItem("jatra_selected_location", ipData.displayName);
-              } catch {}
-              detectingRef.current = false;
-              return;
-            }
-          } catch {}
+          setState((prev) => ({
+            ...prev,
+            status: "error",
+            error: "Received invalid GPS coordinates. Please try again.",
+          }));
+          detectingRef.current = false;
+          return;
         }
 
         const rev = await reverseGeocode(latitude, longitude);
@@ -108,72 +121,11 @@ export function useGeolocation({ onError } = {}) {
         detectingRef.current = false;
       },
       async (errorData) => {
-        console.warn("Device GPS unavailable, falling back to IP geolocation...", errorData);
-
-        // Fallback to IP / Network Geolocation
-        try {
-          const ipLocation = await detectIPLocation();
-          if (ipLocation && ipLocation.displayName) {
-            const locationData = {
-              latitude: ipLocation.latitude,
-              longitude: ipLocation.longitude,
-              accuracy: ipLocation.accuracy || 2500,
-              timestamp: Date.now(),
-              locality: ipLocation.locality || null,
-              city: ipLocation.city || null,
-              district: ipLocation.district || null,
-              state: ipLocation.state || null,
-              country: ipLocation.country || "India",
-              postalCode: null,
-              formattedAddress: ipLocation.formattedAddress || null,
-              displayName: ipLocation.displayName,
-              source: "network",
-              status: "success",
-              error: null,
-            };
-
-            try {
-              localStorage.setItem("jatra_detected_location", JSON.stringify(locationData));
-              localStorage.setItem("jatra_selected_location", ipLocation.displayName);
-              localStorage.setItem("jatra_detected_time", String(Date.now()));
-            } catch {}
-
-            setState((prev) => ({
-              ...prev,
-              ...locationData,
-            }));
-            detectingRef.current = false;
-            return;
-          }
-        } catch (ipErr) {
-          console.warn("IP Geolocation fallback error:", ipErr);
-        }
-
-        // If completely offline or network blocked, set default Jatra region
-        const defaultRegion = {
-          latitude: 21.93,
-          longitude: 86.74,
-          accuracy: 5000,
-          timestamp: Date.now(),
-          locality: "Bahanada",
-          city: "Khunta",
-          district: "Mayurbhanj",
-          state: "Odisha",
-          country: "India",
-          displayName: "Bahanada, Khunta, Mayurbhanj",
-          source: "network",
-          status: "success",
-          error: null,
-        };
-
-        try {
-          localStorage.setItem("jatra_detected_location", JSON.stringify(defaultRegion));
-          localStorage.setItem("jatra_selected_location", defaultRegion.displayName);
-        } catch {}
-
+        console.warn("Device geolocation failed:", errorData);
         setState((prev) => ({
           ...prev,
-          ...defaultRegion,
+          status: classifyErrorCode(errorData?.code),
+          error: errorData?.message || "Unable to get your current location.",
         }));
         detectingRef.current = false;
       }
@@ -205,22 +157,7 @@ export function useGeolocation({ onError } = {}) {
   }, []);
 
   const reset = useCallback(() => {
-    setState({
-      latitude: null,
-      longitude: null,
-      accuracy: null,
-      timestamp: null,
-      locality: null,
-      city: null,
-      district: null,
-      state: null,
-      country: null,
-      postalCode: null,
-      formattedAddress: null,
-      source: null,
-      status: "idle",
-      error: null,
-    });
+    setState(EMPTY_STATE);
   }, []);
 
   const displayName = state.displayName || formatLocationName(state) || state.locality || null;

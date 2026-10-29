@@ -12,6 +12,7 @@ import {
   subscribeTicketById,
 } from "../../../lib/bookings";
 import { fetchEvents } from "../../../lib/events";
+import { findLocalTicketView } from "../../../lib/myTickets";
 import { ticketQrUrl } from "../../../lib/ticket-qr";
 
 function formatSeatNumber(seatStr) {
@@ -77,6 +78,13 @@ export default function TicketDetailPage({ params }) {
 
     let eventsMap = {};
 
+    // Show the locally saved ticket immediately; live data overrides it below.
+    const localView = findLocalTicketView(id);
+    if (localView) {
+      latestBookingData = localView;
+      updateTicketState();
+    }
+
     fetchEvents()
       .then((list) => {
         if (!active || !Array.isArray(list)) return;
@@ -102,7 +110,6 @@ export default function TicketDetailPage({ params }) {
         setLoading(false);
         return;
       }
-
       const evtKey = (data.eventId || "").trim();
       const evtNameKey = (data.eventName || "").toLowerCase().trim();
       const evt =
@@ -225,14 +232,20 @@ export default function TicketDetailPage({ params }) {
           updateTicketState();
         } else {
           fetchBookingByTicketNumber(baseNumber).then((bData) => {
-            latestBookingData = bData;
-            updateTicketState();
+            if (!active) return;
+            if (bData) {
+              latestBookingData = bData;
+              updateTicketState();
+            } else if (!latestBookingData) {
+              updateTicketState();
+            }
           });
         }
       });
     } catch (err) {
       console.warn("Ticket subscription failed, fallback to booking:", err);
       unsubBooking = subscribeBookingByTicketNumber(baseNumber, (data) => {
+        if (!data) return;
         latestBookingData = data;
         updateTicketState();
       });

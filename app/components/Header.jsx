@@ -19,21 +19,31 @@ export default function Header({ showBack, showShare, onShare, title }) {
   const [showManual, setShowManual] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Load saved location on mount, then auto-detect GPS
+  // Drop any legacy IP/default location, then always refresh the current GPS fix
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setSavedLocation(saved);
-      // Has saved location — check if stale (>1 hour), re-detect if so
-      const lastDetect = localStorage.getItem("jatra_detected_time");
-      const isStale = !lastDetect || Date.now() - Number(lastDetect) > 3600000;
-      if (isStale) {
-        location.detect();
+    try {
+      const rawDetected = localStorage.getItem("jatra_detected_location");
+      if (rawDetected) {
+        const parsed = JSON.parse(rawDetected);
+        if (parsed?.source !== "gps") {
+          localStorage.removeItem("jatra_detected_location");
+          localStorage.removeItem("jatra_detected_time");
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (parsed?.displayName && stored === parsed.displayName) {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        }
       }
-    } else {
-      // No saved location — auto-detect GPS on first load
-      location.detect();
+    } catch {
+      /* ignore corrupt storage */
     }
+
+    // Show the last confirmed location while the fresh fix is in flight
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) setSavedLocation(saved);
+
+    // Always re-detect so the header reflects the actual current position
+    location.detect();
 
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {

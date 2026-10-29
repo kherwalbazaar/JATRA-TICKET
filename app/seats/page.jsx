@@ -423,7 +423,7 @@ function SeatSelectionContent() {
     return { total: fsSeats.length, available };
   };
 
-  // Group Firestore seats by row for data-driven rendering
+  // Group seats by row for data-driven rendering
   const getFsRows = (blockId) => {
     const list = seatsByBlock[blockId] || [];
     if (!list.length) return null;
@@ -942,7 +942,7 @@ function SeatSelectionContent() {
 
           <button
             onClick={() => {
-              // Always pass Firestore doc ids: row-seatNumber (e.g. A-9, A-10)
+              // Always pass canonical seat ids: row-seatNumber (e.g. A-9, A-10)
               const displaySeats = selected.map((key) => {
                 const fs = findFsSeat(activeBlock, key);
                 if (fs) {

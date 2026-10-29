@@ -66,7 +66,7 @@ export default function UserSeatGrid({
   const seatsByBlock = isControlled ? (externalSeatsByBlock || {}) : internalSeats;
   const loading = externalLoading !== undefined ? externalLoading : internalLoading;
 
-  // Real-time Firestore onSnapshot subscription (only runs when NOT controlled externally)
+  // Real-time Supabase realtime subscription (only runs when NOT controlled externally)
   useEffect(() => {
     if (isControlled) {
       setInternalLoading(false);

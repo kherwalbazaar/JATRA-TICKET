@@ -97,22 +97,6 @@ export default function LocationCard({ location, onDetect, onSelectManual }) {
           </div>
         )}
 
-        {/* Success with network / IP auto-detected location */}
-        {status === "success" && (source === "network" || source === "ip") && (
-          <div className="space-y-1.5 py-1">
-            <p className="text-base font-bold text-white">{displayName || locality || "Location Detected"}</p>
-            {latitude != null && longitude != null && (
-              <p className="text-[11px] font-mono text-slate-400">
-                {latitude.toFixed(4)}, {longitude.toFixed(4)}
-              </p>
-            )}
-            <div className="flex items-center gap-1.5">
-              <i className="fa-solid fa-satellite-dish text-sky-400 text-[9px]" />
-              <span className="text-[10px] text-sky-400 font-medium">Auto-detected Location</span>
-            </div>
-          </div>
-        )}
-
         {/* Success with manual location */}
         {status === "success" && source === "manual" && (
           <div className="space-y-1.5 py-1">

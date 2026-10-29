@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { calculateCustomerCharges } from "@/lib/pricing";
 import { resolveBookingParameters } from "@/lib/paymentMethods";
-import { firestore } from "@/lib/firebase";
-import { doc, setDoc, writeBatch } from "firebase/firestore";
 import crypto from "crypto";
 
 function isHoldFresh(reservedAt) {
@@ -284,7 +282,7 @@ export async function POST(request) {
           updated_at: nowIso,
         })
         .eq("event_id", eventId)
-        .or(`id.eq.${cleanKey},seat_label.eq.${cleanKey}`);
+        .or(`id.eq.${cleanKey},seat_id.eq.${cleanKey},seat_label.eq.${cleanKey}`);
     }
 
     // 7. Insert Individual Tickets in Supabase
@@ -359,99 +357,15 @@ export async function POST(request) {
       console.warn("Failed to update event revenue:", evErr?.message);
     }
 
-    // 9. DUAL-WRITE TO FIRESTORE:
-    // This guarantees that JATRA BAZAAR ADMIN and SCANNER immediately see the booking and tickets in real time!
-    try {
-      const batch = writeBatch(firestore);
-
-      // Firestore booking doc
-      const fsBookingRef = doc(firestore, "bookings", orderId);
-      const fsBookingData = {
-        id: orderId,
-        bookingId: ticketNumber,
-        ticketNumber: ticketNumber,
-        showId: eventId,
-        eventId: eventId,
-        eventName: resolvedEventName,
-        customerName: bookingRow.customer_name,
-        customerPhone: bookingRow.customer_phone,
-        customerEmail: bookingRow.customer_email,
-        ticketTypeName: tierName || "SEATED",
-        quantity: ticketCount,
-        unitPrice: unitPrice,
-        amount: finalAmount,
-        ticketAmount: pricing.ticketAmount,
-        finalCustomerAmount: finalAmount,
-        source: bookingParams.source,
-        paymentMethod: bookingParams.canonicalMethod,
-        bookingMethod: bookingParams.bookingMethod,
-        paymentChannel: bookingParams.paymentChannel,
-        status: bookingParams.status,
-        bookingStatus: bookingParams.bookingStatus,
-        paymentStatus: bookingParams.paymentStatus,
-        transactionId: bookingRow.transaction_id,
-        gatewayTransactionId: bookingRow.gateway_transaction_id,
-        date: bookingDate,
-        time: bookingTime,
-        assignedGate: assignedGate,
-        block: cleanBlock,
-        seats: seatList,
-        seatNumber: seatList.join(", "),
-        seatCount: ticketCount,
-        enteredCount: 0,
-        remainingCount: ticketCount,
-        usedTickets: [],
-        usedSeats: [],
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      batch.set(fsBookingRef, fsBookingData, { merge: true });
-
-      // Firestore tickets
-      for (const t of ticketRows) {
-        const fsTicketRef = doc(firestore, "tickets", t.id);
-        batch.set(
-          fsTicketRef,
-          {
-            id: t.id,
-            ticketId: t.ticket_id,
-            bookingId: t.booking_id,
-            bookingDocId: t.booking_doc_id,
-            ticketIndex: t.ticket_index,
-            totalTickets: t.total_tickets,
-            eventId: t.event_id,
-            eventName: t.event_name,
-            ticketTypeName: t.ticket_type_name,
-            seat: t.seat,
-            seatIndex: t.seat_index,
-            seatCount: t.seat_count,
-            block: t.block,
-            assignedGate: t.assigned_gate,
-            customerName: t.customer_name,
-            customerPhone: t.customer_phone,
-            serialNumber: t.serial_number,
-            qrToken: t.qr_token,
-            status: "ACTIVE",
-            date: t.date,
-            time: t.time,
-            unitPrice: t.unit_price,
-            createdAt: nowIso,
-          },
-          { merge: true }
-        );
-      }
-
-      await batch.commit();
-    } catch (fsErr) {
-      console.warn("Firestore dual-write notice:", fsErr?.message);
-    }
-
     return NextResponse.json({
       success: true,
       orderId,
       ticketNumber,
       amount: finalAmount,
       seats: seatList,
+      // Returned so the client can keep an offline copy under My Tickets.
+      booking: bookingRow,
+      tickets: ticketRows,
       redirectUrl: "/tickets",
     });
   } catch (err) {
