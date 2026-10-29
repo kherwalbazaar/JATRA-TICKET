@@ -8,6 +8,7 @@ import { getImageSource } from "../../components/BannerImage";
 import { getSavedCustomerProfile } from "../../../lib/supabase";
 import LoginRequiredModal from "../../components/LoginRequiredModal";
 import { findParty, findPartyForEvent } from "../../../lib/parties";
+import { splitPhoneNumbers } from "../../../lib/phoneNumbers";
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
 
@@ -281,7 +282,7 @@ export default function EventDetail({ id }) {
   const partyWriter = firstValue(partyInfo?.writer, event?.writer, credits?.writer);
   const partyPhone1 = firstValue(partyInfo?.phone, event?.phone, contact?.phone);
   const partyPhone2 = firstValue(partyInfo?.phone2, event?.phone2, "");
-  const partyPhones = [partyPhone1, partyPhone2].filter(Boolean);
+  const partyPhones = splitPhoneNumbers(partyPhone1, partyPhone2);
   const partyColor = partyInfo?.color || "from-indigo-600 to-purple-600";
 
   const address = firstValue(contact.address, event?.fullAddress, event?.address, event?.addressLine, partyLocation);
@@ -295,6 +296,7 @@ export default function EventDetail({ id }) {
   );
   const locationAddress = committeeAddress || address;
   const phone = firstValue(contact.phone, contact.mobile, event?.contactNumber, event?.mdPhone, event?.phone, partyPhone1);
+  const contactNumbers = splitPhoneNumbers(phone);
   const managingDirector = firstValue(contact.md, contact.managingDirector, event?.managingDirector, event?.mdName, partyDirector);
   const committee = event?.committee || contact.committee;
   const about = event?.about || "";
@@ -510,25 +512,34 @@ export default function EventDetail({ id }) {
 
               {/* Troupe Contact Numbers & Direct Call Action */}
               {partyPhones.length > 0 && (
-                <div className="bg-indigo-50/60 rounded-xl p-2.5 border border-indigo-100/80 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
-                      <i className="fa-solid fa-phone text-xs" />
+                <div className="bg-indigo-50/60 rounded-xl p-2.5 border border-indigo-100/80 space-y-2">
+                  {partyPhones.map((number, index) => (
+                    <div
+                      key={number}
+                      className="flex items-center justify-between gap-2 bg-white rounded-lg px-2.5 py-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                          <i className="fa-solid fa-phone text-xs" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase leading-none">
+                            {partyPhones.length > 1 ? `Troupe Contact ${index + 1}` : "Troupe Contact"}
+                          </p>
+                          <p className="text-xs font-mono font-bold text-slate-800 truncate mt-0.5">
+                            {number}
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href={`tel:${number.replace(/[^\d+]/g, "")}`}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1 flex-shrink-0 active:scale-95 transition-transform"
+                      >
+                        <i className="fa-solid fa-phone-volume text-[10px]" />
+                        <span>Call</span>
+                      </a>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase leading-none">Troupe Contact</p>
-                      <p className="text-xs font-mono font-bold text-slate-800 truncate mt-0.5">
-                        {partyPhones.join(" / ")}
-                      </p>
-                    </div>
-                  </div>
-                  <a
-                    href={`tel:${partyPhones[0].replace(/[^\d+]/g, "")}`}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1 flex-shrink-0 active:scale-95 transition-transform"
-                  >
-                    <i className="fa-solid fa-phone-volume text-[10px]" />
-                    <span>Call</span>
-                  </a>
+                  ))}
                 </div>
               )}
 
@@ -810,7 +821,7 @@ export default function EventDetail({ id }) {
           </div>
 
           {/* Party Address - only database data */}
-          {(managingDirector || address || phone) && (
+          {(managingDirector || address || contactNumbers.length > 0) && (
             <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 shadow-sm border border-purple-100">
               <h3 className="text-sm font-black text-slate-900 font-brand mb-3 flex items-center gap-2">
                 <i className="fa-solid fa-address-book text-purple-500" /> Party Address
@@ -846,21 +857,27 @@ export default function EventDetail({ id }) {
                     </a>
                   </div>
                 )}
-                {phone && (
-                  <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                      <i className="fa-solid fa-phone text-emerald-500 text-sm" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Contact Number</p>
-                      <p className="text-sm font-bold text-indigo-700">{phone}</p>
-                    </div>
-                    <a
-                      href={`tel:${phone}`}
-                      className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
-                    >
-                      <i className="fa-solid fa-phone-volume text-white text-sm" />
-                    </a>
+                {contactNumbers.length > 0 && (
+                  <div className="space-y-2">
+                    {contactNumbers.map((number, index) => (
+                      <div key={number} className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                          <i className="fa-solid fa-phone text-emerald-500 text-sm" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase">
+                            {contactNumbers.length > 1 ? `Contact Number ${index + 1}` : "Contact Number"}
+                          </p>
+                          <p className="text-sm font-bold text-indigo-700 break-all">{number}</p>
+                        </div>
+                        <a
+                          href={`tel:${number.replace(/[^\d+]/g, "")}`}
+                          className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
+                        >
+                          <i className="fa-solid fa-phone-volume text-white text-sm" />
+                        </a>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

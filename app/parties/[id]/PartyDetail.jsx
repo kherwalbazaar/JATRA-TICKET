@@ -5,6 +5,7 @@ import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { findParty, subscribeParties, DEFAULT_PARTIES } from "../../../lib/parties";
 import { subscribeEvents, isLogoUrl } from "../../../lib/events";
+import { splitPhoneNumbers } from "../../../lib/phoneNumbers";
 import { getImageSource } from "../../components/BannerImage";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -21,6 +22,24 @@ function showDateOf(show) {
   return new Date(year, monthIndex, day);
 }
 
+function formatShowDate(show) {
+  const date = showDateOf(show);
+  if (!date) return "Date not available";
+  return `${date.getDate()} ${MONTH_LABELS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function committeeAddressOf(show) {
+  return (
+    show?.committeeLocation ||
+    show?.committee_location ||
+    show?.address ||
+    show?.venue ||
+    show?.location ||
+    show?.city ||
+    ""
+  );
+}
+
 export default function PartyDetail({ id }) {
   const [party, setParty] = useState(null);
   const [allEvents, setAllEvents] = useState([]);
@@ -28,7 +47,6 @@ export default function PartyDetail({ id }) {
   const [slotYear, setSlotYear] = useState(() => new Date().getFullYear());
   const [slotMonth, setSlotMonth] = useState(() => new Date().getMonth());
   const [selectedDay, setSelectedDay] = useState(null);
-  const [autoJumped, setAutoJumped] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +102,7 @@ export default function PartyDetail({ id }) {
   const pColor = party?.color || "from-indigo-600 to-purple-600";
   const pPhone1 = party?.phone || "";
   const pPhone2 = party?.phone2 || "";
-  const phoneNumbers = [pPhone1, pPhone2].filter(Boolean);
+  const phoneNumbers = splitPhoneNumbers(pPhone1, pPhone2);
 
   // Filter shows belonging to this party
   const partyShows = useMemo(() => {
@@ -110,28 +128,15 @@ export default function PartyDetail({ id }) {
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  // Open on the troupe's next show month so the active month is the first thing seen
-  useEffect(() => {
-    if (autoJumped || !party) return;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const upcoming = partyShows
-      .map((show) => ({ show, date: showDateOf(show) }))
-      .filter(({ date }) => date && date >= today)
-      .sort((a, b) => a.date - b.date)[0];
-    if (upcoming) {
-      setSlotYear(upcoming.date.getFullYear());
-      setSlotMonth(upcoming.date.getMonth());
-    }
-    setAutoJumped(true);
-  }, [autoJumped, party, partyShows]);
-
   const monthShows = useMemo(() => {
     const map = new Map();
     partyShows.forEach((show) => {
       const date = showDateOf(show);
       if (!date || date.getFullYear() !== slotYear || date.getMonth() !== slotMonth) return;
-      map.set(date.getDate(), show);
+      const day = date.getDate();
+      const existing = map.get(day);
+      if (existing) existing.push(show);
+      else map.set(day, [show]);
     });
     return map;
   }, [partyShows, slotYear, slotMonth]);
@@ -146,7 +151,7 @@ export default function PartyDetail({ id }) {
   const daysInPrevMonth = new Date(slotYear, slotMonth, 0).getDate();
   const trailingDays = (7 - ((leadingDays + daysInMonth) % 7)) % 7;
   const todayStart = new Date(currentYear, now.getMonth(), now.getDate());
-  const selectedShow = selectedDay ? monthShows.get(selectedDay) : null;
+  const selectedShows = selectedDay ? monthShows.get(selectedDay) || [] : [];
 
   const changeMonth = (delta) => {
     const next = new Date(slotYear, slotMonth + delta, 1);
@@ -323,7 +328,7 @@ export default function PartyDetail({ id }) {
             </div>
 
             {/* Weekday names + dates */}
-            <div className="grid grid-cols-7 gap-1.5 text-center">
+            <div className="grid grid-cols-7 gap-2 text-center">
               {WEEKDAYS.map((weekday, index) => (
                 <span
                   key={`weekday-${index}`}
@@ -336,7 +341,7 @@ export default function PartyDetail({ id }) {
               {Array.from({ length: leadingDays }, (_, index) => (
                 <span
                   key={`prev-${index}`}
-                  className="aspect-square rounded-lg border border-transparent text-[11px] font-bold flex items-center justify-center bg-slate-50 text-slate-300"
+                  className="aspect-square rounded-md text-[11px] font-bold flex items-center justify-center bg-slate-200 text-slate-400"
                 >
                   {daysInPrevMonth - leadingDays + 1 + index}
                 </span>
@@ -344,7 +349,8 @@ export default function PartyDetail({ id }) {
 
               {Array.from({ length: daysInMonth }, (_, index) => {
                 const day = index + 1;
-                const show = monthShows.get(day);
+                const dayShows = monthShows.get(day) || [];
+                const hasShows = dayShows.length > 0;
                 const isPast = new Date(slotYear, slotMonth, day) < todayStart;
                 const isToday =
                   slotYear === currentYear && slotMonth === now.getMonth() && day === now.getDate();
@@ -354,22 +360,35 @@ export default function PartyDetail({ id }) {
                   <button
                     key={day}
                     type="button"
-                    disabled={isPast && !show}
+                    disabled={isPast && !hasShows}
                     onClick={() => setSelectedDay(isSelected ? null : day)}
                     aria-pressed={isSelected}
-                    title={show ? show.name || show.eventTitle || "Show day" : undefined}
-                    className={`aspect-square rounded-lg text-[11px] font-bold flex flex-col items-center justify-center border transition-colors ${
-                      show
-                        ? "bg-red-600 border-red-700 text-white shadow-sm"
+                    aria-label={
+                      hasShows
+                        ? `${day} ${MONTH_FULL[slotMonth]} ${slotYear} - ${dayShows.length} booked event${dayShows.length > 1 ? "s" : ""}`
+                        : undefined
+                    }
+                    title={
+                      hasShows
+                        ? dayShows.map((s) => s.eventTitle || s.name || "Jatra Show").join(", ")
+                        : undefined
+                    }
+                    className={`aspect-square rounded-md text-[11px] font-bold flex flex-col items-center justify-center transition-colors ${
+                      hasShows
+                        ? "bg-red-600 text-white shadow-sm hover:bg-red-700 active:scale-95"
                         : isPast
-                          ? "bg-rose-100 border-rose-200 text-rose-400"
-                          : "bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200 active:scale-95"
+                          ? "bg-rose-200 text-rose-500"
+                          : "bg-emerald-200 text-emerald-900 hover:bg-emerald-300 active:scale-95"
                     } ${isSelected ? "ring-2 ring-indigo-600 ring-offset-1" : ""} ${
-                      isToday && !isSelected ? "ring-2 ring-indigo-400 ring-inset" : ""
+                      isToday && !isSelected && !hasShows ? "ring-2 ring-indigo-400 ring-inset" : ""
                     }`}
                   >
                     <span>{day}</span>
-                    {show && <span className="w-1 h-1 rounded-full bg-white/90 mt-0.5" />}
+                    {hasShows && (
+                      <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5">
+                        {dayShows.length > 1 ? `${dayShows.length} Shows` : "Booked"}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -377,7 +396,7 @@ export default function PartyDetail({ id }) {
               {Array.from({ length: trailingDays }, (_, index) => (
                 <span
                   key={`next-${index}`}
-                  className="aspect-square rounded-lg border border-transparent text-[11px] font-bold flex items-center justify-center bg-slate-50 text-slate-300"
+                  className="aspect-square rounded-md text-[11px] font-bold flex items-center justify-center bg-slate-200 text-slate-400"
                 >
                   {index + 1}
                 </span>
@@ -385,44 +404,70 @@ export default function PartyDetail({ id }) {
             </div>
 
             {selectedDay && (
-              <div className="flex items-center justify-between gap-2 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2">
-                <div className="min-w-0">
-                  {selectedShow ? (
-                    <>
-                      <p className="text-[9px] font-bold uppercase text-rose-600">
-                        Show on {selectedDay} {MONTH_LABELS[slotMonth]} {slotYear}
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5 space-y-2">
+                {selectedShows.length > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-rose-600">
+                        Booked on {selectedDay} {MONTH_LABELS[slotMonth]} {slotYear}
                       </p>
-                      <p className="text-[11px] font-black text-slate-900 truncate">
-                        {selectedShow.name || selectedShow.eventTitle || "Jatra Show"}
-                      </p>
-                    </>
-                  ) : (
+                      <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full shrink-0">
+                        {selectedShows.length} event{selectedShows.length > 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    {selectedShows.map((show) => (
+                      <div
+                        key={show.key || show.id}
+                        className="bg-white rounded-lg border border-slate-200 p-2.5 space-y-1.5"
+                      >
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Event Name
+                          </p>
+                          <p className="text-xs font-black text-slate-900">
+                            {show.eventTitle || show.name || "Jatra Show"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Event Date
+                          </p>
+                          <p className="text-[11px] font-semibold text-slate-700">
+                            {formatShowDate(show)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                            Committee Address
+                          </p>
+                          <p className="text-[11px] font-semibold text-slate-700">
+                            {committeeAddressOf(show) || "Address not available"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] font-bold text-indigo-900">
                       Enquire for {selectedDay} {MONTH_LABELS[slotMonth]} {slotYear}
                     </p>
-                  )}
-                </div>
 
-                {selectedShow ? (
-                  <Link
-                    href={`/event-details?id=${encodeURIComponent(selectedShow.key || selectedShow.id)}`}
-                    className="bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
-                  >
-                    <i className="fa-solid fa-ticket text-[9px]" />
-                    View Show
-                  </Link>
-                ) : phoneNumbers[0] ? (
-                  <a
-                    href={`tel:${phoneNumbers[0].replace(/[^\d+]/g, "")}`}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
-                  >
-                    <i className="fa-solid fa-phone-volume text-[9px]" />
-                    Call Troupe
-                  </a>
-                ) : (
-                  <span className="text-[10px] font-semibold text-indigo-700 shrink-0">
-                    Contact via support
-                  </span>
+                    {phoneNumbers[0] ? (
+                      <a
+                        href={`tel:${phoneNumbers[0].replace(/[^\d+]/g, "")}`}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
+                      >
+                        <i className="fa-solid fa-phone-volume text-[9px]" />
+                        Call Troupe
+                      </a>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-indigo-700 shrink-0">
+                        Contact via support
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -485,7 +530,7 @@ export default function PartyDetail({ id }) {
                       </div>
                       <div>
                         <p className="text-[9px] font-bold text-slate-400 uppercase">
-                          {i === 0 ? "Primary Contact" : "Secondary Contact"}
+                          {i === 0 ? "Primary Contact" : i === 1 ? "Secondary Contact" : `Contact ${i + 1}`}
                         </p>
                         <p className="text-xs sm:text-sm font-mono font-bold text-slate-900">{phone}</p>
                       </div>
@@ -613,19 +658,6 @@ export default function PartyDetail({ id }) {
             </p>
           </div>
         </div>
-
-        {/* Floating Call Troupe Button for easy mobile access */}
-        {phoneNumbers.length > 0 && (
-          <div className="fixed bottom-16 left-0 right-0 p-3 bg-gradient-to-t from-[#f8faff] via-[#f8faff]/90 to-transparent z-40 max-w-md mx-auto">
-            <a
-              href={`tel:${phoneNumbers[0].replace(/[^\d+]/g, "")}`}
-              className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-black text-sm py-3 px-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-transform hover:brightness-110"
-            >
-              <i className="fa-solid fa-phone-volume text-base" />
-              <span>Contact {pName.split(" ")[0]} Troupe</span>
-            </a>
-          </div>
-        )}
 
         <BottomNav active="events" />
       </div>
