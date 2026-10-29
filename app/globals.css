@@ -31,6 +31,23 @@ body {
   animation: blink-live 1s ease-in-out infinite;
 }
 
+@keyframes blink-expired {
+  0%, 100% {
+    background-color: #e11d48;
+    color: #ffffff;
+    border-color: #be123c;
+  }
+  50% {
+    background-color: #ffffff;
+    color: #e11d48;
+    border-color: #e11d48;
+  }
+}
+
+.blink-expired {
+  animation: blink-expired 1s ease-in-out infinite;
+}
+
 /* ============ Book Ticket Now Glowing & Shimmering Animation ============ */
 @keyframes cta-pulse-glow {
   0%, 100% {

@@ -1186,9 +1186,14 @@ function EventCarousel() {
               location,
               entryTime,
               startTime,
+              isExpired: getEventExpiryInfo(ev).isExpired,
             };
           });
-          setEvents(processedEvents);
+
+          const upcoming = processedEvents.filter((ev) => !ev.isExpired);
+          const expired = processedEvents.filter((ev) => ev.isExpired);
+          // With enough live shows, expired ones are dropped from the carousel.
+          setEvents(upcoming.length >= 3 ? upcoming : [...upcoming, ...expired]);
           setIndex(0);
         } else {
           setEvents([]);
@@ -1239,9 +1244,13 @@ function EventCarousel() {
                   <i className="fa-solid fa-users text-8xl text-indigo-900" />
                 </div>
 
-                <div className="absolute top-1.5 right-1.5 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap -mt-1 blink-live">
+                <div
+                  className={`absolute top-1.5 right-1.5 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap -mt-1 ${
+                    ev.isExpired ? "blink-expired" : "blink-live"
+                  }`}
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
-                  <span>Live Booking</span>
+                  <span>{ev.isExpired ? "Expired" : "Live Booking"}</span>
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
