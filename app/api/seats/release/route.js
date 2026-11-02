@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, serverBroadcastSeatChange } from "@/lib/server/supabaseAdmin";
+import { holdSessionId } from "@/lib/reservation";
 
 export async function POST(request) {
   try {
@@ -111,7 +112,8 @@ export async function POST(request) {
 
     // Only release if currently 'reserved' (never overwrite 'booked' or 'sold')
     if (targetSeat.status === "reserved") {
-      if (cleanSession && targetSeat.reserved_by === cleanSession) {
+      const ownerSession = holdSessionId(targetSeat.reserved_by);
+      if (ownerSession === cleanSession) {
         const nowIso = new Date().toISOString();
         const { data: updatedSeats, error: updateError } = await supabaseAdmin
           .from("seats")
@@ -135,7 +137,7 @@ export async function POST(request) {
 
           return NextResponse.json({ success: true, seat: releasedSeat });
         }
-      } else if (targetSeat.reserved_by && targetSeat.reserved_by !== cleanSession) {
+      } else if (ownerSession !== cleanSession) {
         return NextResponse.json(
           {
             success: false,

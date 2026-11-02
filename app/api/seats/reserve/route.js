@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, serverBroadcastSeatChange } from "@/lib/server/supabaseAdmin";
-
-function isHoldFresh(reservedAt) {
-  if (!reservedAt) return false;
-  const at = Date.parse(reservedAt);
-  if (Number.isNaN(at)) return false;
-  return Date.now() - at < 10 * 60 * 1000;
-}
+import {
+  applyOwnershipFilter,
+  holdSessionId,
+  isHoldFreshValue,
+} from "@/lib/reservation";
 
 export async function POST(request) {
   try {
@@ -141,12 +139,13 @@ export async function POST(request) {
       );
     }
 
-    // Check if seat is reserved by another customer and hold is fresh (< 10 minutes)
+    // Check if the seat is held by another customer inside its validity window
+    // (selection holds run 10 minutes, payment reservations 60 seconds)
     if (
       currentStatus === "reserved" &&
       targetSeat.reserved_by &&
-      targetSeat.reserved_by !== cleanSession &&
-      isHoldFresh(targetSeat.reserved_at)
+      holdSessionId(targetSeat.reserved_by) !== cleanSession &&
+      isHoldFreshValue(targetSeat.reserved_by, targetSeat.reserved_at)
     ) {
       return NextResponse.json(
         {
@@ -162,7 +161,7 @@ export async function POST(request) {
 
     // Atomically update seat to 'reserved'
     const nowIso = new Date().toISOString();
-    const { data: updatedSeats, error: updateError } = await supabaseAdmin
+    let holdQuery = supabaseAdmin
       .from("seats")
       .update({
         status: "reserved",
@@ -171,16 +170,23 @@ export async function POST(request) {
         updated_at: nowIso,
       })
       .eq("id", targetSeat.id)
-      .select();
+      .in("status", ["available", "reserved"]);
+    holdQuery = applyOwnershipFilter(
+      holdQuery,
+      targetSeat.reserved_by,
+      targetSeat.reserved_at
+    );
+    const { data: updatedSeats, error: updateError } = await holdQuery.select();
 
     if (updateError || !updatedSeats || updatedSeats.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          code: "RESERVATION_FAILED",
-          message: "Failed to reserve the seat. Please try again.",
+          code: "SEAT_ALREADY_RESERVED",
+          message:
+            "This seat has just been reserved by another customer. Please select another seat.",
         },
-        { status: 500 }
+        { status: 409 }
       );
     }
 

@@ -14,6 +14,7 @@ import {
 import { fetchEvents } from "../../../lib/events";
 import { findLocalTicketView } from "../../../lib/myTickets";
 import { ticketQrUrl } from "../../../lib/ticket-qr";
+import { copyTextToClipboard } from "../../../lib/clipboard";
 
 function formatSeatNumber(seatStr) {
   if (!seatStr) return "";
@@ -316,11 +317,9 @@ export default function TicketDetailPage({ params }) {
         e.preventDefault();
         setIsScreenProtected(true);
         triggerScreenshotAlert();
-        try {
-          if (navigator.clipboard?.writeText) {
-            navigator.clipboard.writeText("Screenshots are restricted on this ticket for security reasons.");
-          }
-        } catch {}
+        copyTextToClipboard(
+          "Screenshots are restricted on this ticket for security reasons."
+        );
         setTimeout(() => setIsScreenProtected(false), 2000);
         return;
       }
@@ -348,11 +347,7 @@ export default function TicketDetailPage({ params }) {
 
     const handleKeyUp = (e) => {
       if (e.key === "PrintScreen" || e.keyCode === 44) {
-        try {
-          if (navigator.clipboard?.writeText) {
-            navigator.clipboard.writeText("");
-          }
-        } catch {}
+        copyTextToClipboard("");
         setIsScreenProtected(true);
         triggerScreenshotAlert();
         setTimeout(() => setIsScreenProtected(false), 2000);
@@ -402,11 +397,10 @@ export default function TicketDetailPage({ params }) {
   }, []);
 
   const copy = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyTextToClipboard(text)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {}
+    }
   };
 
   if (loading) {

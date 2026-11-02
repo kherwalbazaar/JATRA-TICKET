@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import {
   fetchBookings,
   subscribeBookings,
@@ -424,11 +425,10 @@ export default function TicketsPage() {
   }, [bookingGroups]);
 
   const copyToClipboard = async (text, id) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyTextToClipboard(text)) {
       setCopied(id || text);
       setTimeout(() => setCopied(""), 1500);
-    } catch {}
+    }
   };
 
   return (

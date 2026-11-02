@@ -3,17 +3,15 @@
 import { useState } from "react";
 import Header from "../../components/Header";
 import { ticketQrPayload } from "../../../lib/ticket-qr";
+import { copyTextToClipboard } from "../../../lib/clipboard";
 
 export default function TicketDetail({ ticket }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyTextToClipboard(text)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
     }
   };
 

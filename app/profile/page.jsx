@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import BottomNav from "../components/BottomNav";
 import Header from "../components/Header";
+import { copyTextToClipboard } from "../../lib/clipboard";
 import {
   signInWithGoogle,
   quickDemoGoogleLogin,
@@ -98,12 +99,9 @@ function ProfileContent() {
   };
 
   const copy = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyTextToClipboard(text)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
     }
   };
 

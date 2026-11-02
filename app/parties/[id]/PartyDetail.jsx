@@ -6,6 +6,7 @@ import BottomNav from "../../components/BottomNav";
 import { findParty, subscribeParties, DEFAULT_PARTIES } from "../../../lib/parties";
 import { subscribeEvents, isLogoUrl } from "../../../lib/events";
 import { splitPhoneNumbers } from "../../../lib/phoneNumbers";
+import { copyTextToClipboard } from "../../../lib/clipboard";
 import { getImageSource } from "../../components/BannerImage";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -179,10 +180,12 @@ export default function PartyDetail({ id }) {
           url: window.location.href,
         });
       } catch {}
-    } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
-      setCopiedPhone(true);
-      setTimeout(() => setCopiedPhone(false), 2000);
+    } else if (typeof navigator !== "undefined") {
+      copyTextToClipboard(window.location.href).then((ok) => {
+        if (!ok) return;
+        setCopiedPhone(true);
+        setTimeout(() => setCopiedPhone(false), 2000);
+      });
     }
   };
 

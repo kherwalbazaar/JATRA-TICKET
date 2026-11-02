@@ -11,7 +11,16 @@ import {
   BLOCK_GROUPS,
   getHoldSessionId,
   isHoldFresh,
+  holdSessionId,
 } from "../../lib/seats";
+import {
+  createReservation,
+  cancelReservation,
+  fetchReservationStatus,
+  readActiveReservation,
+  saveActiveReservation,
+  PAYMENT_EXPIRED_MESSAGE,
+} from "../../lib/reservation";
 import { calculateCustomerCharges } from "../../lib/pricing";
 import {
   getSavedCustomerProfile,
@@ -29,6 +38,7 @@ import UserSeatGrid from "./UserSeatGrid";
 import BlockCategoryDiagram from "./BlockCategoryDiagram";
 import LoginRequiredModal from "./LoginRequiredModal";
 import FakePaymentModal from "./FakePaymentModal";
+import PaymentQrModal from "./PaymentQrModal";
 
 export const bookingTiers = [
   { id: "standing", name: "STANDING", price: 50, gate: "Gate A" },
@@ -87,6 +97,13 @@ export default function BookingForm({
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showFakePayModal, setShowFakePayModal] = useState(false);
   const [fakePayState, setFakePayState] = useState("");
+
+  // Payment reservation (60s server-validated hold), QR popup and cancel guard
+  const [reservation, setReservation] = useState(null);
+  const [reservationWindowMs, setReservationWindowMs] = useState(60000);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrNotice, setQrNotice] = useState("");
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // 1. Subscribe to Live Block Categories
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
@@ -338,6 +355,16 @@ export default function BookingForm({
   const isStep3Completed = isStep2Completed && totalAmountPayable > 0;
   const isStep4Enabled = isStep3Completed && !isSubmitting;
 
+  // The floating strip only books; it unlocks once every step above is done.
+  const bookingReady = isStep3Completed && activeStep === 4;
+  const pendingStep = !isStep1Completed
+    ? "Select your seats"
+    : !isStep2Completed
+      ? "Verify your profile details"
+      : !isStep3Completed
+        ? "Review the payment breakdown"
+        : "Choose a booking method";
+
   // Invalidate later steps if seats are removed
   useEffect(() => {
     if (quantity === 0 && activeStep > 1) {
@@ -379,7 +406,7 @@ export default function BookingForm({
         setTimeout(() => setErrorMessage(""), 5000);
         return;
       }
-      if (fs && st === "reserved" && fs.reservedBy && fs.reservedBy !== sid) {
+      if (fs && st === "reserved" && fs.reservedBy && holdSessionId(fs.reservedBy) !== sid) {
         setErrorMessage(
           "This seat has just been reserved by another customer. Please select another seat."
         );
@@ -409,6 +436,119 @@ export default function BookingForm({
     },
     [activeBlock, selectedSeats, resolvedEventId, seatsByBlock]
   );
+
+  // Normalise the selected keys to the seat ids stored in Supabase
+  const resolveDisplaySeats = useCallback(() => {
+    return selectedSeats.map((key) => {
+      const list = seatsByBlock[activeBlock] || [];
+      const fs = list.find(
+        (s) =>
+          s.id === key ||
+          s.seatLabel === key ||
+          `${s.rowId}-${s.seatNumber}` === key ||
+          `${s.rowId}${s.seatNumber}` === key
+      );
+      if (fs) return fs.id || `${fs.rowId}-${fs.seatNumber}`;
+      if (key.includes("-")) return key;
+      const m = String(key).match(/^([A-Za-z]+)(\d+)$/);
+      if (m) return `${m[1].toUpperCase()}-${m[2]}`;
+      return key;
+    });
+  }, [selectedSeats, seatsByBlock, activeBlock]);
+
+  const clearReservation = useCallback(() => {
+    setReservation(null);
+    setShowQrModal(false);
+    setQrNotice("");
+    saveActiveReservation(null);
+  }, []);
+
+  // Seats were just released by the server: drop the local selection too
+  const handleReservationExpired = useCallback(() => {
+    clearReservation();
+    setSelectedSeats([]);
+    setActiveStep(1);
+    setErrorMessage(PAYMENT_EXPIRED_MESSAGE);
+    setTimeout(() => setErrorMessage(""), 9000);
+  }, [clearReservation]);
+
+  const releaseAllHolds = useCallback(() => {
+    const sid = getHoldSessionId();
+    if (reservation?.reservationId) {
+      cancelReservation({
+        eventId: resolvedEventId,
+        reservationId: reservation.reservationId,
+        sessionId: sid,
+      }).catch(() => {});
+    } else {
+      selectedSeats.forEach((k) => releaseSeatHold(resolvedEventId, activeBlock, k));
+    }
+  }, [reservation, resolvedEventId, selectedSeats, activeBlock]);
+
+  // "Yes, Cancel Booking" — give the seats back and leave the checkout
+  const cancelBooking = useCallback(
+    (after) => {
+      releaseAllHolds();
+      clearReservation();
+      setShowFakePayModal(false);
+      setShowCancelConfirm(false);
+      setSelectedSeats([]);
+      setActiveStep(1);
+      if (typeof after === "function") after();
+    },
+    [releaseAllHolds, clearReservation]
+  );
+
+  // Arm the payment hold, then open the matching payment surface
+  const startPayment = useCallback(async () => {
+    const seats = resolveDisplaySeats();
+    if (!resolvedEventId || seats.length === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const res = await createReservation({
+        eventId: resolvedEventId,
+        block: activeBlock,
+        seats,
+        sessionId: getHoldSessionId(),
+      });
+
+      if (!res.ok || !res.success) {
+        setErrorMessage(
+          res.error || "Could not hold your seats for payment. Please try again."
+        );
+        if (res.code === "SEAT_COLLISION" || res.code === "SEAT_ALREADY_RESERVED") {
+          setSelectedSeats([]);
+          setActiveStep(1);
+        }
+        return;
+      }
+
+      const info = {
+        reservationId: res.reservationId,
+        eventId: resolvedEventId,
+        block: activeBlock,
+        seats,
+        expiresAt: res.expiresAt,
+        seatPrice,
+        eventName: resolvedEventName,
+      };
+      setReservation(info);
+      setReservationWindowMs(Number(res.windowMs) || 60000);
+      saveActiveReservation(info);
+      setQrNotice("");
+
+      if (!res.qrAvailable && res.testMode) {
+        // No payable QR configured yet and PAYMENT_TEST_MODE is on: keep the
+        // existing in-app UPI options reachable instead of a dead end.
+        setShowFakePayModal(true);
+        return;
+      }
+      setShowQrModal(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [resolveDisplaySeats, resolvedEventId, activeBlock, seatPrice, resolvedEventName]);
 
   const handleSelectBlock = (b) => {
     if (!isOnline(b)) return;
@@ -462,7 +602,7 @@ export default function BookingForm({
     if (paymentMethod === "counter") {
       await handleExecuteBooking({ bookingMethod: "counter", method: "Cash" });
     } else {
-      setShowFakePayModal(true);
+      await startPayment();
     }
   };
 
@@ -473,21 +613,7 @@ export default function BookingForm({
 
     try {
       // Revalidate and normalize seat keys
-      const displaySeats = selectedSeats.map((key) => {
-        const list = seatsByBlock[activeBlock] || [];
-        const fs = list.find(
-          (s) =>
-            s.id === key ||
-            s.seatLabel === key ||
-            `${s.rowId}-${s.seatNumber}` === key ||
-            `${s.rowId}${s.seatNumber}` === key
-        );
-        if (fs) return fs.id || `${fs.rowId}-${fs.seatNumber}`;
-        if (key.includes("-")) return key;
-        const m = String(key).match(/^([A-Za-z]+)(\d+)$/);
-        if (m) return `${m[1].toUpperCase()}-${m[2]}`;
-        return key;
-      });
+      const displaySeats = resolveDisplaySeats();
 
       const blockLabel = getBlockName(activeBlock) || activeBlock;
 
@@ -516,16 +642,36 @@ export default function BookingForm({
           bookingMethod: resolvedBookingMethod,
           paymentMethod: resolvedPaymentMethod,
           transactionId: details.transactionId || (isCounter ? `COUNTER_${Date.now()}` : `TXN_SIM_${Date.now()}`),
+          reservationId: details.reservationId || "",
+          paymentRef: details.paymentRef || "",
         }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.code === "RESERVATION_EXPIRED") {
+          handleReservationExpired();
+          setShowFakePayModal(false);
+          setQrNotice(PAYMENT_EXPIRED_MESSAGE);
+          throw new Error(PAYMENT_EXPIRED_MESSAGE);
+        }
         if (data.code === "SEAT_COLLISION") {
+          clearReservation();
           setActiveStep(1);
+        }
+        if (data.code === "PAYMENT_NOT_VERIFIED") {
+          // Money has not been captured yet — keep the popup and the countdown alive
+          setQrNotice(
+            data.error ||
+              "Your payment is still being verified. Your seats stay held while the timer runs."
+          );
+          throw new Error(data.error || "Payment is still being verified.");
         }
         throw new Error(data.error || "Failed to confirm booking.");
       }
+
+      clearReservation();
+      setShowQrModal(false);
 
       // Clear hold session storage
       try {
@@ -559,6 +705,81 @@ export default function BookingForm({
       setIsSubmitting(false);
     }
   };
+
+  // The popup's "I have paid" path books only after the server verified the money
+  const handleQrVerified = useCallback(
+    async (payment = {}) => {
+      await handleExecuteBooking({
+        bookingMethod: "direct",
+        method: "UPI",
+        transactionId: payment.transactionId || payment.paymentRef || "",
+        paymentRef: payment.paymentRef || "",
+        reservationId: reservation?.reservationId || "",
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reservation]
+  );
+
+  // Reopen the popup with the same server deadline after a refresh or restart
+  useEffect(() => {
+    if (!resolvedEventId) return;
+    const saved = readActiveReservation();
+    if (!saved || saved.eventId !== resolvedEventId || !saved.reservationId) return;
+    let cancelled = false;
+    const resume = (remainingMs) => {
+      setReservation(saved);
+      setReservationWindowMs(Math.max(1000, remainingMs));
+      setSelectedSeats(saved.seats || []);
+      if (saved.block) setActiveBlock(saved.block);
+      setShowQrModal(true);
+    };
+    const storedDeadlineMs = Date.parse(saved.expiresAt || "") || 0;
+    fetchReservationStatus({
+      eventId: saved.eventId,
+      reservationId: saved.reservationId,
+      sessionId: getHoldSessionId(),
+      seats: (saved.seats || []).join(","),
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.ok && res.status === "active") {
+          resume(Math.max(1000, Number(res.remainingMs) || 60000));
+        } else if (res?.ok) {
+          // The server already released the seats while the app was closed
+          handleReservationExpired();
+        } else if (storedDeadlineMs > Date.now()) {
+          resume(storedDeadlineMs - Date.now());
+        } else {
+          handleReservationExpired();
+        }
+      })
+      // Offline restart: keep the countdown on the stored deadline and let the
+      // popup's status sync correct it as soon as the server is reachable again
+      .catch(() => {
+        if (cancelled) return;
+        if (storedDeadlineMs > Date.now()) resume(storedDeadlineMs - Date.now());
+        else handleReservationExpired();
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedEventId]);
+
+  // Android / browser Back must ask before throwing away a live reservation
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isStep1Completed || bookingConfirmed) return;
+
+    window.history.pushState({ jatraBookingGuard: true }, "");
+    const onPopState = () => {
+      window.history.pushState({ jatraBookingGuard: true }, "");
+      setShowCancelConfirm(true);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [isStep1Completed, bookingConfirmed]);
 
   const expiryInfo = getEventExpiryInfo({ date: eventDate, time: eventTime });
 
@@ -1477,7 +1698,14 @@ export default function BookingForm({
               })}
             </div>
 
-            {/* Below: Left side Total Amount & Right side Continue tab with amount */}
+            {!bookingReady && (
+              <p className="text-[10px] font-bold text-amber-700 flex items-center gap-1.5">
+                <i className="fa-solid fa-circle-exclamation" />
+                <span>Pending: {pendingStep}</span>
+              </p>
+            )}
+
+            {/* Below: Left side Total Amount & Right side Confirm & Book */}
             <div className="flex items-center justify-between gap-4 pt-1.5 border-t border-slate-100">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-wider">
@@ -1494,28 +1722,24 @@ export default function BookingForm({
 
               <button
                 type="button"
-                onClick={() => {
-                  if (!profile || !profile.full_name) {
-                    setShowLoginModal(true);
-                    return;
-                  }
-                  if (activeStep < 4) {
-                    setActiveStep((s) => s + 1);
-                  } else {
-                    handleConfirmAndBook();
-                  }
-                }}
-                disabled={isSubmitting}
-                className="bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs sm:text-sm py-2.5 px-4 sm:px-6 rounded-2xl shadow-md flex items-center gap-2 active:scale-95 transition-all cursor-pointer shrink-0"
+                onClick={handleConfirmAndBook}
+                disabled={!bookingReady || isSubmitting}
+                className={`font-extrabold text-xs sm:text-sm py-2.5 px-4 sm:px-6 rounded-2xl flex items-center gap-2 transition-all shrink-0 ${
+                  bookingReady && !isSubmitting
+                    ? "bg-indigo-900 hover:bg-indigo-950 text-white shadow-md active:scale-95 cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                }`}
               >
                 <span>
-                  {activeStep < 3
-                    ? `Continue • ₹${ticketSubtotal}`
-                    : isSubmitting
+                  {isSubmitting
                     ? "Confirming..."
                     : `Confirm & Book • ₹${totalAmountPayable.toFixed(2)}`}
                 </span>
-                <i className="fa-solid fa-arrow-right text-[10px]" />
+                <i
+                  className={`fa-solid ${
+                    bookingReady ? "fa-arrow-right" : "fa-lock"
+                  } text-[10px]`}
+                />
               </button>
             </div>
           </div>
@@ -1525,7 +1749,11 @@ export default function BookingForm({
       {/* Fake Payment Modal */}
       <FakePaymentModal
         isOpen={showFakePayModal}
-        onClose={() => setShowFakePayModal(false)}
+        onClose={() =>
+          reservation || selectedSeats.length > 0
+            ? setShowCancelConfirm(true)
+            : setShowFakePayModal(false)
+        }
         onConfirmPayment={handleExecuteBooking}
         amount={totalAmountPayable}
         eventName={resolvedEventName}
@@ -1536,6 +1764,63 @@ export default function BookingForm({
         loading={isSubmitting}
         processingState={fakePayState}
       />
+
+      {/* Payment QR popup with the server-validated countdown */}
+      <PaymentQrModal
+        isOpen={showQrModal}
+        eventId={resolvedEventId}
+        block={activeBlock || ""}
+        seats={reservation?.seats || []}
+        seatPrice={reservation?.seatPrice ?? seatPrice}
+        reservationId={reservation?.reservationId || ""}
+        sessionId={getHoldSessionId()}
+        amount={totalAmountPayable}
+        eventName={resolvedEventName}
+        initialRemainingMs={reservationWindowMs}
+        externalNotice={qrNotice}
+        isSubmitting={isSubmitting}
+        onVerified={handleQrVerified}
+        onExpired={handleReservationExpired}
+        onRequestClose={() => setShowCancelConfirm(true)}
+      />
+
+      {/* Cancel-booking confirmation (Back button, popup close, cancel action) */}
+      {showCancelConfirm && (
+        <div className="fixed inset-0 z-[170] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 font-sans">
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-base shrink-0">
+                <i className="fa-solid fa-circle-exclamation" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-slate-900 font-brand leading-snug">
+                  Are you sure you want to cancel this booking?
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium mt-1 leading-snug">
+                  Your selected seats will be released and made available to other customers.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs py-2.5 rounded-2xl transition-all active:scale-95 cursor-pointer"
+              >
+                Continue Booking
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelBooking(() => (fullPage ? onClose?.() : undefined))}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs py-2.5 rounded-2xl transition-all active:scale-95 cursor-pointer"
+              >
+                Yes, Cancel Booking
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Login Required Modal */}
       <LoginRequiredModal

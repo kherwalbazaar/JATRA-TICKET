@@ -145,7 +145,13 @@ export default function UserSeatGrid({
     if (!list.length) return null;
 
     const byRow = {};
+    const seenSeat = new Set();
     list.forEach((s) => {
+      // A seat reached us twice (duplicate row or a re-keyed realtime payload)
+      // would render two children under one React key.
+      const identity = s.id || s.rawId || `${s.block}-${s.rowId}-${s.seatNumber}`;
+      if (identity && seenSeat.has(identity)) return;
+      if (identity) seenSeat.add(identity);
       const rid = String(s.rowId || s.row || "A").trim().toUpperCase();
       if (!byRow[rid]) byRow[rid] = [];
       byRow[rid].push(s);

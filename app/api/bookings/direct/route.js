@@ -2,14 +2,17 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, serverBroadcastSeatChange } from "@/lib/server/supabaseAdmin";
 import { calculateCustomerCharges } from "@/lib/pricing";
 import { resolveBookingParameters } from "@/lib/paymentMethods";
+import {
+  holdSessionId as ownerSessionOf,
+  isHoldFreshValue,
+  parseHold,
+  seatMatchesKey,
+} from "@/lib/reservation";
+import {
+  verifyPayment,
+  isGatewayConfigured,
+} from "@/lib/server/paymentGateway";
 import crypto from "crypto";
-
-function isHoldFresh(reservedAt) {
-  if (!reservedAt) return false;
-  const at = Date.parse(reservedAt);
-  if (Number.isNaN(at)) return false;
-  return Date.now() - at < 10 * 60 * 1000;
-}
 
 function generateQrToken() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -59,6 +62,8 @@ export async function POST(request) {
       bookingMethod = "direct",
       paymentMethod = "",
       transactionId = "",
+      reservationId = "",
+      paymentRef = "",
     } = body;
 
     // Resolve canonical payment method and booking parameters
@@ -184,8 +189,8 @@ export async function POST(request) {
           const heldByOther =
             st === "reserved" &&
             matched.reserved_by &&
-            matched.reserved_by !== holdSessionId &&
-            isHoldFresh(matched.reserved_at);
+            ownerSessionOf(matched.reserved_by) !== holdSessionId &&
+            isHoldFreshValue(matched.reserved_by, matched.reserved_at);
 
           if (st === "booked" || heldByOther) {
             const label = matched.seat_label || cleanKey;
@@ -207,6 +212,62 @@ export async function POST(request) {
     const rawTicketAmount = unitPrice * seatList.length;
     const pricing = calculateCustomerCharges(rawTicketAmount);
     const finalAmount = pricing.finalCustomerAmount;
+
+    // 3.b Reservation guard + server-side payment verification.
+    // A booking that arrives with a reservation id must still own live seats,
+    // and the money is only ever treated as paid when the gateway confirms it
+    // here — frontend confirmation alone can never mark a booking Successful.
+    const cleanReservationId = String(reservationId || "").trim();
+    const isCounterSale =
+      bookingMethod === "counter" || bookingParams.canonicalMethod === "Cash";
+    let paymentVerification = { verified: true, source: "counter" };
+
+    if (!isCounterSale && (cleanReservationId || isGatewayConfigured())) {
+      const heldSeats = existingSeats.filter(
+        (s) =>
+          parseHold(s.reserved_by).reservationId === cleanReservationId &&
+          seatList.some((k) => seatMatchesKey(s, k))
+      );
+      const stillActive =
+        !cleanReservationId ||
+        (heldSeats.length > 0 &&
+          heldSeats.every((s) => isHoldFreshValue(s.reserved_by, s.reserved_at)));
+
+      paymentVerification = await verifyPayment({
+        paymentRef: String(paymentRef || "").trim(),
+        transactionId: String(transactionId || "").trim(),
+        reservationId: cleanReservationId,
+        amount: finalAmount,
+        seatCount: seatList.length,
+      });
+
+      if (!paymentVerification.verified) {
+        // Payment may still be settling at the gateway: hold the seats and tell
+        // the customer to retry instead of silently taking the money.
+        const code = stillActive
+          ? "PAYMENT_NOT_VERIFIED"
+          : "RESERVATION_EXPIRED";
+        return NextResponse.json(
+          {
+            success: false,
+            code,
+            pending: stillActive,
+            verified: false,
+            error: stillActive
+              ? paymentVerification.message ||
+                "Your payment is still being verified. Your seats are held — try again in a moment."
+              : "Payment Time Expired! Your selected seats have been released. Please select your seats again.",
+            gateway: paymentVerification.gateway || null,
+          },
+          { status: stillActive ? 409 : 410 }
+        );
+      }
+    }
+
+    const verifiedTxnId =
+      paymentVerification.transactionId ||
+      transactionId ||
+      (isCounterSale ? `COUNTER_${Date.now()}` : "");
 
     // 4. Order ID & Ticket Number
     const orderId = `JB_${Date.now()}_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -245,8 +306,8 @@ export async function POST(request) {
       status: bookingParams.status,
       booking_status: bookingParams.bookingStatus,
       payment_status: bookingParams.paymentStatus,
-      transaction_id: transactionId || (bookingParams.canonicalMethod === "Cash" ? `COUNTER_${Date.now()}` : `TXN_SIM_${Date.now()}`),
-      gateway_transaction_id: transactionId || null,
+      transaction_id: verifiedTxnId,
+      gateway_transaction_id: paymentVerification.transactionId || verifiedTxnId || null,
       date: bookingDate,
       time: bookingTime,
       block: cleanBlock || null,
@@ -283,26 +344,40 @@ export async function POST(request) {
 
     // Record payment transaction in Supabase payments table
     try {
+      const payId = `PAY_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
       const paymentRow = {
-        id: `PAY_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`,
-        payment_id: `PAY_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`,
+        id: payId,
+        payment_id: payId,
         booking_id: bookingRow.id,
         ticket_number: bookingRow.ticket_number,
         event_id: eventId,
         customer_name: customerName,
-        customer_phone: cleanPhone,
-        amount: finalCustomerAmount,
+        customer_phone: customerPhone.trim(),
+        amount: finalAmount,
         currency: "INR",
-        payment_gateway: isCounter ? "Cash" : "Paytm",
+        payment_gateway:
+          paymentVerification.gateway ||
+          (isCounterSale ? "Cash" : bookingParams.paymentChannel || "Online"),
         gateway_order_id: orderId,
-        gateway_transaction_id: transactionId || null,
+        gateway_transaction_id: paymentVerification.transactionId || transactionId || null,
         payment_status: bookingParams.paymentStatus,
         payment_method: bookingParams.canonicalMethod,
         payment_channel: bookingParams.paymentChannel,
+        gateway_response: {
+          verified_server_side: Boolean(paymentVerification.verified),
+          source: paymentVerification.source || null,
+          verified_at: paymentVerification.verifiedAt || null,
+          reservation_id: cleanReservationId || null,
+        },
         created_at: nowIso,
         updated_at: nowIso,
       };
-      await supabaseAdmin.from("payments").insert([paymentRow]);
+      const { error: paymentErr } = await supabaseAdmin
+        .from("payments")
+        .insert([paymentRow]);
+      if (paymentErr) {
+        console.warn("Direct booking payments insert notice:", paymentErr.message);
+      }
     } catch (payErr) {
       console.warn("Direct booking payments table notice:", payErr?.message);
     }
@@ -385,6 +460,25 @@ export async function POST(request) {
 
     if (ticketsInsertErr) {
       console.error("Failed to insert tickets in Supabase:", ticketsInsertErr.message);
+    }
+
+    // 7.b Flip the reservation to confirmed (needs the supabase/012 functions)
+    if (cleanReservationId) {
+      try {
+        const { error: confirmErr } = await supabaseAdmin.rpc("confirm_reservation_atomic", {
+          p_reservation_id: cleanReservationId,
+          p_booking_id: orderId,
+          p_gateway: paymentVerification.gateway || bookingParams.paymentChannel || "upi",
+          p_gateway_transaction_id: paymentVerification.transactionId || verifiedTxnId || null,
+        });
+        if (confirmErr) {
+          // Row-level fallback keeps the reservation state consistent even
+          // before the 012 migration is applied
+          console.warn("confirm_reservation_atomic notice:", confirmErr.message);
+        }
+      } catch (confirmEx) {
+        console.warn("Reservation confirm notice:", confirmEx?.message);
+      }
     }
 
     // 8. Update event stats in Supabase
