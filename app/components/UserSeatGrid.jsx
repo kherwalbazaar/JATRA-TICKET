@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import ChairSvg from "./ChairSvg";
 import { subscribeSeats, getHoldSessionId, isHoldFresh } from "../../lib/seats";
 import { getPriceForRow, subscribeTicketTypes } from "../../lib/ticketTypes";
-import { subscribeBlockCategories, blockDisplayName } from "../../lib/blockCategories";
 
 /**
  * UserSeatGrid: Reactive real-time seat availability map for customer booking.
@@ -34,7 +33,6 @@ export default function UserSeatGrid({
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState("grid"); // "grid" (default) | "row"
   const [ticketTypes, setTicketTypes] = useState([]);
-  const [blockCats, setBlockCats] = useState([]);
 
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
@@ -113,11 +111,6 @@ export default function UserSeatGrid({
       if (typeof unsub === "function") unsub();
     };
   }, [targetId]);
-
-  // Subscribe to block categories from Supabase (for block display names)
-  useEffect(() => {
-    return subscribeBlockCategories(setBlockCats);
-  }, []);
 
   // Concurrency collision check: deselect any seat that became booked / locked / reserved by someone else
   useEffect(() => {
@@ -282,21 +275,6 @@ export default function UserSeatGrid({
     return Array.from(groupMap.values()).sort((a, b) => b.price - a.price);
   }, [rows, ticketTypes, pricePerSeat]);
 
-  const customBlockName = useMemo(() => {
-    return blockDisplayName(blockCats, activeBlock);
-  }, [blockCats, activeBlock]);
-
-  const priceSummaryText = useMemo(() => {
-    if (!priceGroups || priceGroups.length === 0) {
-      return pricePerSeat ? `₹${pricePerSeat}` : "₹100";
-    }
-    const prices = priceGroups.map((g) => g.price);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    if (min === max) return `₹${min}`;
-    return `₹${max} - ₹${min}`;
-  }, [priceGroups, pricePerSeat]);
-
 
   const handleSeatClick = (seat) => {
     if (disabled) return;
@@ -313,7 +291,7 @@ export default function UserSeatGrid({
   return (
     <div className="w-full space-y-2.5">
       {/* Legend: Available = Green | Selected = Deep Pink | Reserved = Orange | Booked = Red */}
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3.5 text-[10px] font-bold text-slate-600 py-1 bg-slate-50/80 rounded-xl border border-slate-200/70">
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3.5 text-[10px] font-bold text-slate-600 py-1 px-2 bg-slate-50/80 rounded-xl border border-slate-200/70">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-[3px] bg-[#22C55E] border border-emerald-700 inline-block" /> Available
         </span>
@@ -326,6 +304,19 @@ export default function UserSeatGrid({
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-[3px] bg-[#EF4444] border border-red-700 inline-block" /> Booked
         </span>
+        <button
+          type="button"
+          onClick={() => setViewMode((prev) => (prev === "grid" ? "row" : "grid"))}
+          className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 transition-all text-[10px] font-bold text-slate-700 cursor-pointer select-none active:scale-95 shrink-0"
+          title={viewMode === "grid" ? "Click to switch to List View" : "Click to switch to Grid View"}
+        >
+          <i
+            className={`fa-solid ${
+              viewMode === "grid" ? "fa-grip text-sky-500" : "fa-bars text-amber-500"
+            } text-[10px]`}
+          />
+          <span>{viewMode === "grid" ? "Grid" : "List"}</span>
+        </button>
       </div>
 
       {/* Disconnection Warning Banner if error occurs */}
@@ -360,68 +351,6 @@ export default function UserSeatGrid({
           </div>
         ) : rows && rows.length > 0 ? (
           <div className="space-y-2.5">
-            {/* Block Header Banner with Default Color Background */}
-            <div className="w-full bg-[#12193b] text-white rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-md space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3">
-                {/* Left: Block Title & Custom Name & Stats */}
-                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-                  <span className="bg-sky-500 text-slate-950 font-black text-xs sm:text-sm px-3 py-1 rounded-lg uppercase tracking-wider shadow-xs flex items-center gap-1.5">
-                    <i className="fa-solid fa-layer-group text-[11px]" />
-                    <span>Block {activeBlock}</span>
-                  </span>
-                  {customBlockName && customBlockName !== activeBlock && !/^block\s+/i.test(customBlockName) && (
-                    <span className="bg-white/10 text-white font-bold text-xs sm:text-sm px-2.5 py-1 rounded-lg border border-white/15">
-                      {customBlockName}
-                    </span>
-                  )}
-                  <span className="text-[11px] sm:text-xs font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800/70 px-2.5 py-0.5 rounded-md flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{blockStats.available} Available</span>
-                  </span>
-                  <span className="text-[11px] sm:text-xs font-semibold text-slate-300 bg-white/5 border border-white/10 px-2.5 py-0.5 rounded-md">
-                    Total {blockStats.total}
-                  </span>
-                  {selected.length > 0 && (
-                    <span className="text-[11px] sm:text-xs font-black text-slate-950 bg-amber-400 px-2.5 py-0.5 rounded-md shadow-xs flex items-center gap-1">
-                      <i className="fa-solid fa-check text-[10px]" />
-                      <span>{selected.length} Selected</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Right: Price highlight and View Switcher */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 pt-1.5 sm:pt-0 border-t border-white/10 sm:border-t-0">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-[10px] sm:text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                      Price:
-                    </span>
-                    <span className="text-xl sm:text-2xl md:text-3xl font-black text-amber-400 font-brand tracking-tight drop-shadow-sm">
-                      {priceSummaryText}
-                    </span>
-                    <span className="text-[10px] sm:text-xs font-bold text-slate-300">
-                      / seat
-                    </span>
-                  </div>
-
-                  {/* View Switcher Button */}
-                  <button
-                    type="button"
-                    onClick={() => setViewMode((prev) => (prev === "grid" ? "row" : "grid"))}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 transition-all text-xs font-bold text-white shadow-2xs cursor-pointer select-none active:scale-95 shrink-0"
-                    title={viewMode === "grid" ? "Click to switch to List View" : "Click to switch to Grid View"}
-                  >
-                    <i
-                      className={`fa-solid ${
-                        viewMode === "grid" ? "fa-grip text-sky-400" : "fa-bars text-amber-400"
-                      } text-xs`}
-                    />
-                    <span>{viewMode === "grid" ? "Grid" : "List"}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-
             {/* View Mode: Grid (Grouped by Price Category) vs Row View */}
             {viewMode === "grid" ? (
               <div className="space-y-4 py-1">
