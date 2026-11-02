@@ -18,6 +18,7 @@ import {
   blockDisplayName,
 } from "../../lib/blockCategories";
 import { getPriceForRow } from "../../lib/ticketTypes";
+import { fetchEvents } from "../../lib/events";
 import { getSavedCustomerProfile } from "../../lib/supabase";
 import LoginRequiredModal from "../components/LoginRequiredModal";
 
@@ -37,6 +38,7 @@ function SelectSeatsContent() {
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
   const [blockCats, setBlockCats] = useState([]);
+  const [eventBanner, setEventBanner] = useState("");
   const [counterNotice, setCounterNotice] = useState("");
   const [seatCollisionNotice, setSeatCollisionNotice] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -44,6 +46,21 @@ function SelectSeatsContent() {
   const seatGridRef = useRef(null);
 
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
+
+  useEffect(() => {
+    if (!eventId) return;
+    let cancelled = false;
+    fetchEvents()
+      .then((list) => {
+        if (cancelled) return;
+        const matched = list.find((e) => e.key === eventId || e.id === eventId);
+        if (matched?.banner) setEventBanner(matched.banner);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
   const blockLabel = (id) => blockDisplayName(blockCats, id);
@@ -275,6 +292,22 @@ function SelectSeatsContent() {
               {eventDate ? ` • ${eventDate}` : ""}
             </p>
           </div>
+
+          {/* Event banner — until the shopper picks a block */}
+          {!activeBlock && eventBanner && (
+            <div className="w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={eventBanner}
+                alt={eventName}
+                className="w-full h-auto object-contain max-h-64"
+                decoding="async"
+                onError={(e) => {
+                  e.currentTarget.parentElement.style.display = "none";
+                }}
+              />
+            </div>
+          )}
 
           {/* Stage Diagram Only */}
           <BlockCategoryDiagram

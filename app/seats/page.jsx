@@ -6,16 +6,23 @@ import { Suspense } from "react";
 import ChairSvg from "../components/ChairSvg";
 import UserSeatGrid from "../components/UserSeatGrid";
 import MovingSpotlights from "../components/MovingSpotlights";
-import { subscribeSeats, BLOCK_GROUPS, holdSeat, releaseSeatHold, getHoldSessionId, isHoldFresh } from "../../lib/seats";
+import { subscribeSeats, BLOCK_GROUPS, holdSeat, releaseSeatHold, getHoldSessionId } from "../../lib/seats";
 import { fetchEvents, getEventExpiryInfo } from "../../lib/events";
 import {
   subscribeBlockCategories,
   isBlockOnline,
-  blockDisplayName,
-  blockChannelText,
 } from "../../lib/blockCategories";
 import { getSavedCustomerProfile } from "../../lib/supabase";
-import { getPriceForRow } from "../../lib/ticketTypes";
+import { getPriceForRow, subscribeTicketTypes } from "../../lib/ticketTypes";
+import {
+  BlockLabels,
+  BLOCK_LABEL_LAYOUT,
+  diagramBlockLabel,
+  diagramBlockPriceText,
+  isBlockSoldOut,
+  blockStatusText,
+  blockStatusColor,
+} from "../components/BlockCategoryDiagram";
 import LoginRequiredModal from "../components/LoginRequiredModal";
 
 const EVENT_ID_KEY = "jatra:eventId";
@@ -69,10 +76,14 @@ function SeatSelectionContent() {
   const [showSeatPanel, setShowSeatPanel] = useState(true);
   const [showBlockSelector, setShowBlockSelector] = useState(true);
   const [clickedFromMap, setClickedFromMap] = useState(!!blockParam);
+  // The event banner stays visible until the shopper actually taps a block,
+  // even though the page opens pre-pointed at B1.
+  const [blockTapped, setBlockTapped] = useState(false);
   const [seatsByBlock, setSeatsByBlock] = useState({});
   const [loading, setLoading] = useState(true);
   const [eventReady, setEventReady] = useState(!!eventIdParam);
   const [blockCats, setBlockCats] = useState([]);
+  const [ticketTypes, setTicketTypes] = useState([]);
   const [counterNotice, setCounterNotice] = useState("");
   const [seatCollisionNotice, setSeatCollisionNotice] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -80,9 +91,10 @@ function SeatSelectionContent() {
 
   // Live block-category config from Supabase (source of truth)
   useEffect(() => subscribeBlockCategories(setBlockCats), []);
+  useEffect(() => subscribeTicketTypes(setTicketTypes, eventId), [eventId]);
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
-  const blockLabel = (id) => blockDisplayName(blockCats, id);
+  const blockLabel = (id) => diagramBlockLabel(blockCats, id);
 
   // If currently active block is switched to counter-only via Supabase Realtime, deselect it
   useEffect(() => {
@@ -95,20 +107,26 @@ function SeatSelectionContent() {
       setTimeout(() => setCounterNotice(""), 5000);
     }
   }, [activeBlock, blockCats, eventId]);
-  // Diagram sub-label: "Counter" (amber) when counter selling, "Online" (sky) otherwise.
-  const subLabel = (id) => blockChannelText(blockCats, id);
-  const channelColor = (id) => (isOnlineBlock(blockCats, id) ? "#dcfce7" : "#fffbeb");
+  const renderBlockLabels = (id) => (
+    <BlockLabels
+      layout={BLOCK_LABEL_LAYOUT[id]}
+      name={blockLabel(id)}
+      status={blockStatusText(id, seatsByBlock)}
+      statusFill={blockStatusColor(id, seatsByBlock)}
+      price={diagramBlockPriceText(id, seatsByBlock, ticketTypes)}
+    />
+  );
+  // Selected block gets an amber outline; every other block fades back.
+  const activeStroke = (id) => (activeBlock === id ? "#fbbf24" : "#38bdf8");
+  const activeWidth = (id) => (activeBlock === id ? 5 : 1.5);
+  const blockClass = (id) =>
+    `block-path ${activeBlock === id ? "block-active" : ""} ${
+      activeBlock && activeBlock !== id ? "block-dim" : ""
+    }`;
   // Diagram block colours: fully sold out (booked or fresh holds) → red,
   // Counter → yellow, Online → green.
   const blockFill = (id) => {
-    const list = seatsByBlock[id] || [];
-    const seatTaken = (s) => {
-      const st = String(s.status || "").toLowerCase();
-      if (st === "booked" || st === "sold") return true;
-      if (st === "reserved" && isHoldFresh(s)) return true;
-      return false;
-    };
-    if (list.length && list.every(seatTaken)) return "#ef4444";
+    if (isBlockSoldOut(id, seatsByBlock)) return "#ef4444";
     return isOnlineBlock(id) ? "#16a34a" : "#d97706";
   };
 
@@ -247,6 +265,7 @@ function SeatSelectionContent() {
     setEventName(opt.name);
     setSelected([]);
     setActiveBlock(null);
+    setBlockTapped(false);
     setShowBlockSelector(false);
     setClickedFromMap(false);
     setSeatsByBlock({});
@@ -331,6 +350,7 @@ function SeatSelectionContent() {
       setSelected([]);
     }
     setActiveBlock(blockId);
+    setBlockTapped(true);
     setShowSeatPanel(true);
     setClickedFromMap(true);
     setShowBlockSelector(true);
@@ -514,27 +534,21 @@ function SeatSelectionContent() {
           opacity: 0.95;
         }
         .block-path text {
-          fill: #ffffff !important;
           stroke: none !important;
         }
-        .block-active {
-          stroke: #38bdf8 !important;
-          stroke-width: 4 !important;
-          filter: drop-shadow(0 0 14px rgba(56, 189, 248, 1)) !important;
-          animation: pulse-glow 2s infinite ease-in-out;
+        .block-dim {
+          opacity: 0.4;
         }
-        .block-off {
-          opacity: 0.85;
-          cursor: pointer;
+        .block-active {
+          filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.95));
+          animation: pulse-glow 2s infinite ease-in-out;
         }
         @keyframes pulse-glow {
           0%, 100% {
-            opacity: 1;
-            filter: brightness(1) drop-shadow(0 0 14px rgba(56, 189, 248, 0.9));
+            filter: brightness(1) drop-shadow(0 0 14px rgba(251, 191, 36, 0.85));
           }
           50% {
-            opacity: 0.9;
-            filter: brightness(1.2) drop-shadow(0 0 20px rgba(56, 189, 248, 1));
+            filter: brightness(1.18) drop-shadow(0 0 22px rgba(251, 191, 36, 1));
           }
         }
       `}</style>
@@ -574,6 +588,20 @@ function SeatSelectionContent() {
             <p className="text-center text-slate-500 text-xs mb-3">
               Click on any block (especially <span className="text-emerald-600 font-semibold">Block B1</span>) to view and book seats
             </p>
+            {!blockTapped && currentEventData?.banner && (
+              <div className="w-full rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100 mb-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={currentEventData.banner}
+                  alt={eventName}
+                  className="w-full h-auto object-contain max-h-64"
+                  decoding="async"
+                  onError={(e) => {
+                    e.currentTarget.parentElement.style.display = "none";
+                  }}
+                />
+              </div>
+            )}
             <div className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 mb-2.5 flex items-center justify-around text-xs font-bold text-slate-200 shadow-sm">
               <span className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-sm bg-[#16a34a] inline-block shadow-xs" />
@@ -585,7 +613,7 @@ function SeatSelectionContent() {
               </span>
               <span className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-sm bg-[#ef4444] inline-block shadow-xs" />
-                <span>All Booked</span>
+                <span>Not Available</span>
               </span>
             </div>
             
@@ -651,144 +679,117 @@ function SeatSelectionContent() {
               </g>
 
               {/* BLOCK C2 (Top Left) */}
-              <g onClick={() => handleBlockSelect('C2')} className={`block-path ${activeBlock === 'C2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C2')} className={blockClass('C2')}>
                 <rect
                   x="40"
                   y="40"
                   width="310"
                   height="190"
                   fill={blockFill('C2')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('C2')}
+                  strokeWidth={activeWidth('C2')}
                   rx="12"
                 />
-                <text x="195" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C2')}</text>
-                <text x="195" y="165" textAnchor="middle" fill={channelColor('C2')} fontSize="14" pointerEvents="none">
-                  {subLabel('C2')}
-                </text>
+                {renderBlockLabels('C2')}
               </g>
 
               {/* BLOCK A2 (Top Right) */}
-              <g onClick={() => handleBlockSelect('A2')} className={`block-path ${activeBlock === 'A2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A2')} className={blockClass('A2')}>
                 <rect
                   x="650"
                   y="40"
                   width="310"
                   height="190"
                   fill={blockFill('A2')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('A2')}
+                  strokeWidth={activeWidth('A2')}
                   rx="12"
                 />
-                <text x="805" y="135" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A2')}</text>
-                <text x="805" y="165" textAnchor="middle" fill={channelColor('A2')} fontSize="14" pointerEvents="none">
-                  {subLabel('A2')}
-                </text>
+                {renderBlockLabels('A2')}
               </g>
 
               {/* BLOCK C3 (Outer Left) */}
-              <g onClick={() => handleBlockSelect('C3')} className={`block-path ${activeBlock === 'C3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C3')} className={blockClass('C3')}>
                 <path
                   d={roundedPolygon("40,250 170,250 170,680 40,840", 12)}
                   fill={blockFill('C3')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('C3')}
+                  strokeWidth={activeWidth('C3')}
                   strokeLinejoin="round"
                 />
-                <text x="105" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C3')}</text>
-                <text x="105" y="550" textAnchor="middle" fill={channelColor('C3')} fontSize="14" pointerEvents="none">
-                  {subLabel('C3')}
-                </text>
+                {renderBlockLabels('C3')}
               </g>
 
               {/* BLOCK C1 (Inner Left) */}
-              <g onClick={() => handleBlockSelect('C1')} className={`block-path ${activeBlock === 'C1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('C1')} className={blockClass('C1')}>
                 <path
                   d={roundedPolygon("190,250 350,250 350,420 190,660", 12)}
                   fill={blockFill('C1')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('C1')}
+                  strokeWidth={activeWidth('C1')}
                   strokeLinejoin="round"
                 />
-                <text x="270" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('C1')}</text>
-                <text x="270" y="470" textAnchor="middle" fill={channelColor('C1')} fontSize="14" pointerEvents="none">
-                  {subLabel('C1')}
-                </text>
+                {renderBlockLabels('C1')}
               </g>
 
               {/* BLOCK A1 (Inner Right) */}
-              <g onClick={() => handleBlockSelect('A1')} className={`block-path ${activeBlock === 'A1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A1')} className={blockClass('A1')}>
                 <path
                   d={roundedPolygon("650,250 810,250 810,660 650,420", 12)}
                   fill={blockFill('A1')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('A1')}
+                  strokeWidth={activeWidth('A1')}
                   strokeLinejoin="round"
                 />
-                <text x="730" y="440" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A1')}</text>
-                <text x="730" y="470" textAnchor="middle" fill={channelColor('A1')} fontSize="14" pointerEvents="none">
-                  {subLabel('A1')}
-                </text>
+                {renderBlockLabels('A1')}
               </g>
 
               {/* BLOCK A3 (Outer Right) */}
-              <g onClick={() => handleBlockSelect('A3')} className={`block-path ${activeBlock === 'A3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('A3')} className={blockClass('A3')}>
                 <path
                   d={roundedPolygon("830,250 960,250 960,840 830,680", 12)}
                   fill={blockFill('A3')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('A3')}
+                  strokeWidth={activeWidth('A3')}
                   strokeLinejoin="round"
                 />
-                <text x="895" y="520" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('A3')}</text>
-                <text x="895" y="550" textAnchor="middle" fill={channelColor('A3')} fontSize="14" pointerEvents="none">
-                  {subLabel('A3')}
-                </text>
+                {renderBlockLabels('A3')}
               </g>
 
               {/* BLOCK B1 (Main Center Front Trapezoid) */}
-              <g onClick={() => handleBlockSelect('B1')} className={`block-path ${activeBlock === 'B1' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B1')} className={blockClass('B1')}>
                 <path
                   d={roundedPolygon("370,420 630,420 780,660 220,660", 12)}
                   fill={blockFill('B1')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('B1')}
+                  strokeWidth={activeWidth('B1')}
                   strokeLinejoin="round"
                 />
-                <text x="500" y="540" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B1')}</text>
-                <text x="500" y="575" textAnchor="middle" fill={channelColor('B1')} fontSize="14" pointerEvents="none">
-                  {subLabel('B1')}
-                </text>
+                {renderBlockLabels('B1')}
               </g>
 
               {/* BLOCK B2 (Bottom Left) */}
-              <g onClick={() => handleBlockSelect('B2')} className={`block-path ${activeBlock === 'B2' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B2')} className={blockClass('B2')}>
                 <path
                   d={roundedPolygon("200,680 480,680 480,860 60,860", 12)}
                   fill={blockFill('B2')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('B2')}
+                  strokeWidth={activeWidth('B2')}
                   strokeLinejoin="round"
                 />
-                <text x="290" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B2')}</text>
-                <text x="290" y="800" textAnchor="middle" fill={channelColor('B2')} fontSize="14" pointerEvents="none">
-                  {subLabel('B2')}
-                </text>
+                {renderBlockLabels('B2')}
               </g>
 
               {/* BLOCK B3 (Bottom Right) */}
-              <g onClick={() => handleBlockSelect('B3')} className={`block-path ${activeBlock === 'B3' ? 'block-active' : ''}`} style={{ cursor: 'pointer', transition: 'all 0.2s ease-in-out' }}>
+              <g onClick={() => handleBlockSelect('B3')} className={blockClass('B3')}>
                 <path
                   d={roundedPolygon("520,680 800,680 940,860 520,860", 12)}
                   fill={blockFill('B3')}
-                  stroke="#38bdf8"
-                  strokeWidth="1.5"
+                  stroke={activeStroke('B3')}
+                  strokeWidth={activeWidth('B3')}
                   strokeLinejoin="round"
                 />
-                <text x="710" y="770" textAnchor="middle" fill="#ffffff" fontSize="28" fontWeight="bold" pointerEvents="none">{blockLabel('B3')}</text>
-                <text x="710" y="800" textAnchor="middle" fill={channelColor('B3')} fontSize="14" pointerEvents="none">
-                  {subLabel('B3')}
-                </text>
+                {renderBlockLabels('B3')}
               </g>
             </svg>
             </div>
@@ -829,6 +830,7 @@ function SeatSelectionContent() {
                                 key={letter}
                                 onClick={() => {
                                   setActiveBlock(letter);
+                                  setBlockTapped(true);
                                   setSelected([]);
                                   setClickedFromMap(false);
                                 }}
@@ -853,6 +855,7 @@ function SeatSelectionContent() {
                                 key={letter}
                                 onClick={() => {
                                   setActiveBlock(letter);
+                                  setBlockTapped(true);
                                   setSelected([]);
                                   setClickedFromMap(false);
                                 }}
@@ -877,6 +880,7 @@ function SeatSelectionContent() {
                                 key={letter}
                                 onClick={() => {
                                   setActiveBlock(letter);
+                                  setBlockTapped(true);
                                   setSelected([]);
                                   setClickedFromMap(false);
                                 }}

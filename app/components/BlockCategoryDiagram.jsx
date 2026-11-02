@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   subscribeBlockCategories,
   isBlockOnline,
   blockDisplayName,
-  blockChannelText,
 } from "../../lib/blockCategories";
 import { subscribeTicketTypes, getPriceForRow } from "../../lib/ticketTypes";
 import { isHoldFresh } from "../../lib/seats";
@@ -46,8 +45,212 @@ function roundedPolygon(pointsStr, radius = 10) {
 }
 
 /**
+ * Label anchors per block inside the 1000x900 viewBox.
+ * `maxW` is the widest a line may get without crossing its block polygon,
+ * `max` the largest size the vertical gap to the next line allows,
+ * `init` a known-safe size used until the real font is measured.
+ */
+export const BLOCK_LABEL_LAYOUT = {
+  C2: {
+    x: 195,
+    name: { y: 105, maxW: 282, max: 44, init: 32 },
+    channel: { y: 142, maxW: 282, max: 30, init: 20 },
+    price: { y: 180, maxW: 282, max: 34, init: 24 },
+  },
+  A2: {
+    x: 805,
+    name: { y: 105, maxW: 282, max: 44, init: 32 },
+    channel: { y: 142, maxW: 282, max: 30, init: 20 },
+    price: { y: 180, maxW: 282, max: 34, init: 24 },
+  },
+  C3: {
+    x: 105,
+    name: { y: 490, maxW: 118, max: 30, init: 28, spacing: -0.2 },
+    channel: { y: 528, maxW: 118, max: 26, init: 20 },
+    price: { y: 566, maxW: 118, max: 22, init: 20 },
+  },
+  A3: {
+    x: 895,
+    name: { y: 490, maxW: 118, max: 30, init: 28, spacing: -0.2 },
+    channel: { y: 528, maxW: 118, max: 26, init: 20 },
+    price: { y: 566, maxW: 118, max: 22, init: 20 },
+  },
+  C1: {
+    x: 270,
+    priceX: 265,
+    name: { y: 380, maxW: 142, max: 36, init: 32 },
+    channel: { y: 418, maxW: 142, max: 28, init: 20 },
+    price: { y: 456, maxW: 120, max: 26, init: 22 },
+  },
+  A1: {
+    x: 730,
+    priceX: 735,
+    name: { y: 380, maxW: 142, max: 36, init: 32 },
+    channel: { y: 418, maxW: 142, max: 28, init: 20 },
+    price: { y: 456, maxW: 120, max: 26, init: 22 },
+  },
+  B1: {
+    x: 500,
+    name: { y: 505, maxW: 300, max: 58, init: 38 },
+    channel: { y: 548, maxW: 400, max: 34, init: 22 },
+    price: { y: 590, maxW: 440, max: 38, init: 28 },
+  },
+  B2: {
+    x: 290,
+    name: { y: 742, maxW: 270, max: 46, init: 32 },
+    channel: { y: 780, maxW: 280, max: 30, init: 20 },
+    price: { y: 818, maxW: 300, max: 32, init: 24 },
+  },
+  B3: {
+    x: 710,
+    name: { y: 742, maxW: 270, max: 46, init: 32 },
+    channel: { y: 780, maxW: 280, max: 30, init: 20 },
+    price: { y: 818, maxW: 300, max: 32, init: 24 },
+  },
+};
+
+const FIT_MIN_FONT = 15;
+
+/** Bare block name for the diagram — "C2", not "Block C2". */
+export function diagramBlockLabel(blockCats, id) {
+  const raw = blockDisplayName(blockCats, id) || id;
+  return raw.replace(/^block\s+/i, "");
+}
+
+const isSeatTaken = (s) => {
+  const st = String(s.status || "").toLowerCase();
+  if (st === "booked" || st === "sold") return true;
+  return st === "reserved" && isHoldFresh(s);
+};
+
+/** True only once seats for the block are loaded and every one of them is gone. */
+export function isBlockSoldOut(id, seatsByBlock) {
+  const list = seatsByBlock[id] || [];
+  return list.length > 0 && list.every(isSeatTaken);
+}
+
+export function blockStatusText(id, seatsByBlock) {
+  return isBlockSoldOut(id, seatsByBlock) ? "Not Available" : "Available";
+}
+
+/** Availability colour: the block fill already flags Online vs Counter. */
+export function blockStatusColor(id, seatsByBlock) {
+  return isBlockSoldOut(id, seatsByBlock) ? "#fee2e2" : "#bbf7d0";
+}
+
+/** Unique seat prices for a block, e.g. Star 200 + VIP 150 -> [200, 150]. */
+export function diagramBlockPrices(id, seatsByBlock, ticketTypes, seatPrice = 0) {
+  const list = seatsByBlock[id] || [];
+  const priceSet = new Set();
+
+  if (list.length > 0) {
+    list.forEach((s) => {
+      const rawP = Number(s.price);
+      if (!isNaN(rawP) && rawP > 0) {
+        priceSet.add(rawP);
+      } else {
+        const rowPrice = getPriceForRow(s.rowId || s.row, ticketTypes);
+        if (rowPrice && Number(rowPrice) > 0) {
+          priceSet.add(Number(rowPrice));
+        }
+      }
+    });
+  }
+
+  if (priceSet.size > 0) {
+    return Array.from(priceSet).sort((a, b) => b - a);
+  }
+
+  // Default category tier fallbacks when seats for a block are not loaded yet
+  if (id === "B1") return [200, 150]; // Star (A-E) 200 & VIP (F-K) 150
+  if (id === "B2" || id === "B3") return [150, 100];
+  if (id === "C3" || id === "A3") return [100, 80];
+  if (seatPrice > 0) return [seatPrice];
+  return [200];
+}
+
+export function diagramBlockPriceText(id, seatsByBlock, ticketTypes, seatPrice = 0) {
+  const prices = diagramBlockPrices(id, seatsByBlock, ticketTypes, seatPrice);
+  if (!prices || prices.length === 0) return null;
+  if (prices.length === 1) return `₹${prices[0]}`;
+  if (prices.length === 2) return `₹${prices[0]} & ₹${prices[1]}`;
+  return prices.map((p) => `₹${p}`).join(" & ");
+}
+
+/**
+ * SVG text that grows to the largest size still fitting its block, measured with
+ * the real rendered font. Sizes live in viewBox units, so they scale with screen width.
+ */
+export function FitLabel({ text, x, y, maxW, max, init, spacing = 0.5, fill, weight }) {
+  const ref = useRef(null);
+  const [size, setSize] = useState(init);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof el.getComputedTextLength !== "function") return;
+    let fitted = init;
+    el.setAttribute("font-size", String(max));
+    const widthAtMax = el.getComputedTextLength();
+    if (widthAtMax <= maxW) {
+      fitted = max;
+    } else {
+      fitted = Math.max(FIT_MIN_FONT, Math.floor((max * maxW) / widthAtMax));
+      el.setAttribute("font-size", String(fitted));
+      // letter-spacing is absolute, so the proportional guess can still overshoot
+      if (el.getComputedTextLength() > maxW) fitted -= 2;
+    }
+    setSize(fitted);
+  }, [text, maxW, max, init]);
+
+  return (
+    <text
+      ref={ref}
+      x={x}
+      y={y}
+      textAnchor="middle"
+      fill={fill}
+      fontSize={size}
+      fontWeight={weight}
+      letterSpacing={spacing}
+      style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
+      pointerEvents="none"
+    >
+      {text}
+    </text>
+  );
+}
+
+/**
+ * The three auto-fitted lines drawn inside every block: name, Online/Counter, price.
+ * Shared by the block diagram and the /seats map so both stay in sync.
+ */
+export function BlockLabels({ layout, name, status, statusFill, price }) {
+  return (
+    <>
+      <FitLabel text={name} x={layout.x} fill="#ffffff" weight={900} {...layout.name} />
+      <FitLabel
+        text={status}
+        x={layout.x}
+        fill={statusFill}
+        weight={900}
+        {...layout.channel}
+      />
+      {price != null && (
+        <FitLabel
+          text={price}
+          x={layout.priceX ?? layout.x}
+          fill="#fef08a"
+          weight={900}
+          {...layout.price}
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * Interactive venue block-category diagram.
- * Click a block to select it. Colors: green=Online, amber=Counter, red=All Booked.
+ * Click a block to select it. Colors: green=Online, amber=Counter, red=Not Available.
  */
 export default function BlockCategoryDiagram({
   seatsByBlock = {},
@@ -69,76 +272,25 @@ export default function BlockCategoryDiagram({
   }, [eventId]);
 
   const isOnlineBlock = (id) => isBlockOnline(blockCats, id);
-  const blockLabel = (id) => {
-    const raw = blockDisplayName(blockCats, id);
-    if (!raw) return `Block ${id}`;
-    if (/^block\s+/i.test(raw)) return raw;
-    return `Block ${raw}`;
-  };
-  const subLabel = (id) => blockChannelText(blockCats, id);
-  const channelColor = (id) => (isOnlineBlock(id) ? "#bbf7d0" : "#fef08a");
+  const blockLabel = (id) => diagramBlockLabel(blockCats, id);
 
   const blockFill = (id) => {
-    const list = seatsByBlock[id] || [];
-    const seatTaken = (s) => {
-      const st = String(s.status || "").toLowerCase();
-      if (st === "booked" || st === "sold") return true;
-      if (st === "reserved" && isHoldFresh(s)) return true;
-      return false;
-    };
-    if (list.length && list.every(seatTaken)) return "#ef4444";
+    if (isBlockSoldOut(id, seatsByBlock)) return "#ef4444";
     return isOnlineBlock(id) ? "#16a34a" : "#d97706";
   };
 
-  /**
-   * Resolves unique seat prices per ticket category for a block (e.g. Star: 200, VIP: 150 -> [200, 150]).
-   */
-  const getBlockPrices = (id) => {
-    const list = seatsByBlock[id] || [];
-    const priceSet = new Set();
-    const effectiveTypes = propTicketTypes || ticketTypes;
+  const blockPriceText = (id) =>
+    diagramBlockPriceText(id, seatsByBlock, propTicketTypes || ticketTypes, seatPrice);
 
-    if (list.length > 0) {
-      list.forEach((s) => {
-        const rawP = Number(s.price);
-        if (!isNaN(rawP) && rawP > 0) {
-          priceSet.add(rawP);
-        } else {
-          const rowPrice = getPriceForRow(s.rowId || s.row, effectiveTypes);
-          if (rowPrice && Number(rowPrice) > 0) {
-            priceSet.add(Number(rowPrice));
-          }
-        }
-      });
-    }
-
-    if (priceSet.size > 0) {
-      return Array.from(priceSet).sort((a, b) => b - a);
-    }
-
-    // Default category tier fallbacks when seats for a block are not loaded yet
-    if (id === "B1") return [200, 150]; // Star (A-E) 200 & VIP (F-K) 150
-    if (id === "B2" || id === "B3") return [150, 100];
-    if (id === "C3" || id === "A3") return [100, 80];
-    if (seatPrice > 0) return [seatPrice];
-    return [200];
-  };
-
-  const blockPriceText = (id) => {
-    const prices = getBlockPrices(id);
-    if (!prices || prices.length === 0) return null;
-    if (prices.length === 1) return `₹${prices[0]}`;
-    if (prices.length === 2) return `₹${prices[0]} & ₹${prices[1]}`;
-    return prices.map((p) => `₹${p}`).join(" & ");
-  };
-
-  const priceFontSize = (id) => {
-    const text = blockPriceText(id) || "";
-    if (id === "B1") return text.length > 8 ? "26" : "28";
-    if (id === "C3" || id === "A3") return text.length > 8 ? "18" : "24";
-    if (id === "C1" || id === "A1") return text.length > 8 ? "20" : "24";
-    return text.length > 8 ? "22" : "24";
-  };
+  const renderBlockLabels = (id) => (
+    <BlockLabels
+      layout={BLOCK_LABEL_LAYOUT[id]}
+      name={blockLabel(id)}
+      status={blockStatusText(id, seatsByBlock)}
+      statusFill={blockStatusColor(id, seatsByBlock)}
+      price={blockPriceText(id)}
+    />
+  );
 
   const handleClick = (id) => {
     if (!isOnlineBlock(id)) {
@@ -158,11 +310,11 @@ export default function BlockCategoryDiagram({
   const blockStyle = (id) => ({
     cursor: isOnlineBlock(id) ? "pointer" : "not-allowed",
     transition: "all 0.2s ease-in-out",
-    opacity: activeBlock && activeBlock !== id ? 0.55 : 1,
+    opacity: activeBlock && activeBlock !== id ? 0.4 : 1,
   });
 
   const activeStroke = (id) => (activeBlock === id ? "#fbbf24" : "#38bdf8");
-  const activeWidth = (id) => (activeBlock === id ? 4 : 1.5);
+  const activeWidth = (id) => (activeBlock === id ? 5 : 1.5);
 
   return (
     <div className="w-full bg-transparent p-0">
@@ -178,7 +330,7 @@ export default function BlockCategoryDiagram({
         </span>
         <span className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-sm bg-[#ef4444] inline-block shadow-xs" />
-          <span>All Booked</span>
+          <span>Not Available</span>
         </span>
       </div>
 
@@ -270,46 +422,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("C2")}
             rx="12"
           />
-          <text
-            x="195"
-            y="105"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="32"
-            fontWeight="900"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("C2")}
-          </text>
-          <text
-            x="195"
-            y="142"
-            textAnchor="middle"
-            fill={channelColor("C2")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("C2")}
-          </text>
-          {blockPriceText("C2") != null && (
-            <text
-              x="195"
-              y="180"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("C2")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("C2")}
-            </text>
-          )}
+          {renderBlockLabels("C2")}
         </g>
 
         {/* BLOCK A2 (Top Right) */}
@@ -328,46 +441,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("A2")}
             rx="12"
           />
-          <text
-            x="805"
-            y="105"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="32"
-            fontWeight="900"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("A2")}
-          </text>
-          <text
-            x="805"
-            y="142"
-            textAnchor="middle"
-            fill={channelColor("A2")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("A2")}
-          </text>
-          {blockPriceText("A2") != null && (
-            <text
-              x="805"
-              y="180"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("A2")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("A2")}
-            </text>
-          )}
+          {renderBlockLabels("A2")}
         </g>
 
         {/* BLOCK C3 (Outer Left) */}
@@ -383,46 +457,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("C3")}
             strokeLinejoin="round"
           />
-          <text
-            x="105"
-            y="490"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="28"
-            fontWeight="900"
-            letterSpacing="-0.2"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("C3")}
-          </text>
-          <text
-            x="105"
-            y="528"
-            textAnchor="middle"
-            fill={channelColor("C3")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("C3")}
-          </text>
-          {blockPriceText("C3") != null && (
-            <text
-              x="105"
-              y="566"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("C3")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("C3")}
-            </text>
-          )}
+          {renderBlockLabels("C3")}
         </g>
 
         {/* BLOCK C1 (Inner Left) */}
@@ -438,46 +473,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("C1")}
             strokeLinejoin="round"
           />
-          <text
-            x="270"
-            y="380"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="32"
-            fontWeight="900"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("C1")}
-          </text>
-          <text
-            x="270"
-            y="418"
-            textAnchor="middle"
-            fill={channelColor("C1")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("C1")}
-          </text>
-          {blockPriceText("C1") != null && (
-            <text
-              x="265"
-              y="456"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("C1")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("C1")}
-            </text>
-          )}
+          {renderBlockLabels("C1")}
         </g>
 
         {/* BLOCK A1 (Inner Right) */}
@@ -493,46 +489,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("A1")}
             strokeLinejoin="round"
           />
-          <text
-            x="730"
-            y="380"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="32"
-            fontWeight="900"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("A1")}
-          </text>
-          <text
-            x="730"
-            y="418"
-            textAnchor="middle"
-            fill={channelColor("A1")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("A1")}
-          </text>
-          {blockPriceText("A1") != null && (
-            <text
-              x="735"
-              y="456"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("A1")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("A1")}
-            </text>
-          )}
+          {renderBlockLabels("A1")}
         </g>
 
         {/* BLOCK A3 (Outer Right) */}
@@ -548,46 +505,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("A3")}
             strokeLinejoin="round"
           />
-          <text
-            x="895"
-            y="490"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="28"
-            fontWeight="900"
-            letterSpacing="-0.2"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("A3")}
-          </text>
-          <text
-            x="895"
-            y="528"
-            textAnchor="middle"
-            fill={channelColor("A3")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("A3")}
-          </text>
-          {blockPriceText("A3") != null && (
-            <text
-              x="895"
-              y="566"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("A3")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("A3")}
-            </text>
-          )}
+          {renderBlockLabels("A3")}
         </g>
 
         {/* BLOCK B1 (Main Center Front Trapezoid) */}
@@ -603,46 +521,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("B1")}
             strokeLinejoin="round"
           />
-          <text
-            x="500"
-            y="505"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="38"
-            fontWeight="900"
-            letterSpacing="1"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("B1")}
-          </text>
-          <text
-            x="500"
-            y="548"
-            textAnchor="middle"
-            fill={channelColor("B1")}
-            fontSize="22"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("B1")}
-          </text>
-          {blockPriceText("B1") != null && (
-            <text
-              x="500"
-              y="590"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("B1")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("B1")}
-            </text>
-          )}
+          {renderBlockLabels("B1")}
         </g>
 
         {/* BLOCK B2 (Bottom Left) */}
@@ -658,46 +537,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("B2")}
             strokeLinejoin="round"
           />
-          <text
-            x="290"
-            y="742"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="32"
-            fontWeight="900"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("B2")}
-          </text>
-          <text
-            x="290"
-            y="780"
-            textAnchor="middle"
-            fill={channelColor("B2")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("B2")}
-          </text>
-          {blockPriceText("B2") != null && (
-            <text
-              x="290"
-              y="818"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("B2")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("B2")}
-            </text>
-          )}
+          {renderBlockLabels("B2")}
         </g>
 
         {/* BLOCK B3 (Bottom Right) */}
@@ -713,46 +553,7 @@ export default function BlockCategoryDiagram({
             strokeWidth={activeWidth("B3")}
             strokeLinejoin="round"
           />
-          <text
-            x="710"
-            y="742"
-            textAnchor="middle"
-            fill="#ffffff"
-            fontSize="32"
-            fontWeight="900"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {blockLabel("B3")}
-          </text>
-          <text
-            x="710"
-            y="780"
-            textAnchor="middle"
-            fill={channelColor("B3")}
-            fontSize="20"
-            fontWeight="800"
-            letterSpacing="0.5"
-            style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-            pointerEvents="none"
-          >
-            {subLabel("B3")}
-          </text>
-          {blockPriceText("B3") != null && (
-            <text
-              x="710"
-              y="818"
-              textAnchor="middle"
-              fill="#fef08a"
-              fontSize={priceFontSize("B3")}
-              fontWeight="900"
-              style={{ textShadow: "0 2px 4px rgba(0,0,0,0.85)" }}
-              pointerEvents="none"
-            >
-              {blockPriceText("B3")}
-            </text>
-          )}
+          {renderBlockLabels("B3")}
         </g>
       </svg>
     </div>
