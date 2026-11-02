@@ -205,7 +205,7 @@ function EmptyTicketArt() {
  */
 function EmptyTicketsState({ hasAccount }) {
   return (
-    <div className="relative max-w-md mx-auto w-full overflow-hidden text-center bg-white rounded-3xl border border-slate-200/80 shadow-sm px-5 py-8 sm:py-10">
+    <div className="relative max-w-lg mx-auto w-full overflow-hidden text-center bg-white rounded-3xl border border-slate-200/80 shadow-sm px-5 py-8 sm:py-10">
       <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-indigo-50 pointer-events-none" />
       <div className="absolute -bottom-20 -left-16 w-44 h-44 rounded-full bg-amber-50 pointer-events-none" />
 
@@ -472,7 +472,7 @@ export default function TicketsPage() {
             allTickets.length === 0 ? (
               <EmptyTicketsState hasAccount={!!profile} />
             ) : tab === "upcoming" && usedTickets.length > 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs max-w-md mx-auto">
+              <div className="text-center py-12 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs max-w-lg mx-auto">
                 <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl shadow-inner">
                   <i className="fa-solid fa-circle-check" />
                 </div>
@@ -491,7 +491,7 @@ export default function TicketsPage() {
                 </button>
               </div>
             ) : tab === "expired" && usedTickets.length > 0 ? (
-              <div className="text-center py-12 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs max-w-md mx-auto">
+              <div className="text-center py-12 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs max-w-lg mx-auto">
                 <i className="fa-regular fa-calendar-check text-4xl text-slate-300 mb-3" />
                 <h3 className="text-base font-black text-slate-900 font-brand">No Expired Tickets</h3>
                 <p className="text-xs text-slate-500 font-medium mt-1 mb-4">
@@ -514,15 +514,12 @@ export default function TicketsPage() {
               </div>
             )
           ) : tab === "upcoming" ? (
-            <div className="space-y-6 max-w-md mx-auto w-full">
+            <div className="space-y-6 max-w-lg mx-auto w-full">
               {activeBookingGroups.map((group) => {
                 const b = group.booking;
                 const bookingId = b.bookingId || b.ticketNumber;
                 return (
-                  <div
-                    key={bookingId}
-                    className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200/80 space-y-3.5"
-                  >
+                  <div key={bookingId} className="space-y-3">
                     {/* Booking Summary Card */}
                     <div className="bg-[#12193b] text-white rounded-2xl p-4 shadow-md space-y-3 relative overflow-hidden">
                       <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-white/5 pointer-events-none" />
@@ -830,7 +827,7 @@ function TicketStatusList({ list, tab }) {
   };
 
   return (
-    <div className="space-y-2.5 max-w-md mx-auto w-full">
+    <div className="space-y-2.5 max-w-lg mx-auto w-full">
       {list.map((ticket) => (
         <Link
           key={ticketKey(ticket)}
