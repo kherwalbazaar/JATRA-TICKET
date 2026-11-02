@@ -5,6 +5,7 @@ import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { findParty, subscribeParties, DEFAULT_PARTIES } from "../../../lib/parties";
 import { subscribeEvents, isLogoUrl } from "../../../lib/events";
+import { subscribePartyBookings, bookingsForParty, normalizeBookingDay } from "../../../lib/partyBookings";
 import { splitPhoneNumbers } from "../../../lib/phoneNumbers";
 import { copyTextToClipboard } from "../../../lib/clipboard";
 import { getImageSource } from "../../components/BannerImage";
@@ -44,6 +45,7 @@ function committeeAddressOf(show) {
 export default function PartyDetail({ id }) {
   const [party, setParty] = useState(null);
   const [allEvents, setAllEvents] = useState([]);
+  const [allBookings, setAllBookings] = useState([]);
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [slotYear, setSlotYear] = useState(() => new Date().getFullYear());
   const [slotMonth, setSlotMonth] = useState(() => new Date().getMonth());
@@ -88,10 +90,17 @@ export default function PartyDetail({ id }) {
       setAllEvents(list);
     });
 
+    // 4. Subscribe to admin-confirmed party bookings (Supabase, read-only)
+    const unsubBookings = subscribePartyBookings((list) => {
+      if (cancelled || !Array.isArray(list)) return;
+      setAllBookings(list);
+    });
+
     return () => {
       cancelled = true;
       unsubParties();
       unsubEvents();
+      unsubBookings();
     };
   }, [id]);
 
@@ -147,12 +156,26 @@ export default function PartyDetail({ id }) {
     [partyShows, slotYear]
   );
 
+  // Admin-confirmed party bookings for the visible month, grouped by day
+  const monthBookings = useMemo(() => {
+    const map = new Map();
+    bookingsForParty(allBookings, party).forEach((booking) => {
+      const d = normalizeBookingDay(booking.booking_date);
+      if (!d || d.year !== slotYear || d.month !== slotMonth) return;
+      const existing = map.get(d.day);
+      if (existing) existing.push(booking);
+      else map.set(d.day, [booking]);
+    });
+    return map;
+  }, [allBookings, party, slotYear, slotMonth]);
+
   const daysInMonth = new Date(slotYear, slotMonth + 1, 0).getDate();
   const leadingDays = new Date(slotYear, slotMonth, 1).getDay();
   const daysInPrevMonth = new Date(slotYear, slotMonth, 0).getDate();
   const trailingDays = (7 - ((leadingDays + daysInMonth) % 7)) % 7;
   const todayStart = new Date(currentYear, now.getMonth(), now.getDate());
   const selectedShows = selectedDay ? monthShows.get(selectedDay) || [] : [];
+  const selectedBookings = selectedDay ? monthBookings.get(selectedDay) || [] : [];
 
   const changeMonth = (delta) => {
     const next = new Date(slotYear, slotMonth + delta, 1);
@@ -353,7 +376,10 @@ export default function PartyDetail({ id }) {
               {Array.from({ length: daysInMonth }, (_, index) => {
                 const day = index + 1;
                 const dayShows = monthShows.get(day) || [];
+                const dayBookings = monthBookings.get(day) || [];
                 const hasShows = dayShows.length > 0;
+                const hasBookings = dayBookings.length > 0;
+                const isBusy = hasShows || hasBookings;
                 const isPast = new Date(slotYear, slotMonth, day) < todayStart;
                 const isToday =
                   slotYear === currentYear && slotMonth === now.getMonth() && day === now.getDate();
@@ -363,31 +389,43 @@ export default function PartyDetail({ id }) {
                   <button
                     key={day}
                     type="button"
-                    disabled={isPast && !hasShows}
+                    disabled={isPast && !isBusy}
                     onClick={() => setSelectedDay(isSelected ? null : day)}
                     aria-pressed={isSelected}
                     aria-label={
-                      hasShows
-                        ? `${day} ${MONTH_FULL[slotMonth]} ${slotYear} - ${dayShows.length} booked event${dayShows.length > 1 ? "s" : ""}`
+                      isBusy
+                        ? `${day} ${MONTH_FULL[slotMonth]} ${slotYear} - ${
+                            hasBookings ? "booked by committee" : ""
+                          }${hasBookings && hasShows ? ", " : ""}${
+                            hasShows ? `${dayShows.length} ticketed show event${dayShows.length > 1 ? "s" : ""}` : ""
+                          }`
                         : undefined
                     }
                     title={
-                      hasShows
-                        ? dayShows.map((s) => s.eventTitle || s.name || "Jatra Show").join(", ")
+                      isBusy
+                        ? [
+                            ...dayBookings.map((b) => `${b.event_name} (${b.committee_name})`),
+                            ...dayShows.map((s) => s.eventTitle || s.name || "Jatra Show"),
+                          ].join(", ")
                         : undefined
                     }
                     className={`aspect-square rounded-md text-[11px] font-bold flex flex-col items-center justify-center transition-colors ${
-                      hasShows
+                      isBusy
                         ? "bg-red-600 text-white shadow-sm hover:bg-red-700 active:scale-95"
                         : isPast
                           ? "bg-rose-200 text-rose-500"
                           : "bg-emerald-200 text-emerald-900 hover:bg-emerald-300 active:scale-95"
                     } ${isSelected ? "ring-2 ring-indigo-600 ring-offset-1" : ""} ${
-                      isToday && !isSelected && !hasShows ? "ring-2 ring-indigo-400 ring-inset" : ""
+                      isToday && !isSelected && !isBusy ? "ring-2 ring-indigo-400 ring-inset" : ""
                     }`}
                   >
                     <span>{day}</span>
-                    {hasShows && (
+                    {hasBookings && (
+                      <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5">
+                        {hasShows ? "Booked + Shows" : "Booked"}
+                      </span>
+                    )}
+                    {!hasBookings && hasShows && (
                       <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5">
                         {dayShows.length > 1 ? `${dayShows.length} Shows` : "Booked"}
                       </span>
@@ -408,48 +446,101 @@ export default function PartyDetail({ id }) {
 
             {selectedDay && (
               <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2.5 space-y-2">
-                {selectedShows.length > 0 ? (
+                {selectedShows.length > 0 || selectedBookings.length > 0 ? (
                   <>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[9px] font-black uppercase tracking-wider text-rose-600">
                         Booked on {selectedDay} {MONTH_LABELS[slotMonth]} {slotYear}
                       </p>
                       <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full shrink-0">
-                        {selectedShows.length} event{selectedShows.length > 1 ? "s" : ""}
+                        {selectedShows.length + selectedBookings.length} event
+                        {selectedShows.length + selectedBookings.length === 1 ? "" : "s"}
                       </span>
                     </div>
 
-                    {selectedShows.map((show) => (
-                      <div
-                        key={show.key || show.id}
-                        className="bg-white rounded-lg border border-slate-200 p-2.5 space-y-1.5"
-                      >
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                            Event Name
-                          </p>
-                          <p className="text-xs font-black text-slate-900">
-                            {show.eventTitle || show.name || "Jatra Show"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                            Event Date
-                          </p>
-                          <p className="text-[11px] font-semibold text-slate-700">
-                            {formatShowDate(show)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                            Committee Address
-                          </p>
-                          <p className="text-[11px] font-semibold text-slate-700">
-                            {committeeAddressOf(show) || "Address not available"}
-                          </p>
-                        </div>
+                    {selectedBookings.length > 0 && (
+                      <div className="space-y-2">
+                        {selectedBookings.map((booking) => (
+                          <div
+                            key={`booking-${booking.id}`}
+                            className="bg-white rounded-lg border border-red-200 p-2.5 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-red-600">
+                                Party Booked
+                              </p>
+                              <span className="text-[8px] font-bold text-slate-400 uppercase">
+                                Confirmed by Jatra Bazaar
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Programme Name
+                              </p>
+                              <p className="text-xs font-black text-slate-900">{booking.event_name}</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                  Committee Name
+                                </p>
+                                <p className="text-[11px] font-semibold text-slate-700">{booking.committee_name}</p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                  Booking Date
+                                </p>
+                                <p className="text-[11px] font-semibold text-slate-700">{booking.booking_date}</p>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Committee Address
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-700">
+                                {booking.committee_address || booking.event_address || "Address not available"}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+
+                    {selectedShows.length > 0 && (
+                      <div className="space-y-2">
+                        {selectedShows.map((show) => (
+                          <div
+                            key={show.key || show.id}
+                            className="bg-white rounded-lg border border-slate-200 p-2.5 space-y-1.5"
+                          >
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Event Name
+                              </p>
+                              <p className="text-xs font-black text-slate-900">
+                                {show.eventTitle || show.name || "Jatra Show"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Event Date
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-700">
+                                {formatShowDate(show)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                Committee Address
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-700">
+                                {committeeAddressOf(show) || "Address not available"}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="flex items-center justify-between gap-2">
