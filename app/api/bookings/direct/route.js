@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { supabaseAdmin, serverBroadcastSeatChange } from "@/lib/server/supabaseAdmin";
 import { calculateCustomerCharges } from "@/lib/pricing";
 import { resolveBookingParameters } from "@/lib/paymentMethods";
 import crypto from "crypto";
@@ -144,11 +144,24 @@ export async function POST(request) {
       }
     }
 
-    // 2. Concurrency Safety: Check seat availability in Supabase seats table
-    const { data: existingSeats, error: seatReadErr } = await supabaseAdmin
-      .from("seats")
-      .select("*")
-      .eq("event_id", eventId);
+    // 2. Concurrency Safety: Check seat availability in Supabase seats table.
+    // PostgREST truncates every response at 1000 rows, so the read is paged —
+    // otherwise seats in the later blocks are invisible to this check.
+    const existingSeats = [];
+    let seatReadErr = null;
+    for (let from = 0; ; from += 1000) {
+      const { data: seatPage, error } = await supabaseAdmin
+        .from("seats")
+        .select("*")
+        .eq("event_id", eventId)
+        .range(from, from + 999);
+      if (error) {
+        seatReadErr = error;
+        break;
+      }
+      existingSeats.push(...(seatPage || []));
+      if ((seatPage || []).length < 1000) break;
+    }
 
     if (seatReadErr) {
       console.warn("Seat availability read warning:", seatReadErr.message);
@@ -268,10 +281,36 @@ export async function POST(request) {
       );
     }
 
+    // Record payment transaction in Supabase payments table
+    try {
+      const paymentRow = {
+        id: `PAY_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`,
+        payment_id: `PAY_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`,
+        booking_id: bookingRow.id,
+        ticket_number: bookingRow.ticket_number,
+        event_id: eventId,
+        customer_name: customerName,
+        customer_phone: cleanPhone,
+        amount: finalCustomerAmount,
+        currency: "INR",
+        payment_gateway: isCounter ? "Cash" : "Paytm",
+        gateway_order_id: orderId,
+        gateway_transaction_id: transactionId || null,
+        payment_status: bookingParams.paymentStatus,
+        payment_method: bookingParams.canonicalMethod,
+        payment_channel: bookingParams.paymentChannel,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+      await supabaseAdmin.from("payments").insert([paymentRow]);
+    } catch (payErr) {
+      console.warn("Direct booking payments table notice:", payErr?.message);
+    }
+
     // 6. Update seats in Supabase to "booked"
     for (const seatKey of seatList) {
       const cleanKey = String(seatKey).trim();
-      await supabaseAdmin
+      const { data: updatedSeats } = await supabaseAdmin
         .from("seats")
         .update({
           status: "booked",
@@ -282,7 +321,22 @@ export async function POST(request) {
           updated_at: nowIso,
         })
         .eq("event_id", eventId)
-        .or(`id.eq.${cleanKey},seat_id.eq.${cleanKey},seat_label.eq.${cleanKey}`);
+        .or(`id.eq.${cleanKey},seat_id.eq.${cleanKey},seat_label.eq.${cleanKey}`)
+        .select();
+
+      const bookedSeat = updatedSeats?.[0] || {
+        id: cleanKey,
+        seat_id: cleanKey,
+        event_id: eventId,
+        status: "booked",
+        booked_at: nowIso,
+        booking_id: ticketNumber,
+      };
+      await serverBroadcastSeatChange(eventId, {
+        eventType: "UPDATE",
+        new: bookedSeat,
+        eventId,
+      });
     }
 
     // 7. Insert Individual Tickets in Supabase

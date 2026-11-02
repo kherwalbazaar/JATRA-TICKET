@@ -13,50 +13,42 @@ export default function ChairSvg({
   disabled = false,
 }) {
   const isUnavailable = isBooked || isLocked || isReserved;
+
+  // Real-Time UI Colour Specifications:
+  // Available = Green | Reserved = Orange | Booked = Red | Selected by current customer = Deep Pink
   const stroke = disabled
-    ? "#E5E7EB"
-    : isBooked
-    ? "#9CA3AF"
-    : isReserved
-    ? "#A16207"
-    : isLocked
-    ? "#D97706"
+    ? "#CBD5E1"
     : isSelected
-    ? "#B45309"
-    : "#065F46";
+    ? "#9D174D"
+    : isBooked
+    ? "#B91C1C"
+    : (isReserved || isLocked)
+    ? "#C2410C"
+    : "#15803D";
+
   const fill = disabled
-    ? "#F3F4F6"
-    : isBooked
-    ? "#D1D5DB"
-    : isReserved
-    ? "#FDE047"
-    : isLocked
-    ? "#FDE68A"
+    ? "#E2E8F0"
     : isSelected
-    ? "#FBBF24"
-    : "#4ADE80";
-  const cushionFill = disabled
-    ? "#E5E7EB"
+    ? "#FF1493"
     : isBooked
-    ? "#9CA3AF"
-    : isReserved
-    ? "#EAB308"
-    : isLocked
-    ? "#F59E0B"
-    : isSelected
-    ? "#F59E0B"
+    ? "#EF4444"
+    : (isReserved || isLocked)
+    ? "#F97316"
     : "#22C55E";
-  const textColor = disabled
-    ? "#9CA3AF"
-    : isBooked
-    ? "#6B7280"
-    : isReserved
-    ? "#713F12"
-    : isLocked
-    ? "#78350F"
+
+  const cushionFill = disabled
+    ? "#CBD5E1"
     : isSelected
-    ? "#7C2D12"
-    : "#065F46";
+    ? "#DB2777"
+    : isBooked
+    ? "#DC2626"
+    : (isReserved || isLocked)
+    ? "#EA580C"
+    : "#16A34A";
+
+  const textColor = disabled
+    ? "#94A3B8"
+    : "#FFFFFF";
 
   return (
     <svg
@@ -65,11 +57,11 @@ export default function ChairSvg({
         disabled
           ? "cursor-not-allowed opacity-50"
           : isBooked
-          ? "cursor-not-allowed opacity-80"
-          : isReserved
           ? "cursor-not-allowed opacity-85"
-          : isLocked
-          ? "cursor-not-allowed opacity-85"
+          : (isReserved || isLocked)
+          ? "cursor-not-allowed opacity-90"
+          : isSelected
+          ? "cursor-pointer active:scale-95"
           : "cursor-pointer active:scale-95"
       }`}
       onClick={!disabled && !isUnavailable ? onClick : undefined}

@@ -10,6 +10,7 @@ import {
   subscribeSeats,
   holdSeat,
   releaseSeatHold,
+  getHoldSessionId,
 } from "../../lib/seats";
 import {
   subscribeBlockCategories,
@@ -37,6 +38,7 @@ function SelectSeatsContent() {
   const [loading, setLoading] = useState(true);
   const [blockCats, setBlockCats] = useState([]);
   const [counterNotice, setCounterNotice] = useState("");
+  const [seatCollisionNotice, setSeatCollisionNotice] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   const seatGridRef = useRef(null);
@@ -110,7 +112,20 @@ function SelectSeatsContent() {
   }, [eventId]);
 
   const toggleSeat = useCallback(
-    (key) => {
+    (key, seatObj, isCollision = false) => {
+      if (isCollision) {
+        setSelected((prev) => prev.filter((k) => k !== key));
+        setSelectedLabels((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        setSeatCollisionNotice(
+          "This seat has just been reserved by another customer. Please select another seat."
+        );
+        setTimeout(() => setSeatCollisionNotice(""), 5000);
+        return;
+      }
       const profile = getSavedCustomerProfile();
       if (!profile || !profile.full_name) {
         setShowLoginModal(true);
@@ -125,7 +140,20 @@ function SelectSeatsContent() {
           `${s.rowId}${s.seatNumber}` === key
       );
       const st = String(fs?.status || "").toLowerCase();
-      if (fs && (st === "booked" || st === "locked" || st === "sold")) return;
+      const sid = getHoldSessionId();
+      if (
+        fs &&
+        (st === "booked" ||
+          st === "locked" ||
+          st === "sold" ||
+          (st === "reserved" && fs.reservedBy && fs.reservedBy !== sid))
+      ) {
+        setSeatCollisionNotice(
+          "This seat has just been reserved by another customer. Please select another seat."
+        );
+        setTimeout(() => setSeatCollisionNotice(""), 5000);
+        return;
+      }
 
       const removing = selected.includes(key);
       if (!removing && selected.length >= 10) return;
@@ -134,23 +162,32 @@ function SelectSeatsContent() {
         fs?.seatLabel ||
         (fs?.rowId && fs?.seatNumber ? `${fs.rowId}${fs.seatNumber}` : key);
 
-      setSelected((prev) =>
-        prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-      );
-      setSelectedLabels((prev) => {
-        const next = { ...prev };
-        if (removing) {
-          delete next[key];
-        } else {
-          next[key] = label;
-        }
-        return next;
-      });
-
       if (removing) {
+        setSelected((prev) => prev.filter((k) => k !== key));
+        setSelectedLabels((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
         releaseSeatHold(eventId, activeBlock, key);
       } else {
-        holdSeat(eventId, activeBlock, key);
+        setSelected((prev) => (prev.includes(key) ? prev : [...prev, key]));
+        setSelectedLabels((prev) => ({ ...prev, [key]: label }));
+        holdSeat(eventId, activeBlock, key).then((res) => {
+          if (res && res.success === false) {
+            setSelected((prev) => prev.filter((k) => k !== key));
+            setSelectedLabels((prev) => {
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            });
+            setSeatCollisionNotice(
+              res.message ||
+                "This seat has just been reserved by another customer. Please select another seat."
+            );
+            setTimeout(() => setSeatCollisionNotice(""), 5000);
+          }
+        });
       }
     },
     [activeBlock, selected, eventId, seatsByBlock]
@@ -352,6 +389,21 @@ function SelectSeatsContent() {
             <button
               onClick={() => setCounterNotice("")}
               className="w-5 h-5 rounded-full bg-amber-600/30 hover:bg-amber-600/50 flex items-center justify-center text-slate-950 flex-shrink-0"
+            >
+              <i className="fa-solid fa-xmark text-[11px]" />
+            </button>
+          </div>
+        )}
+
+        {seatCollisionNotice && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-rose-600 text-white font-black text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-rose-500 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <i className="fa-solid fa-circle-exclamation text-base text-rose-200 flex-shrink-0" />
+              <span className="truncate">{seatCollisionNotice}</span>
+            </div>
+            <button
+              onClick={() => setSeatCollisionNotice("")}
+              className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white flex-shrink-0"
             >
               <i className="fa-solid fa-xmark text-[11px]" />
             </button>

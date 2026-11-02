@@ -347,7 +347,15 @@ export default function BookingForm({
 
   // Seat toggle handler
   const toggleSeat = useCallback(
-    (key) => {
+    (key, seatObj, isCollision = false) => {
+      if (isCollision) {
+        setSelectedSeats((prev) => prev.filter((k) => k !== key));
+        setErrorMessage(
+          "This seat has just been reserved by another customer. Please select another seat."
+        );
+        setTimeout(() => setErrorMessage(""), 5000);
+        return;
+      }
       const profile = getSavedCustomerProfile();
       if (!profile || !profile.full_name) {
         setShowLoginModal(true);
@@ -364,25 +372,39 @@ export default function BookingForm({
       const st = String(fs?.status || "").toLowerCase();
       const sid = getHoldSessionId();
 
-      if (fs && (st === "booked" || st === "locked")) return;
-      if (fs && st === "reserved" && fs.reservedBy !== sid && isHoldFresh(fs)) {
+      if (fs && (st === "booked" || st === "locked" || st === "sold")) {
+        setErrorMessage(
+          "This seat has just been reserved by another customer. Please select another seat."
+        );
+        setTimeout(() => setErrorMessage(""), 5000);
+        return;
+      }
+      if (fs && st === "reserved" && fs.reservedBy && fs.reservedBy !== sid) {
+        setErrorMessage(
+          "This seat has just been reserved by another customer. Please select another seat."
+        );
+        setTimeout(() => setErrorMessage(""), 5000);
         return;
       }
 
       const removing = selectedSeats.includes(key);
       if (!removing && selectedSeats.length >= 10) return;
 
-      setSelectedSeats((prev) => {
-        if (prev.includes(key)) {
-          return prev.filter((k) => k !== key);
-        }
-        return [...prev, key];
-      });
-
       if (removing) {
+        setSelectedSeats((prev) => prev.filter((k) => k !== key));
         releaseSeatHold(resolvedEventId, activeBlock, key);
       } else {
-        holdSeat(resolvedEventId, activeBlock, key);
+        setSelectedSeats((prev) => (prev.includes(key) ? prev : [...prev, key]));
+        holdSeat(resolvedEventId, activeBlock, key).then((res) => {
+          if (res && res.success === false) {
+            setSelectedSeats((prev) => prev.filter((k) => k !== key));
+            setErrorMessage(
+              res.message ||
+                "This seat has just been reserved by another customer. Please select another seat."
+            );
+            setTimeout(() => setErrorMessage(""), 5000);
+          }
+        });
       }
     },
     [activeBlock, selectedSeats, resolvedEventId, seatsByBlock]

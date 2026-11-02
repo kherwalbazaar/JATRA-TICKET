@@ -50,16 +50,11 @@ export default function UserSeatGrid({
 
   const sessionId = useMemo(() => getHoldSessionId(), []);
 
-  // Reserved by another session and still fresh → blocked for this user too.
-  const reservedByOther = (seat) =>
-    String(seat?.status || "").toLowerCase() === "reserved" &&
-    seat.reservedBy !== sessionId &&
-    isHoldFresh(seat);
-
   const isSeatAvailable = (seat) =>
-    !seat?.status ||
-    seat.status === "available" ||
-    (seat.status === "reserved" && !isHoldFresh(seat));
+    !seat?.status || seat.status === "available";
+
+  const isSeatReserved = (seat) =>
+    String(seat?.status || "").toLowerCase() === "reserved";
 
   // Controlled mode: if externalSeatsByBlock is provided, parent manages seat state
   const isControlled = externalSeatsByBlock !== undefined;
@@ -124,7 +119,7 @@ export default function UserSeatGrid({
     return subscribeBlockCategories(setBlockCats);
   }, []);
 
-  // Concurrency collision check: deselect any seat that became booked / locked / reserved
+  // Concurrency collision check: deselect any seat that became booked / locked / reserved by someone else
   useEffect(() => {
     if (!activeBlock || !seatsByBlock[activeBlock] || !onToggleSeatRef.current) return;
     const blockSeats = seatsByBlock[activeBlock];
@@ -133,15 +128,22 @@ export default function UserSeatGrid({
       const found = blockSeats.find(
         (s) =>
           s.id === sKey ||
+          s.seatId === sKey ||
           s.seatLabel === sKey ||
           `${s.rowId}-${s.seatNumber}` === sKey ||
           `${s.rowId}${s.seatNumber}` === sKey
       );
-      if (found && (found.status === "booked" || found.status === "locked" || reservedByOther(found))) {
-        onToggleSeatRef.current(sKey, found);
+      if (
+        found &&
+        (found.status === "booked" ||
+          found.status === "sold" ||
+          found.status === "locked" ||
+          (found.status === "reserved" && found.reservedBy && found.reservedBy !== sessionId))
+      ) {
+        onToggleSeatRef.current(sKey, found, true);
       }
     }
-  }, [seatsByBlock, activeBlock]);
+  }, [seatsByBlock, activeBlock, sessionId]);
 
   // Group seats by row for data-driven rendering of the active block
   const rows = useMemo(() => {
@@ -175,7 +177,7 @@ export default function UserSeatGrid({
     const available = list.filter((s) => isSeatAvailable(s)).length;
     const booked = list.filter((s) => s.status === "booked" || s.status === "sold").length;
     const locked = list.filter((s) => s.status === "locked").length;
-    const reserved = list.filter((s) => s.status === "reserved" && isHoldFresh(s)).length;
+    const reserved = list.filter((s) => s.status === "reserved").length;
     return { total: list.length, available, booked, locked, reserved };
   }, [seatsByBlock, activeBlock]);
 
@@ -299,8 +301,10 @@ export default function UserSeatGrid({
   const handleSeatClick = (seat) => {
     if (disabled) return;
     const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
-    if (seat.status === "booked" || seat.status === "locked") return;
-    if (reservedByOther(seat)) return;
+    const isSelected = selected.includes(key);
+    if (seat.status === "booked" || seat.status === "sold" || seat.status === "locked") return;
+    // If seat is reserved by another customer and not selected by current user, clicking is blocked
+    if (seat.status === "reserved" && !isSelected) return;
     if (onToggleSeat) {
       onToggleSeat(key, seat);
     }
@@ -308,22 +312,19 @@ export default function UserSeatGrid({
 
   return (
     <div className="w-full space-y-2.5">
-      {/* Legend (Reduced Text Size) */}
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-[9px] font-bold text-slate-500 py-0.5">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-[3px] bg-green-400 border border-emerald-600 inline-block" /> Available
+      {/* Legend: Available = Green | Selected = Deep Pink | Reserved = Orange | Booked = Red */}
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3.5 text-[10px] font-bold text-slate-600 py-1 bg-slate-50/80 rounded-xl border border-slate-200/70">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-[#22C55E] border border-emerald-700 inline-block" /> Available
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-[3px] bg-amber-400 border border-amber-600 inline-block" /> Selected
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-[#FF1493] border border-pink-700 inline-block" /> Selected
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-[3px] bg-gray-300 border border-gray-400 inline-block" /> Booked
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-[#F97316] border border-orange-700 inline-block" /> Reserved
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-[3px] bg-amber-200 border border-amber-500 inline-block" /> Locked
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-[3px] bg-yellow-300 border border-yellow-600 inline-block" /> Reserved
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-[3px] bg-[#EF4444] border border-red-700 inline-block" /> Booked
         </span>
       </div>
 
@@ -490,32 +491,32 @@ export default function UserSeatGrid({
                           >
                             {row.seats.map((seat) => {
                               const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
-                              const isBooked = seat.status === "booked";
+                              const isBooked = seat.status === "booked" || seat.status === "sold";
                               const isLocked = seat.status === "locked";
-                              const isReservedBlocked = reservedByOther(seat);
                               const isSelected = selected.includes(key);
+                              const isReserved = !isSelected && (seat.status === "reserved" || isLocked);
                               const seatLabel = seat.seatLabel || `${seat.rowId || seat.row}${seat.seatNumber}`;
 
                               return (
                                 <button
                                   key={key}
                                   type="button"
-                                  disabled={disabled || isBooked || isLocked || isReservedBlocked}
+                                  disabled={disabled || isBooked || isReserved}
                                   onClick={() => handleSeatClick(seat)}
                                   title={`${seatLabel} • ₹${seat.price || group.price} • ${
                                     isBooked
                                       ? "Booked"
                                       : isSelected
                                       ? "Selected"
-                                      : isLocked || isReservedBlocked
-                                      ? "Held"
+                                      : isReserved
+                                      ? "Reserved"
                                       : "Available"
                                   }`}
                                   className={`w-full flex items-center justify-center p-0 transition-all select-none bg-transparent border-0 shadow-none ${
                                     isBooked
                                       ? "opacity-45 cursor-not-allowed"
-                                      : isLocked || isReservedBlocked
-                                      ? "opacity-70 cursor-not-allowed"
+                                      : isReserved
+                                      ? "opacity-90 cursor-not-allowed"
                                       : isSelected
                                       ? "scale-115 drop-shadow-md cursor-pointer"
                                       : "hover:scale-110 active:scale-95 cursor-pointer"
@@ -524,7 +525,7 @@ export default function UserSeatGrid({
                                   <ChairSvg
                                     isBooked={isBooked}
                                     isLocked={isLocked}
-                                    isReserved={isReservedBlocked}
+                                    isReserved={isReserved}
                                     isSelected={isSelected}
                                     label={seat.seatNumber}
                                     sizeClass="w-[20px] h-[24px] sm:w-[22px] sm:h-[26px]"
@@ -607,32 +608,32 @@ export default function UserSeatGrid({
                           <div className="flex items-center gap-[2px] sm:gap-1">
                             {row.seats.map((seat) => {
                               const key = seat.id || `${seat.rowId || seat.row}-${seat.seatNumber}`;
-                              const isBooked = seat.status === "booked";
+                              const isBooked = seat.status === "booked" || seat.status === "sold";
                               const isLocked = seat.status === "locked";
-                              const isReservedBlocked = reservedByOther(seat);
                               const isSelected = selected.includes(key);
+                              const isReserved = !isSelected && (seat.status === "reserved" || isLocked);
                               const seatLabel = seat.seatLabel || `${seat.rowId || seat.row}${seat.seatNumber}`;
 
                               return (
                                 <button
                                   key={key}
                                   type="button"
-                                  disabled={disabled || isBooked || isLocked || isReservedBlocked}
+                                  disabled={disabled || isBooked || isReserved}
                                   onClick={() => handleSeatClick(seat)}
                                   title={`${seatLabel} • ₹${seat.price || group.price} • ${
                                     isBooked
                                       ? "Booked"
                                       : isSelected
                                       ? "Selected"
-                                      : isLocked || isReservedBlocked
-                                      ? "Held"
+                                      : isReserved
+                                      ? "Reserved"
                                       : "Available"
                                   }`}
                                   className={`flex items-center justify-center p-0 transition-all shrink-0 select-none bg-transparent border-0 shadow-none ${
                                     isBooked
                                       ? "opacity-45 cursor-not-allowed"
-                                      : isLocked || isReservedBlocked
-                                      ? "opacity-70 cursor-not-allowed"
+                                      : isReserved
+                                      ? "opacity-90 cursor-not-allowed"
                                       : isSelected
                                       ? "scale-115 drop-shadow-md cursor-pointer"
                                       : "hover:scale-110 active:scale-95 cursor-pointer"
@@ -641,7 +642,7 @@ export default function UserSeatGrid({
                                   <ChairSvg
                                     isBooked={isBooked}
                                     isLocked={isLocked}
-                                    isReserved={isReservedBlocked}
+                                    isReserved={isReserved}
                                     isSelected={isSelected}
                                     label={seat.seatNumber}
                                     sizeClass="w-[20px] h-[24px] sm:w-[22px] sm:h-[26px]"
