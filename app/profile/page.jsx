@@ -48,7 +48,7 @@ function ProfileContent() {
   const [isEditing, setIsEditing] = useState(false);
 
   // Manual Email & Password Login States
-  const [authMode, setAuthMode] = useState("signin"); // "signin" | "signup" | "forgot"
+  const [authMode, setAuthMode] = useState(searchParams.get("mode") === "signup" ? "signup" : "signin"); // "signin" | "signup" | "forgot"
   const [manualEmail, setManualEmail] = useState("");
   const [manualPassword, setManualPassword] = useState("");
   const [manualFullName, setManualFullName] = useState("");

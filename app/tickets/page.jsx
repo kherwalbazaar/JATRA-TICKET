@@ -178,6 +178,70 @@ function ticketKey(t) {
   return `${t.key || t.id || t.baseTicketNumber || t.ticketNumber}-${t.ticketIndex || t.seatIndex || 0}-${t.seat || "0"}`;
 }
 
+/** Ticket illustration for the empty state (Font Awesome glyphs, brand colours). */
+function EmptyTicketArt() {
+  return (
+    <div className="relative w-36 h-36 mx-auto mb-5">
+      <div className="absolute inset-0 rounded-full border-2 border-dashed border-indigo-200" />
+      <div className="absolute inset-5 rounded-full bg-indigo-50/70" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-20 h-20 -rotate-6 rounded-3xl bg-gradient-to-br from-[#12193b] via-indigo-700 to-violet-700 shadow-lg shadow-indigo-500/30 flex items-center justify-center">
+          <i className="fa-solid fa-ticket-simple text-white text-3xl" />
+        </div>
+      </div>
+      <span className="absolute top-0 right-1 w-9 h-9 rotate-12 rounded-2xl bg-amber-400 text-[#12193b] shadow-md flex items-center justify-center">
+        <i className="fa-solid fa-star text-sm" />
+      </span>
+      <span className="absolute bottom-1 left-0 -rotate-12 w-8 h-8 rounded-2xl bg-emerald-500 text-white shadow-md flex items-center justify-center">
+        <i className="fa-solid fa-qrcode text-xs" />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * No tickets at all: an unregistered visitor is pushed to create an account,
+ * a signed-in customer straight to seat selection.
+ */
+function EmptyTicketsState({ hasAccount }) {
+  return (
+    <div className="relative max-w-md mx-auto w-full overflow-hidden text-center bg-white rounded-3xl border border-slate-200/80 shadow-sm px-5 py-8 sm:py-10">
+      <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full bg-indigo-50 pointer-events-none" />
+      <div className="absolute -bottom-20 -left-16 w-44 h-44 rounded-full bg-amber-50 pointer-events-none" />
+
+      <div className="relative">
+        <EmptyTicketArt />
+
+        <h3 className="text-xl sm:text-2xl font-black text-slate-900 font-brand tracking-tight">
+          You Don&apos;t Have Any Tickets Yet!
+        </h3>
+        <p className="text-sm text-slate-500 font-medium leading-relaxed mt-2 mb-6 max-w-xs mx-auto">
+          {hasAccount
+            ? "Pick your favourite Jatra show, choose your seats and get a digital entry pass in seconds."
+            : "Create your account and book your favourite Jatra seats to get started."}
+        </p>
+
+        <Link
+          href={hasAccount ? "/events" : `/profile?mode=signup&redirect=${encodeURIComponent("/events")}`}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-[#12193b] to-indigo-700 hover:from-[#1a2350] hover:to-indigo-600 text-white text-sm font-black py-3.5 px-7 rounded-2xl shadow-lg shadow-indigo-500/25 transition-all active:scale-95"
+        >
+          <i className={`fa-solid ${hasAccount ? "fa-ticket-simple" : "fa-user-plus"}`} />
+          <span>{hasAccount ? "Book Your Seats" : "Create Account"}</span>
+        </Link>
+
+        {!hasAccount && (
+          <Link
+            href={`/profile?redirect=${encodeURIComponent("/events")}`}
+            className="block mt-4 text-xs font-bold text-slate-500 hover:text-indigo-700"
+          >
+            Already have an account? Sign in
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TicketsPage() {
   const [tab, setTab] = useState("upcoming");
   const [copied, setCopied] = useState("");
@@ -271,6 +335,7 @@ export default function TicketsPage() {
   }, [ticketEntries]);
 
   const [profile, setProfile] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const saved = getSavedCustomerProfile();
@@ -279,21 +344,39 @@ export default function TicketsPage() {
       .then((p) => {
         if (p) setProfile(p);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setAuthChecked(true));
   }, []);
 
   const userMobile = profile?.mobile ? String(profile.mobile).replace(/\D/g, "").slice(-10) : "";
   const userEmail = (profile?.email || "").toLowerCase().trim();
 
-  const userBookings = useMemo(() => {
-    if (!userMobile && !userEmail) return bookings;
-    const matched = bookings.filter((b) => {
-      const bPhone = String(b.customerPhone || b.customer_phone || "").replace(/\D/g, "").slice(-10);
-      const bEmail = String(b.customerEmail || b.customer_email || "").toLowerCase().trim();
-      return (userMobile && bPhone === userMobile) || (userEmail && bEmail === userEmail);
+  // Bookings saved on this device keep their identity after the database copy
+  // arrives (the merged record loses the `local` flag).
+  const deviceBookingKeys = useMemo(() => {
+    const keys = new Set();
+    readLocalBookings().forEach((b) => {
+      [b.bookingId, b.ticketNumber, b.id, b.key].forEach((v) => {
+        const k = String(v || "").toUpperCase();
+        if (k) keys.add(k);
+      });
     });
-    return matched.length > 0 ? matched : bookings;
-  }, [bookings, userMobile, userEmail]);
+    return keys;
+  }, []);
+
+  const isOwnBooking = (b) => {
+    if (b.local) return true;
+    if ([b.bookingId, b.ticketNumber, b.id, b.key].some((v) => deviceBookingKeys.has(String(v || "").toUpperCase())))
+      return true;
+    if (!userMobile && !userEmail) return false;
+    const bPhone = String(b.customerPhone || b.customer_phone || "").replace(/\D/g, "").slice(-10);
+    const bEmail = String(b.customerEmail || b.customer_email || "").toLowerCase().trim();
+    return (userMobile && bPhone === userMobile) || (userEmail && bEmail === userEmail);
+  };
+
+  // Only this customer's tickets: booked on this device, or booked under their
+  // account's phone / email. Never another customer's records.
+  const userBookings = useMemo(() => bookings.filter(isOwnBooking), [bookings, deviceBookingKeys, userMobile, userEmail]);
 
   const bookingGroups = useMemo(() => {
     return buildBookingTicketGroups(userBookings, storedTickets, usedCodesSet, ticketEntries, eventsMap);
@@ -380,13 +463,15 @@ export default function TicketsPage() {
         </div>
 
         <div className="p-4 space-y-4 flex-1">
-          {loading ? (
+          {loading || !authChecked ? (
             <div className="text-center py-12">
               <i className="fa-solid fa-spinner fa-spin text-2xl text-slate-400 mb-2" />
               <p className="text-sm text-slate-500">Loading tickets...</p>
             </div>
           ) : currentList.length === 0 ? (
-            tab === "upcoming" && usedTickets.length > 0 ? (
+            allTickets.length === 0 ? (
+              <EmptyTicketsState hasAccount={!!profile} />
+            ) : tab === "upcoming" && usedTickets.length > 0 ? (
               <div className="text-center py-12 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs max-w-md mx-auto">
                 <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl shadow-inner">
                   <i className="fa-solid fa-circle-check" />
