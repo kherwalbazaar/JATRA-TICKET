@@ -12,7 +12,7 @@ import { getImageSource } from "../../components/BannerImage";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function showDateOf(show) {
   const year = Number(show?.year);
@@ -376,7 +376,7 @@ export default function PartyDetail({ id }) {
             </div>
 
             {/* Weekday names + dates */}
-            <div className="grid grid-cols-7 gap-2 text-center">
+            <div className="grid grid-cols-7 gap-0.5 text-center">
               {WEEKDAYS.map((weekday, index) => (
                 <span
                   key={`weekday-${index}`}
@@ -431,7 +431,7 @@ export default function PartyDetail({ id }) {
                           ].join(", ")
                         : undefined
                     }
-                    className={`aspect-square rounded-md text-[clamp(13px,3.4vw,18px)] font-bold flex flex-col items-center justify-center transition-colors ${
+                    className={`aspect-square rounded-lg text-[clamp(13px,3.4vw,18px)] font-bold flex flex-col items-center justify-center transition-colors ${
                       isBusy
                         ? "bg-red-600 text-white shadow-sm hover:bg-red-700 active:scale-95"
                         : isPast
