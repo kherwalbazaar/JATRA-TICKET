@@ -157,10 +157,26 @@ export default function PartyDetail({ id }) {
     return map;
   }, [partyShows, slotYear, slotMonth]);
 
-  const yearShowCount = useMemo(
-    () => partyShows.filter((show) => showDateOf(show)?.getFullYear() === slotYear).length,
-    [partyShows, slotYear]
-  );
+  // Every day this troupe is booked — ticketed show events plus admin-confirmed party bookings
+  const bookedDayKeys = useMemo(() => {
+    const days = new Set();
+    partyShows.forEach((show) => {
+      const d = showDateOf(show);
+      if (d) days.add(`${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`);
+    });
+    bookingsForParty(allBookings, party).forEach((booking) => {
+      const d = normalizeBookingDay(booking.booking_date);
+      if (d) days.add(`${d.year}-${d.month + 1}-${d.day}`);
+    });
+    return days;
+  }, [partyShows, allBookings, party]);
+
+  const bookedYearsLabel = useMemo(() => {
+    const years = [...new Set([...bookedDayKeys].map((k) => Number(k.split("-")[0])))].sort();
+    if (years.length === 0) return String(currentYear);
+    if (years.length === 1) return String(years[0]);
+    return `${years[0]}/${String(years[years.length - 1]).slice(2)}`;
+  }, [bookedDayKeys, currentYear]);
 
   // Admin-confirmed party bookings for the visible month, grouped by day
   const monthBookings = useMemo(() => {
@@ -270,14 +286,14 @@ export default function PartyDetail({ id }) {
 
           {/* Floating Live Badge */}
           <div className="absolute top-3 right-3 z-10">
-            {partyShows.length > 0 ? (
+            {bookedDayKeys.size > 0 ? (
               <span className="bg-emerald-500 text-white font-black text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1.5 animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                {partyShows.length} Live Show{partyShows.length > 1 ? "s" : ""}
+                {bookedDayKeys.size} Total Booking{bookedDayKeys.size > 1 ? "s" : ""} - Booking Open
               </span>
             ) : (
               <span className="bg-slate-900/80 backdrop-blur-md text-white font-bold text-[10px] px-2.5 py-1 rounded-full shadow-md border border-white/10">
-                0 Shows - Bookings Open
+                0 Total Bookings - Booking Open
               </span>
             )}
           </div>
@@ -332,7 +348,7 @@ export default function PartyDetail({ id }) {
                 Booking Slots
               </h3>
               <span className="text-[9px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full border border-rose-100 shrink-0">
-                {yearShowCount} show{yearShowCount === 1 ? "" : "s"} in {slotYear}
+                {bookedDayKeys.size} Booked in {bookedYearsLabel}
               </span>
             </div>
 
@@ -415,7 +431,7 @@ export default function PartyDetail({ id }) {
                           ].join(", ")
                         : undefined
                     }
-                    className={`aspect-square rounded-md text-[11px] font-bold flex flex-col items-center justify-center transition-colors ${
+                    className={`aspect-square rounded-md text-[clamp(13px,3.4vw,18px)] font-bold flex flex-col items-center justify-center transition-colors ${
                       isBusy
                         ? "bg-red-600 text-white shadow-sm hover:bg-red-700 active:scale-95"
                         : isPast
@@ -427,17 +443,17 @@ export default function PartyDetail({ id }) {
                   >
                     <span>{day}</span>
                     {hasBookings && (
-                      <span className="text-[6px] font-black uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight">
+                      <span className="text-[6px] font-medium uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight">
                         {hasShows ? "Booked + Shows" : "Booked"}
                       </span>
                     )}
                     {!hasBookings && hasShows && (
-                      <span className="text-[6px] font-black uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight">
+                      <span className="text-[6px] font-medium uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight">
                         {dayShows.length > 1 ? `${dayShows.length} Shows` : "Booked"}
                       </span>
                     )}
                     {!isBusy && !isPast && (
-                      <span className="text-[6px] font-black uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight opacity-70">
+                      <span className="text-[6px] font-medium uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight opacity-70">
                         Available
                       </span>
                     )}
