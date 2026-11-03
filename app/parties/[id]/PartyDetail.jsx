@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import BottomNav from "../../components/BottomNav";
 import { findParty, subscribeParties, DEFAULT_PARTIES } from "../../../lib/parties";
@@ -206,6 +206,24 @@ export default function PartyDetail({ id }) {
     setSelectedDay(null);
   };
 
+  // Swiping the month grid horizontally steps back/forward a month
+  const swipeStartX = useRef(null);
+  const swipeConsumed = useRef(false);
+
+  const handleSwipeStart = (e) => {
+    swipeStartX.current = e.touches[0].clientX;
+    swipeConsumed.current = false;
+  };
+
+  const handleSwipeEnd = (e) => {
+    if (swipeStartX.current === null) return;
+    const distance = e.changedTouches[0].clientX - swipeStartX.current;
+    swipeStartX.current = null;
+    if (Math.abs(distance) < 45) return;
+    swipeConsumed.current = true;
+    changeMonth(distance < 0 ? 1 : -1);
+  };
+
   const toLoadableUrl = (val) => {
     const src = getImageSource(val, "");
     if (!src) return null;
@@ -376,7 +394,11 @@ export default function PartyDetail({ id }) {
             </div>
 
             {/* Weekday names + dates */}
-            <div className="grid grid-cols-7 gap-0.5 text-center">
+            <div
+              className="grid grid-cols-7 gap-0.5 text-center touch-pan-y select-none"
+              onTouchStart={handleSwipeStart}
+              onTouchEnd={handleSwipeEnd}
+            >
               {WEEKDAYS.map((weekday, index) => (
                 <span
                   key={`weekday-${index}`}
@@ -412,7 +434,13 @@ export default function PartyDetail({ id }) {
                     key={day}
                     type="button"
                     disabled={isPast && !isBusy}
-                    onClick={() => setSelectedDay(isSelected ? null : day)}
+                    onClick={() => {
+                      if (swipeConsumed.current) {
+                        swipeConsumed.current = false;
+                        return;
+                      }
+                      setSelectedDay(isSelected ? null : day);
+                    }}
                     aria-pressed={isSelected}
                     aria-label={
                       isBusy
