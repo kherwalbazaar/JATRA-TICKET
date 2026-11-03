@@ -55,6 +55,8 @@ export default function PartyDetail({ id }) {
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [slotYear, setSlotYear] = useState(() => new Date().getFullYear());
   const [slotMonth, setSlotMonth] = useState(() => new Date().getMonth());
+  const [dragX, setDragX] = useState(0);
+  const [slide, setSlide] = useState({ dir: null, token: 0 });
   const [selectedDay, setSelectedDay] = useState(null);
 
   useEffect(() => {
@@ -204,9 +206,11 @@ export default function PartyDetail({ id }) {
     setSlotYear(next.getFullYear());
     setSlotMonth(next.getMonth());
     setSelectedDay(null);
+    setSlide({ dir: delta > 0 ? "next" : "prev", token: slide.token + 1 });
+    setDragX(0);
   };
 
-  // Swiping the month grid horizontally steps back/forward a month
+  // Swiping the month grid drags it sideways and slides to the next/previous month
   const swipeStartX = useRef(null);
   const swipeConsumed = useRef(false);
 
@@ -215,11 +219,21 @@ export default function PartyDetail({ id }) {
     swipeConsumed.current = false;
   };
 
+  const handleSwipeMove = (e) => {
+    if (swipeStartX.current === null) return;
+    const raw = e.touches[0].clientX - swipeStartX.current;
+    // Resistance so the grid never detaches too far from its own box
+    setDragX(Math.sign(raw) * Math.min(56, Math.abs(raw) * 0.55));
+  };
+
   const handleSwipeEnd = (e) => {
     if (swipeStartX.current === null) return;
     const distance = e.changedTouches[0].clientX - swipeStartX.current;
     swipeStartX.current = null;
-    if (Math.abs(distance) < 45) return;
+    if (Math.abs(distance) < 45) {
+      setDragX(0);
+      return;
+    }
     swipeConsumed.current = true;
     changeMonth(distance < 0 ? 1 : -1);
   };
@@ -395,9 +409,18 @@ export default function PartyDetail({ id }) {
 
             {/* Weekday names + dates */}
             <div
-              className="grid grid-cols-7 gap-0.5 text-center touch-pan-y select-none"
+              key={`${slotYear}-${slotMonth}-${slide.token}`}
+              className={`grid grid-cols-7 gap-0.5 text-center touch-pan-y select-none ${
+                slide.dir === "next" ? "cal-slide-next" : slide.dir === "prev" ? "cal-slide-prev" : ""
+              }`}
+              style={{
+                transform: dragX ? `translateX(${dragX}px)` : undefined,
+                transition: dragX ? "none" : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
               onTouchStart={handleSwipeStart}
+              onTouchMove={handleSwipeMove}
               onTouchEnd={handleSwipeEnd}
+              onTouchCancel={() => setDragX(0)}
             >
               {WEEKDAYS.map((weekday, index) => (
                 <span
