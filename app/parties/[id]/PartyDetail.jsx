@@ -427,17 +427,17 @@ export default function PartyDetail({ id }) {
                   >
                     <span>{day}</span>
                     {hasBookings && (
-                      <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5">
+                      <span className="text-[6px] font-black uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight">
                         {hasShows ? "Booked + Shows" : "Booked"}
                       </span>
                     )}
                     {!hasBookings && hasShows && (
-                      <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5">
+                      <span className="text-[6px] font-black uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight">
                         {dayShows.length > 1 ? `${dayShows.length} Shows` : "Booked"}
                       </span>
                     )}
                     {!isBusy && !isPast && (
-                      <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5 opacity-70">
+                      <span className="text-[6px] font-black uppercase tracking-tighter leading-none mt-0.5 sm:text-[7px] sm:tracking-tight opacity-70">
                         Available
                       </span>
                     )}
