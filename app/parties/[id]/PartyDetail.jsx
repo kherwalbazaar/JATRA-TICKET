@@ -30,6 +30,12 @@ function formatShowDate(show) {
   return `${date.getDate()} ${MONTH_LABELS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+function formatBookingDate(iso) {
+  const d = normalizeBookingDay(iso);
+  if (!d) return "Date not available";
+  return `${d.day} ${MONTH_LABELS[d.month]} ${d.year}`;
+}
+
 function committeeAddressOf(show) {
   return (
     show?.committeeLocation ||
@@ -430,6 +436,11 @@ export default function PartyDetail({ id }) {
                         {dayShows.length > 1 ? `${dayShows.length} Shows` : "Booked"}
                       </span>
                     )}
+                    {!isBusy && !isPast && (
+                      <span className="text-[7px] font-black uppercase tracking-tight leading-none mt-0.5 opacity-70">
+                        Available
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -490,7 +501,9 @@ export default function PartyDetail({ id }) {
                                 <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
                                   Booking Date
                                 </p>
-                                <p className="text-[11px] font-semibold text-slate-700">{booking.booking_date}</p>
+                                <p className="text-[11px] font-semibold text-slate-700">
+                                  {formatBookingDate(booking.booking_date)}
+                                </p>
                               </div>
                             </div>
                             <div>

@@ -1,14 +1,31 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 const PHONE_TEL = "+919583252256";
 const WHATSAPP_URL =
   "https://wa.me/919583252256?text=Hi%20Jatra%20Bazaar%2C%20I%20need%20help%20with%20booking%20seats";
 
+// The FAB is mounted in the root layout, so it would otherwise float over every
+// screen. These sections own the bottom of the viewport already (profile menu,
+// seat selection grid, payment flow) and the call button collides with them.
+const HIDDEN_SECTIONS = new Set([
+  "profile",
+  "payment",
+  "seats",
+  "select-seats",
+  "book",
+]);
+
 export default function StageContactFab({ className = "" }) {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [pathname]);
 
   // Close on outside click or touch
   useEffect(() => {
@@ -40,6 +57,8 @@ export default function StageContactFab({ className = "" }) {
     }
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
+
+  if (HIDDEN_SECTIONS.has(String(pathname || "").split("/")[1])) return null;
 
   return (
     <div
